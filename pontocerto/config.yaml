@@ -1,0 +1,105 @@
+# ---------------------------------------------------------------------------
+# Ponto Certo - configuracao unica do sistema
+# Todos os caminhos relativos sao resolvidos a partir da pasta deste arquivo.
+# ---------------------------------------------------------------------------
+
+projeto:
+  nome: "Ponto Certo"
+  descricao: "Inspecao de costura em tempo real por visao computacional"
+
+dados:
+  # Pasta que contem "A. Cotton-Poly", "B. Linen-Poly", ... (o dataset bruto).
+  raiz: ".."
+  tamanho_imagem: 224
+  # Manifesto gerado por scripts/01_preparar_dados.py
+  manifesto: "artifacts/splits.csv"
+
+divisao:
+  treino: 0.70
+  validacao: 0.15
+  teste: 0.15
+  semente: 42
+  # Estratifica por (tecido, classe) para que todo tecido apareca em todo split.
+  estratificar_por: ["tecido", "classe"]
+
+treino:
+  backbone: "mobilenet_v3_small"   # mobilenet_v3_small | mobilenet_v3_large | resnet18
+  epocas: 15
+  batch_size: 64
+  lr: 0.0008
+  weight_decay: 0.00005
+  warmup_epocas: 1
+  label_smoothing: 0.05
+  workers: 6
+  pesos_por_classe: true           # compensa o excesso de imagens "Normal"
+  early_stopping_paciencia: 4
+  amp: false                       # sem GPU nesta maquina
+  seed: 42
+  saida: "artifacts/modelo.pt"
+  historico: "artifacts/historico_treino.json"
+  # Aumentos de dados pensados para costura (o defeito e uma textura fina)
+  aug:
+    flip_horizontal: 0.5
+    flip_vertical: 0.2
+    rotacao_graus: 12
+    brilho: 0.25
+    contraste: 0.25
+    saturacao: 0.15
+    matiz: 0.03
+    random_resized_crop_min: 0.75
+    borrao_prob: 0.10              # simula camera fora de foco
+    ruido_prob: 0.10               # simula ganho alto / pouca luz
+
+avaliacao:
+  saida_dir: "artifacts/avaliacao"
+  top_k: 3
+
+inferencia:
+  modelo: "artifacts/modelo.pt"
+  dispositivo: "auto"              # auto | cpu | cuda
+  # Suavizacao temporal: evita o veredito piscar entre frames
+  ema_alpha: 0.45
+  frames_para_confirmar: 4         # frames consecutivos acima do limiar
+  limiar_alerta: 0.55              # confianca minima para declarar falha
+  limiar_incerteza: 0.70           # abaixo disso a IA pede segunda opiniao ao LLM
+  cooldown_evento_s: 3.0           # intervalo minimo entre dois eventos iguais
+  gradcam: true
+  camada_gradcam: "auto"
+
+camera:
+  indice: 0
+  largura: 1280
+  altura: 720
+  fps: 30
+  espelhar: true
+  # Regiao de interesse analisada (fracao do frame): x, y, largura, altura
+  roi: [0.25, 0.25, 0.50, 0.50]
+  backend: "auto"                  # auto | dshow | msmf | any
+
+llm:
+  ativo: true
+  provedor: "openrouter"
+  base_url: "https://openrouter.ai/api/v1"
+  modelo_visao: "openai/gpt-4o-mini"
+  modelo_texto: "openai/gpt-4o-mini"
+  timeout_s: 45
+  max_tentativas: 3
+  temperatura: 0.2
+  max_tokens: 700
+  # Guardas de custo
+  max_chamadas_por_minuto: 8
+  cache_diagnostico: true
+  # Auditoria de rotulos assistida por LLM (etapa de preparacao dos dados)
+  auditoria:
+    amostras_por_classe: 12
+    saida: "artifacts/auditoria_rotulos.csv"
+
+app:
+  host: "127.0.0.1"
+  porta: 8000
+  titulo: "Ponto Certo"
+  max_eventos_memoria: 300
+  pasta_capturas: "artifacts/capturas"
+  pasta_relatorios: "artifacts/relatorios"
+  # Rotulos corrigidos pelo operador na tela de Historico
+  correcoes: "artifacts/correcoes_operador.csv"

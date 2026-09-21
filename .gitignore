@@ -1,0 +1,20 @@
+# Dataset de costura (914 MB) - ver README para onde colocar as pastas
+A. Cotton-Poly/
+B. Linen-Poly/
+C. Denim-Poly/
+D. Velveteen-Poly/
+E. Polyester-Poly/
+F. Satin-Core/
+G. Chiffon-Poly/
+H. Nylon-Core/
+I. Jacquard-Poly/
+J. Oxford-Core/
+K. Polyester (coated)-Core/
+
+# Ambiente e segredos
+.venv/
+.env
+
+# Python
+__pycache__/
+*.pyc
