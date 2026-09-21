@@ -1,0 +1,2 @@
+timestamp,hora,evento_id,imagem,classe_predita,classe_corrigida,confianca,tecido
+1789433419.109,2026-09-14 21:50:19,4836b3c2fc27,,puckering,crooked_seam,0.8100,C

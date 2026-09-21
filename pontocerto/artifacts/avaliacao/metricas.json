@@ -1,0 +1,318 @@
+{
+  "modelo": "C:\\Users\\rafmic\\Desktop\\testeprojetointegrador-ia\\pontocerto\\artifacts\\modelo.pt",
+  "backbone": "mobilenet_v3_small",
+  "amostras_teste": 2178,
+  "acuracia": 0.9803,
+  "macro_f1": 0.9816,
+  "acuracia_ok_ng": 0.9885,
+  "segundos_inferencia": 28.56,
+  "ms_por_imagem": 13.11,
+  "por_classe": {
+    "normal": {
+      "nome": "Costura normal",
+      "precisao": 0.9474,
+      "recall": 0.9863,
+      "f1": 0.9664,
+      "suporte": 365
+    },
+    "skipped_stitch": {
+      "nome": "Ponto falhado",
+      "precisao": 0.9779,
+      "recall": 0.9568,
+      "f1": 0.9672,
+      "suporte": 185
+    },
+    "broken_stitch": {
+      "nome": "Ponto quebrado",
+      "precisao": 0.9833,
+      "recall": 0.9888,
+      "f1": 0.9861,
+      "suporte": 179
+    },
+    "pinched_fabric": {
+      "nome": "Tecido beliscado",
+      "precisao": 0.9944,
+      "recall": 1.0,
+      "f1": 0.9972,
+      "suporte": 179
+    },
+    "crooked_seam": {
+      "nome": "Costura torta",
+      "precisao": 0.963,
+      "recall": 0.9838,
+      "f1": 0.9733,
+      "suporte": 185
+    },
+    "thread_sagging": {
+      "nome": "Linha frouxa",
+      "precisao": 1.0,
+      "recall": 0.96,
+      "f1": 0.9796,
+      "suporte": 175
+    },
+    "puckering": {
+      "nome": "Franzimento",
+      "precisao": 1.0,
+      "recall": 0.9892,
+      "f1": 0.9946,
+      "suporte": 186
+    },
+    "stain_damage": {
+      "nome": "Mancha ou dano",
+      "precisao": 0.9885,
+      "recall": 0.9942,
+      "f1": 0.9914,
+      "suporte": 173
+    },
+    "needle_mark": {
+      "nome": "Marca de agulha",
+      "precisao": 0.9831,
+      "recall": 0.9457,
+      "f1": 0.964,
+      "suporte": 184
+    },
+    "bobbin_pullup": {
+      "nome": "Linha da bobina subindo",
+      "precisao": 0.9842,
+      "recall": 0.9947,
+      "f1": 0.9894,
+      "suporte": 188
+    },
+    "overlapped_stitch": {
+      "nome": "Ponto sobreposto",
+      "precisao": 1.0,
+      "recall": 0.9777,
+      "f1": 0.9887,
+      "suporte": 179
+    }
+  },
+  "por_tecido": {
+    "A": {
+      "nome": "Algodao",
+      "acuracia": 0.9714,
+      "amostras": 210
+    },
+    "B": {
+      "nome": "Linho",
+      "acuracia": 0.9851,
+      "amostras": 201
+    },
+    "C": {
+      "nome": "Jeans",
+      "acuracia": 0.9634,
+      "amostras": 191
+    },
+    "D": {
+      "nome": "Veludo cotele",
+      "acuracia": 0.9895,
+      "amostras": 190
+    },
+    "E": {
+      "nome": "Poliester",
+      "acuracia": 0.9655,
+      "amostras": 203
+    },
+    "F": {
+      "nome": "Cetim",
+      "acuracia": 0.9741,
+      "amostras": 193
+    },
+    "G": {
+      "nome": "Chiffon",
+      "acuracia": 1.0,
+      "amostras": 190
+    },
+    "H": {
+      "nome": "Nylon",
+      "acuracia": 0.9951,
+      "amostras": 205
+    },
+    "I": {
+      "nome": "Jacquard",
+      "acuracia": 0.9947,
+      "amostras": 189
+    },
+    "J": {
+      "nome": "Oxford",
+      "acuracia": 0.9526,
+      "amostras": 211
+    },
+    "K": {
+      "nome": "Poliester revestido",
+      "acuracia": 0.9949,
+      "amostras": 195
+    }
+  },
+  "matriz_confusao": [
+    [
+      360,
+      1,
+      0,
+      1,
+      1,
+      0,
+      0,
+      0,
+      1,
+      1,
+      0
+    ],
+    [
+      5,
+      177,
+      1,
+      0,
+      2,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      1,
+      177,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      179,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      1,
+      0,
+      0,
+      182,
+      0,
+      0,
+      1,
+      0,
+      1,
+      0
+    ],
+    [
+      2,
+      1,
+      2,
+      0,
+      1,
+      168,
+      0,
+      1,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      2,
+      0,
+      184,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      172,
+      1,
+      0,
+      0
+    ],
+    [
+      8,
+      0,
+      0,
+      0,
+      1,
+      0,
+      0,
+      0,
+      174,
+      1,
+      0
+    ],
+    [
+      1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      187,
+      0
+    ],
+    [
+      4,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      175
+    ]
+  ],
+  "classes": [
+    "normal",
+    "skipped_stitch",
+    "broken_stitch",
+    "pinched_fabric",
+    "crooked_seam",
+    "thread_sagging",
+    "puckering",
+    "stain_damage",
+    "needle_mark",
+    "bobbin_pullup",
+    "overlapped_stitch"
+  ],
+  "nomes": [
+    "Costura normal",
+    "Ponto falhado",
+    "Ponto quebrado",
+    "Tecido beliscado",
+    "Costura torta",
+    "Linha frouxa",
+    "Franzimento",
+    "Mancha ou dano",
+    "Marca de agulha",
+    "Linha da bobina subindo",
+    "Ponto sobreposto"
+  ],
+  "avaliado_em": "2026-09-15T09:56:26"
+}
