@@ -1,0 +1,201 @@
+{
+  "version": "delay-synthetic-v1",
+  "executionMode": "model",
+  "trainingDataOrigin": "synthetic",
+  "generatedAt": "2026-10-20T11:29:24.611791+00:00",
+  "seed": 42,
+  "generatorVersion": "v1",
+  "count": 2400,
+  "features": [
+    "remaining",
+    "days",
+    "capacityPerDay",
+    "recentRate",
+    "reworkRate"
+  ],
+  "trainCount": 1680,
+  "validation": {
+    "support": 360,
+    "lateCount": 239,
+    "randomForest": {
+      "precision": 0.9519650655021834,
+      "recall": 0.9121338912133892,
+      "f1": 0.9316239316239316,
+      "confusionMatrix": [
+        [
+          110,
+          11
+        ],
+        [
+          21,
+          218
+        ]
+      ],
+      "classOrder": [
+        "no_delay",
+        "delay"
+      ],
+      "prAucAveragePrecision": 0.9908942528112706,
+      "brierScore": 0.05816064567648691
+    },
+    "logisticRegression": {
+      "precision": 0.9297520661157025,
+      "recall": 0.9414225941422594,
+      "f1": 0.9355509355509356,
+      "confusionMatrix": [
+        [
+          104,
+          17
+        ],
+        [
+          14,
+          225
+        ]
+      ],
+      "classOrder": [
+        "no_delay",
+        "delay"
+      ],
+      "prAucAveragePrecision": 0.9876533797651157,
+      "brierScore": 0.06139349642019791
+    },
+    "capacityBaseline": {
+      "precision": 0.9781659388646288,
+      "recall": 0.9372384937238494,
+      "f1": 0.9572649572649573,
+      "confusionMatrix": [
+        [
+          116,
+          5
+        ],
+        [
+          15,
+          224
+        ]
+      ],
+      "classOrder": [
+        "no_delay",
+        "delay"
+      ]
+    },
+    "productionMAE": 29.722960348493224,
+    "productionBaselineMAE": 31.51579126206611
+  },
+  "test": {
+    "support": 360,
+    "lateCount": 239,
+    "randomForest": {
+      "precision": 0.9736842105263158,
+      "recall": 0.9288702928870293,
+      "f1": 0.9507494646680942,
+      "confusionMatrix": [
+        [
+          115,
+          6
+        ],
+        [
+          17,
+          222
+        ]
+      ],
+      "classOrder": [
+        "no_delay",
+        "delay"
+      ],
+      "prAucAveragePrecision": 0.994515880051071,
+      "brierScore": 0.053815208640364126
+    },
+    "logisticRegression": {
+      "precision": 0.968609865470852,
+      "recall": 0.9037656903765691,
+      "f1": 0.935064935064935,
+      "confusionMatrix": [
+        [
+          114,
+          7
+        ],
+        [
+          23,
+          216
+        ]
+      ],
+      "classOrder": [
+        "no_delay",
+        "delay"
+      ],
+      "prAucAveragePrecision": 0.9904833612233384,
+      "brierScore": 0.0554189295351112
+    },
+    "capacityBaseline": {
+      "precision": 0.9910313901345291,
+      "recall": 0.9246861924686193,
+      "f1": 0.9567099567099567,
+      "confusionMatrix": [
+        [
+          119,
+          2
+        ],
+        [
+          18,
+          221
+        ]
+      ],
+      "classOrder": [
+        "no_delay",
+        "delay"
+      ]
+    },
+    "productionMAE": 31.55074488727623,
+    "productionBaselineMAE": 34.573082957837066
+  },
+  "sklearnVersion": "1.9.1",
+  "numpyVersion": "2.5.4",
+  "datasetSha256": "6cce4d8e2bf869a4cd588486c4371651d90c242810e7174e76f9a3fa079e1882",
+  "modelSha256": "a10270eb233d43a5887ee13fcd49bb07a9188b447d9ebde7c74ed4054302976b",
+  "sourceSha256": "fb57dd11423b9a82436c7f0e6bb6193dae57cc436873460179535bdeddf8bdc1",
+  "parameters": {
+    "bootstrap": true,
+    "ccp_alpha": 0.0,
+    "class_weight": "balanced",
+    "criterion": "gini",
+    "max_depth": 9,
+    "max_features": "sqrt",
+    "max_leaf_nodes": null,
+    "max_samples": null,
+    "min_impurity_decrease": 0.0,
+    "min_samples_leaf": 8,
+    "min_samples_split": 2,
+    "min_weight_fraction_leaf": 0.0,
+    "monotonic_cst": null,
+    "n_estimators": 120,
+    "n_jobs": 1,
+    "oob_score": false,
+    "random_state": 42,
+    "verbose": 0,
+    "warm_start": false
+  },
+  "regressorParameters": {
+    "bootstrap": true,
+    "ccp_alpha": 0.0,
+    "criterion": "squared_error",
+    "max_depth": 9,
+    "max_features": 1.0,
+    "max_leaf_nodes": null,
+    "max_samples": null,
+    "min_impurity_decrease": 0.0,
+    "min_samples_leaf": 8,
+    "min_samples_split": 2,
+    "min_weight_fraction_leaf": 0.0,
+    "monotonic_cst": null,
+    "n_estimators": 120,
+    "n_jobs": 1,
+    "oob_score": false,
+    "random_state": 42,
+    "verbose": 0,
+    "warm_start": false
+  },
+  "notice": "Experimento sintético: não validado na Duas Marias. Não automatiza decisões.",
+  "calibrated": false,
+  "protocol": "Um snapshot por lote independente; 70/15/15 estratificado; teste não usado no ajuste; limiar fixo 0.5.",
+  "limitation": "O modelo aprende hipóteses do gerador. Brier é reportado, mas não houve calibração nem validação operacional."
+}

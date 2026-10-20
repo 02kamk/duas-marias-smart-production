@@ -1,0 +1,148 @@
+{
+  "version": "uci597-pre-shift-v1",
+  "generatedAt": "2026-10-20T12:28:16.360798+00:00",
+  "source": "https://archive.ics.uci.edu/dataset/597/productivity",
+  "downloadUrl": "https://archive.ics.uci.edu/static/public/597/productivity+prediction+of+garment+employees.zip",
+  "doi": "10.24432/C51S6D",
+  "license": "CC BY 4.0",
+  "attribution": "Productivity Prediction of Garment Employees [Dataset]. (2020). UCI Machine Learning Repository. https://doi.org/10.24432/C51S6D",
+  "dataOrigin": "public",
+  "executionMode": "model",
+  "originalRows": 1197,
+  "duplicatesRemoved": 0,
+  "features": [
+    "no_of_workers",
+    "no_of_style_change",
+    "targeted_productivity",
+    "smv",
+    "weekday",
+    "department",
+    "team"
+  ],
+  "excludedColumns": [
+    "actual_productivity",
+    "over_time",
+    "incentive",
+    "idle_time",
+    "idle_men",
+    "wip",
+    "quarter",
+    "day",
+    "date"
+  ],
+  "selectedModel": "random_forest",
+  "selection": "Menor MAE na validação temporal; sem ajuste no teste.",
+  "validation": {
+    "baseline_median": {
+      "mae": 0.15412131642307692,
+      "rmse": 0.21700744652373363,
+      "r2": -0.5357435135146515
+    },
+    "ridge": {
+      "mae": 0.1336362891843603,
+      "rmse": 0.1815081511689529,
+      "r2": -0.07438931959784045
+    },
+    "random_forest": {
+      "mae": 0.11619916781900122,
+      "rmse": 0.16285409336908488,
+      "r2": 0.13509825284234145
+    }
+  },
+  "test": {
+    "baseline_median": {
+      "mae": 0.11641415591666666,
+      "rmse": 0.17252473183397773,
+      "r2": -0.2399483206334927
+    },
+    "ridge": {
+      "mae": 0.09252292054198925,
+      "rmse": 0.13536056173113784,
+      "r2": 0.2367177577877515
+    },
+    "random_forest": {
+      "mae": 0.09512141389315205,
+      "rmse": 0.13065263802098667,
+      "r2": 0.28888927497300165
+    }
+  },
+  "seed": 42,
+  "sklearnVersion": "1.9.1",
+  "numpyVersion": "2.5.4",
+  "pandasVersion": "3.0.6",
+  "datasetSha256": "763ffcdd39b7f7f360243c2af8f89ed733e8b5f9e511efeb0c886b83e1b76866",
+  "modelSha256": "bb7c71db04be1da355153f743d9c07de746bf2b424c3e84b805dd5065f14c9a4",
+  "sourceSha256": "1e653e5316be555316298afe11bcb47b7761c958a6b42e6f0b152d9c19a28de6",
+  "notice": "Modelo experimental em dados públicos de outra indústria; não validado na Duas Marias. Não prevê peças/dia ou atraso.",
+  "targetRange": [
+    0.233705476,
+    1.1204375
+  ],
+  "outOfUnitRangeTargets": 37,
+  "partitions": {
+    "train": {
+      "rows": 823,
+      "firstDate": "2015-01-01",
+      "lastDate": "2015-02-17"
+    },
+    "validation": {
+      "rows": 182,
+      "firstDate": "2015-02-18",
+      "lastDate": "2015-03-01"
+    },
+    "test": {
+      "rows": 192,
+      "firstDate": "2015-03-02",
+      "lastDate": "2015-03-11"
+    }
+  },
+  "numericRanges": {
+    "no_of_workers": [
+      2.0,
+      89.0
+    ],
+    "no_of_style_change": [
+      0.0,
+      2.0
+    ],
+    "targeted_productivity": [
+      0.07,
+      0.8
+    ],
+    "smv": [
+      2.9,
+      54.56
+    ],
+    "weekday": [
+      0.0,
+      6.0
+    ]
+  },
+  "categories": {
+    "department": [
+      "finishing",
+      "sweing"
+    ],
+    "team": [
+      "1",
+      "10",
+      "11",
+      "12",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7",
+      "8",
+      "9"
+    ]
+  },
+  "assumption": "Equipe, efetivo, mudanças de estilo, meta e SMV precisam ser conhecidos antes do turno. Excluídos campos realizados/timing incerto. A disponibilidade real deve ser confirmada.",
+  "limitations": [
+    "Índice não é peças/dia nem atraso de lote.",
+    "Mesmas equipes reaparecem em datas futuras; não mede transferência para equipe/fábrica nova.",
+    "Sem intervenção causal ou avaliação de trabalhadores individuais.",
+    "Alvos fora de 0–1 são preservados e reportados, sem truncamento silencioso."
+  ]
+}
