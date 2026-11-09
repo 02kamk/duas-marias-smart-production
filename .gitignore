@@ -20,4 +20,8 @@ __pycache__/
 *.pyc
 
 # Capturas de tela geradas pelo app em execucao
-pontocerto/artifacts/capturas/
+artifacts/capturas/
+
+# Fila do banco (Supabase) e lote em producao - estado local desta maquina
+artifacts/pendentes*.jsonl
+artifacts/lote_ativo.json

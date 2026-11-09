@@ -15,7 +15,7 @@ from collections import deque
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import numpy as np
 
@@ -44,6 +44,13 @@ class Evento:
     diagnostico: dict | None = None
     revisao_llm: dict | None = None
     rotulo_operador: str | None = None
+    lote_id: int | None = None       # lote em producao quando a peca foi inspecionada
+    lote_codigo: str | None = None   # None: evento so local, nao vai para o banco
+
+    @property
+    def classe_final(self) -> str:
+        """Classe que vale: a corrigida pelo operador ou, sem correcao, a prevista."""
+        return self.rotulo_operador or self.classe_key
 
     def to_dict(self) -> dict:
         return {
@@ -61,6 +68,8 @@ class Evento:
             "revisao_llm": self.revisao_llm,
             "rotulo_operador": self.rotulo_operador,
             "e_falha": int(self.classe_idx) != OK_INDEX,
+            "lote_id": self.lote_id,
+            "lote_codigo": self.lote_codigo,
         }
 
 
@@ -84,6 +93,11 @@ class EstadoSessao:
         self._melhor_sequencia = 0
         self._por_classe: dict[str, int] = {k: 0 for k in CLASS_KEYS}
         self.meta_pecas = int(app.get("meta_pecas", META_PECAS_PADRAO))
+        # Lote em producao ({"id": ..., "codigo": ...}) carimbado em cada evento novo.
+        self.lote_ativo: dict | None = None
+        # Chamado (fora do lock) sempre que um evento nasce ou muda. O servidor
+        # liga aqui o sincronizador do banco; deve ser rapido e nunca estourar.
+        self.observador: Callable[[Evento], None] | None = None
         try:
             garantir_pasta(self._pasta_capturas)
         except Exception:
@@ -112,6 +126,7 @@ class EstadoSessao:
 
         evento_id = uuid.uuid4().hex[:12]
         imagem_url = self._salvar_captura(evento_id, frame_bgr)
+        lote = self.lote_ativo
 
         evento = Evento(
             id=evento_id,
@@ -124,6 +139,8 @@ class EstadoSessao:
             gravidade=gravidade,
             tecido=tecido,
             imagem=imagem_url,
+            lote_id=int(lote["id"]) if lote else None,
+            lote_codigo=str(lote.get("codigo") or "") if lote else None,
         )
 
         with self._lock:
@@ -141,7 +158,16 @@ class EstadoSessao:
             else:
                 self._reprovadas += 1
                 self._sequencia_ok = 0
+        self._avisar(evento)
         return evento
+
+    def _avisar(self, evento: Evento | None) -> None:
+        if evento is None or self.observador is None:
+            return
+        try:
+            self.observador(evento)
+        except Exception:
+            pass  # o banco nunca derruba a inspecao
 
     def _salvar_captura(self, evento_id: str, frame_bgr: np.ndarray | None) -> str | None:
         if frame_bgr is None:
@@ -165,6 +191,26 @@ class EstadoSessao:
             return None
         destino = self._pasta_capturas / Path(ev.imagem).name
         return destino if destino.exists() else None
+
+    def remover_captura(self, evento_id: str) -> bool | None:
+        """Apaga a foto de um evento do disco e tira a referencia dele.
+
+        O evento continua no historico e nas estatisticas (a peca foi
+        inspecionada), so a imagem deixa de existir. Devolve None se o evento nao
+        existe, False se ele ja estava sem foto e True se a foto foi apagada.
+        Levanta OSError se o arquivo nao pode ser apagado (ex.: aberto em outro
+        programa no Windows); nesse caso o evento continua apontando para a foto.
+        """
+        with self._lock:
+            ev = self._indice.get(str(evento_id))
+            if ev is None:
+                return None
+            if not ev.imagem:
+                return False
+            destino = self._pasta_capturas / Path(ev.imagem).name
+            destino.unlink(missing_ok=True)
+            ev.imagem = None
+        return True
 
     # ----------------------------------------------------------------- leitura
 
@@ -191,7 +237,8 @@ class EstadoSessao:
             if ev is None:
                 return False
             ev.diagnostico = diagnostico
-            return True
+        self._avisar(ev)
+        return True
 
     def anexar_revisao(self, evento_id: str, revisao: dict) -> bool:
         with self._lock:
@@ -199,7 +246,8 @@ class EstadoSessao:
             if ev is None:
                 return False
             ev.revisao_llm = revisao
-            return True
+        self._avisar(ev)
+        return True
 
     # --------------------------------------------------------- correcao humana
 
@@ -226,6 +274,7 @@ class EstadoSessao:
                 "tecido": ev.tecido or "",
             }
         self._gravar_correcao(linha)
+        self._avisar(ev)
         return True
 
     def _gravar_correcao(self, linha: dict) -> None:

@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import base64
 import json
+import re
 import sys
 import threading
 import time
@@ -106,6 +107,19 @@ try:
 except Exception as _exc:  # pragma: no cover
     revisar_predicao = None  # type: ignore[assignment]
     IMPORTS_FALHOS["review"] = f"{type(_exc).__name__}: {_exc}"
+
+try:
+    from pontocerto.app.db import BancoSupabase, ErroBanco  # type: ignore
+except Exception as _exc:  # pragma: no cover
+    BancoSupabase = None  # type: ignore[assignment]
+    ErroBanco = RuntimeError  # type: ignore[assignment,misc]
+    IMPORTS_FALHOS["db"] = f"{type(_exc).__name__}: {_exc}"
+
+try:
+    from pontocerto.app.sincronizador import Sincronizador  # type: ignore
+except Exception as _exc:  # pragma: no cover
+    Sincronizador = None  # type: ignore[assignment]
+    IMPORTS_FALHOS["sincronizador"] = f"{type(_exc).__name__}: {_exc}"
 
 
 # ---------------------------------------------------------------------------
@@ -533,6 +547,65 @@ def _ler_json(caminho: str | Path) -> Any:
 def criar_app(cfg: Any = None) -> FastAPI:
     """Monta a aplicacao FastAPI completa."""
     cfg = cfg if cfg is not None else carregar_config()
+    cfg_banco = cfg.get("banco") or {}
+
+    # ------------------------------------------------------- lote ativo
+    def _arquivo_lote_ativo() -> Path | None:
+        caminho = cfg_banco.get("lote_ativo")
+        return Path(caminho) if caminho else None
+
+    def _definir_lote_ativo(lote: dict | None) -> dict | None:
+        """Troca o lote em producao (None = so local) e lembra dele em disco."""
+        resumo = None
+        if lote:
+            resumo = {
+                "id": int(lote["id"]),
+                "codigo": lote.get("codigo"),
+                "cliente": lote.get("cliente"),
+                "modelo_peca": lote.get("modelo_peca"),
+                "tecido": lote.get("tecido"),
+            }
+        app.state.estado.lote_ativo = resumo
+        arquivo = _arquivo_lote_ativo()
+        if arquivo is not None:
+            try:
+                if resumo is None:
+                    arquivo.unlink(missing_ok=True)
+                else:
+                    garantir_pasta(arquivo.parent)
+                    arquivo.write_text(json.dumps(resumo, ensure_ascii=False), encoding="utf-8")
+            except Exception:
+                pass
+        return resumo
+
+    def _verificacao_inicial() -> None:
+        """Testa o banco e confere se o lote lembrado ainda pode receber pecas."""
+        banco = app.state.banco
+        try:
+            banco.status(forcar=True)
+            lote = app.state.estado.lote_ativo
+            if lote and banco.disponivel:
+                atual = banco.obter_lote(int(lote["id"]))
+                if not atual or atual.get("status") == "concluido":
+                    _definir_lote_ativo(None)
+                else:
+                    _definir_lote_ativo(atual)
+        except Exception:
+            pass  # sem internet: mantem o lote lembrado, o reenvio cuida depois
+
+    def _com_alerta(lote: dict | None) -> dict | None:
+        """Marca `alerta` quando a taxa de defeito passa do limite do lote."""
+        if not lote:
+            return lote
+        minimo = int(cfg_banco.get("min_pecas_alerta", 20))
+        inspecionadas = int(lote.get("inspecionadas") or 0)
+        taxa = float(lote.get("taxa_defeito") or 0)
+        limite = float(lote.get("limite_defeito") or 0.05)
+        lote["min_pecas_alerta"] = minimo
+        lote["alerta"] = inspecionadas >= minimo and taxa > limite
+        ativo = app.state.estado.lote_ativo
+        lote["ativo"] = bool(ativo and int(ativo["id"]) == int(lote["id"]))
+        return lote
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -562,6 +635,31 @@ def criar_app(cfg: Any = None) -> FastAPI:
         else:
             app.state.cliente = None
 
+        # Banco (Supabase): nunca impede a subida. O primeiro teste de conexao
+        # roda em segundo plano para nao atrasar o servidor sem internet.
+        app.state.banco = None
+        app.state.sincronizador = None
+        if BancoSupabase is not None:
+            try:
+                app.state.banco = BancoSupabase(cfg)
+            except Exception as exc:
+                app.state.banco = None
+                app.state.erros_import["db"] = f"{type(exc).__name__}: {exc}"
+
+        banco = app.state.banco
+        if banco is not None and banco.configurado:
+            app.state.estado.lote_ativo = _ler_json(_arquivo_lote_ativo()) or None
+            if Sincronizador is not None:
+                try:
+                    sinc = Sincronizador(cfg, banco, cfg.app.pasta_capturas)
+                    app.state.estado.observador = sinc.enfileirar_evento
+                    sinc.iniciar()
+                    app.state.sincronizador = sinc
+                except Exception as exc:
+                    app.state.erros_import["sincronizador"] = f"{type(exc).__name__}: {exc}"
+            threading.Thread(target=_verificacao_inicial, name="banco-teste-inicial",
+                             daemon=True).start()
+
         app.state.motor = Motor(cfg, app.state.camera, app.state.preditor, app.state.estado)
         app.state.motor.iniciar()  # a camera NAO e aberta automaticamente
         try:
@@ -574,6 +672,17 @@ def criar_app(cfg: Any = None) -> FastAPI:
                 pass
             try:
                 app.state.camera.parar()
+            except Exception:
+                pass
+            try:
+                # antes de fechar o banco: o que nao foi gravado vai para o arquivo
+                if app.state.sincronizador is not None:
+                    app.state.sincronizador.parar()
+            except Exception:
+                pass
+            try:
+                if app.state.banco is not None:
+                    app.state.banco.fechar()
             except Exception:
                 pass
 
@@ -595,8 +704,21 @@ def criar_app(cfg: Any = None) -> FastAPI:
     pasta_capturas = garantir_pasta(cfg.app.pasta_capturas)
     garantir_pasta(cfg.app.pasta_relatorios)
     garantir_pasta(PASTA_STATIC)
-    app.mount("/capturas", StaticFiles(directory=str(pasta_capturas)), name="capturas")
     app.mount("/static", StaticFiles(directory=str(PASTA_STATIC)), name="static")
+
+    # Fotos sem cache no navegador: uma foto apagada pelo operador nao pode
+    # continuar aparecendo a partir de uma copia guardada pelo browser.
+    SEM_CACHE = {"Cache-Control": "no-store, private", "Pragma": "no-cache"}
+
+    @app.get("/capturas/{nome}", include_in_schema=False)
+    def captura_local(nome: str):
+        if not re.fullmatch(r"[A-Za-z0-9_\-]+\.jpg", nome):
+            return JSONResponse(status_code=404, content={"erro": "foto nao encontrada"})
+        arquivo = pasta_capturas / nome
+        if not arquivo.is_file():
+            return JSONResponse(status_code=404, content={"erro": "foto nao encontrada"},
+                                headers=SEM_CACHE)
+        return FileResponse(str(arquivo), media_type="image/jpeg", headers=SEM_CACHE)
 
     # ------------------------------------------------------------- pagina
     @app.get("/", include_in_schema=False)
@@ -637,6 +759,11 @@ def criar_app(cfg: Any = None) -> FastAPI:
             "llm": {
                 "configurado": bool(getattr(cliente, "configurado", False)),
                 "modelo": str(cfg.llm.get("modelo_visao", "")) if cliente is not None else None,
+            },
+            "banco": {
+                # so le o estado atual: quem testa a conexao e /api/db/status
+                "configurado": bool(getattr(app.state.banco, "configurado", False)),
+                "conectado": bool(getattr(app.state.banco, "disponivel", False)),
             },
             "versao": VERSAO,
             "modulos_indisponiveis": app.state.erros_import,
@@ -767,6 +894,7 @@ def criar_app(cfg: Any = None) -> FastAPI:
             "fps": instantaneo["fps"],
             "gradcam": instantaneo["gradcam"],
             "erro": instantaneo["erro"],
+            "lote_ativo": app.state.estado.lote_ativo,
         }
 
     @app.post("/api/gradcam")
@@ -840,6 +968,61 @@ def criar_app(cfg: Any = None) -> FastAPI:
             "eventos": app.state.estado.eventos(limite=limite, classe=classe),
             "estatisticas": app.state.estado.estatisticas(),
         }
+
+    @app.get("/api/inspecoes/{evento_id}/foto", include_in_schema=False)
+    def foto_inspecao(evento_id: str):
+        """Foto de uma inspecao gravada no Supabase, servida pelo proprio app.
+
+        O navegador nunca recebe link direto do Storage: cada pedido consulta o
+        banco, entao uma foto apagada fica inacessivel imediatamente.
+        """
+        banco = app.state.banco
+        if banco is None or not banco.configurado:
+            return JSONResponse(status_code=503, content={"erro": "banco desconectado"},
+                                headers=SEM_CACHE)
+        try:
+            conteudo = banco.foto_da_inspecao(evento_id)
+        except Exception as exc:
+            return JSONResponse(status_code=503, headers=SEM_CACHE,
+                                content={"erro": banco.mascarar(str(exc))})
+        if conteudo is None:
+            return JSONResponse(status_code=404, content={"erro": "foto nao encontrada"},
+                                headers=SEM_CACHE)
+        return Response(content=conteudo, media_type="image/jpeg", headers=SEM_CACHE)
+
+    @app.delete("/api/eventos/{evento_id}/foto")
+    def remover_foto(evento_id: str):
+        """Apaga a foto de um evento (disco local e, se houver, bucket do Supabase).
+
+        O evento continua no historico e nas estatisticas: so a imagem some.
+        """
+        try:
+            resultado = app.state.estado.remover_captura(evento_id)
+        except OSError as exc:
+            return JSONResponse(status_code=409, content={
+                "erro": "nao consegui apagar o arquivo da foto (esta aberto em outro "
+                        f"programa?): {type(exc).__name__}"})
+        if resultado is None:
+            return JSONResponse(status_code=404, content={"erro": "evento nao encontrado"})
+
+        # Se este era o ultimo evento mostrado no "Ao vivo", tira a foto de la tambem.
+        motor = app.state.motor
+        with motor._lock:
+            if motor._ultimo_evento and motor._ultimo_evento.get("id") == evento_id:
+                motor._ultimo_evento["imagem"] = None
+
+        # Banco: sempre tenta quando ha Supabase configurado (uma foto esquecida na
+        # nuvem e pior que alguns segundos de espera). Falha aqui nao desfaz a
+        # remocao local e volta como aviso para a tela.
+        banco = app.state.banco
+        nuvem = {"tentou": False, "removida": False, "erro": None}
+        if banco is not None and banco.configurado:
+            nuvem["tentou"] = True
+            try:
+                nuvem["removida"] = banco.remover_foto_inspecao(evento_id)
+            except Exception as exc:
+                nuvem["erro"] = banco.mascarar(str(exc))
+        return {"ok": True, "removida_local": bool(resultado), "nuvem": nuvem}
 
     @app.post("/api/eventos/{evento_id}/rotulo")
     def rotular(evento_id: str, corpo: dict = Body(default={})):
@@ -939,6 +1122,154 @@ def criar_app(cfg: Any = None) -> FastAPI:
             return {"erro": f"falha na revisao: {exc}"}
         app.state.estado.anexar_revisao(evento_id, resultado)
         return {"revisao": resultado}
+
+    # --------------------------------------------------------------- banco
+    @app.get("/api/db/status")
+    def db_status(forcar: bool = Query(False, description="ignora o cache e testa agora")):
+        """Banco conectado?, motivo do erro (sem segredo) e pendencias na fila."""
+        banco = app.state.banco
+        if banco is None:
+            return {
+                "configurado": False,
+                "conectado": False,
+                "erro": "modulo do banco indisponivel: "
+                        + app.state.erros_import.get("db", "nao carregado"),
+                "latencia_ms": None,
+                "storage": {"configurado": False, "ok": False, "bucket": None, "erro": None},
+                "pendentes": 0,
+                "verificado_em": None,
+                "sincronizacao": None,
+                "lote_ativo": None,
+            }
+        sinc = app.state.sincronizador
+        resultado = banco.status(
+            forcar=forcar, pendentes=sinc.contar_pendentes() if sinc is not None else None,
+        )
+        resultado["sincronizacao"] = sinc.estado() if sinc is not None else None
+        resultado["lote_ativo"] = app.state.estado.lote_ativo
+        return resultado
+
+    # ------------------------------------------------------ clientes e lotes
+    def _banco_pronto():
+        """(banco, None) se da para consultar; (None, resposta 503) se nao."""
+        banco = app.state.banco
+        if banco is None or not banco.configurado:
+            motivo = (getattr(banco, "erro", None)
+                      or app.state.erros_import.get("db") or "banco nao configurado")
+            return None, JSONResponse(status_code=503,
+                                      content={"erro": f"Banco indisponivel: {motivo}"})
+        return banco, None
+
+    def _falha_banco(banco, exc: Exception) -> JSONResponse:
+        # Erro de validacao/regra (banco respondeu) = 400; sem conexao = 503.
+        codigo = 400 if (isinstance(exc, ErroBanco) and banco.disponivel) else 503
+        return JSONResponse(status_code=codigo, content={"erro": banco.mascarar(str(exc))})
+
+    @app.get("/api/clientes")
+    def listar_clientes():
+        banco, erro = _banco_pronto()
+        if erro:
+            return erro
+        try:
+            return {"clientes": banco.listar_clientes()}
+        except Exception as exc:
+            return _falha_banco(banco, exc)
+
+    @app.post("/api/clientes")
+    def criar_cliente(corpo: dict = Body(default={})):
+        banco, erro = _banco_pronto()
+        if erro:
+            return erro
+        corpo = corpo or {}
+        try:
+            return {"cliente": banco.criar_cliente(str(corpo.get("nome") or ""),
+                                                   corpo.get("cnpj"))}
+        except Exception as exc:
+            return _falha_banco(banco, exc)
+
+    @app.get("/api/lotes")
+    def listar_lotes():
+        banco, erro = _banco_pronto()
+        if erro:
+            return erro
+        try:
+            lotes = [_com_alerta(l) for l in banco.listar_lotes()]
+        except Exception as exc:
+            return _falha_banco(banco, exc)
+        return {"lotes": lotes, "ativo": app.state.estado.lote_ativo}
+
+    @app.post("/api/lotes")
+    def criar_lote(corpo: dict = Body(default={})):
+        banco, erro = _banco_pronto()
+        if erro:
+            return erro
+        try:
+            novo = banco.criar_lote(corpo or {})
+            return {"lote": _com_alerta(banco.obter_lote(int(novo["id"])))}
+        except Exception as exc:
+            return _falha_banco(banco, exc)
+
+    @app.get("/api/lotes/ativo")
+    def ler_lote_ativo():
+        return {"lote": app.state.estado.lote_ativo}
+
+    @app.post("/api/lotes/ativo")
+    def escolher_lote_ativo(corpo: dict = Body(default={})):
+        """{"lote_id": 3} poe o lote em producao; {"lote_id": null} volta ao modo so local."""
+        corpo = corpo or {}
+        lote_id = corpo.get("lote_id")
+        if lote_id in (None, ""):
+            return {"lote": _definir_lote_ativo(None)}
+        banco, erro = _banco_pronto()
+        if erro:
+            return erro
+        try:
+            lote = banco.obter_lote(int(lote_id))
+            if lote is None:
+                return JSONResponse(status_code=404, content={"erro": "lote nao encontrado"})
+            if lote.get("status") == "concluido":
+                return JSONResponse(status_code=409, content={
+                    "erro": f"o lote {lote.get('codigo')} ja foi concluido; reabra antes de usar"})
+            if lote.get("status") == "aberto":
+                banco.atualizar_status_lote(int(lote_id), "em_inspecao")
+        except (TypeError, ValueError):
+            return JSONResponse(status_code=400, content={"erro": "lote_id deve ser um numero"})
+        except Exception as exc:
+            return _falha_banco(banco, exc)
+        return {"lote": _definir_lote_ativo(lote)}
+
+    @app.get("/api/lotes/{lote_id}")
+    def detalhe_lote(lote_id: int, limite: int = Query(30, ge=1, le=200)):
+        banco, erro = _banco_pronto()
+        if erro:
+            return erro
+        try:
+            lote = banco.obter_lote(lote_id)
+            if lote is None:
+                return JSONResponse(status_code=404, content={"erro": "lote nao encontrado"})
+            return {
+                "lote": _com_alerta(lote),
+                "defeitos": banco.defeitos_por_classe(lote_id),
+                "inspecoes": banco.ultimas_inspecoes(lote_id, limite),
+            }
+        except Exception as exc:
+            return _falha_banco(banco, exc)
+
+    @app.post("/api/lotes/{lote_id}/status")
+    def mudar_status_lote(lote_id: int, corpo: dict = Body(default={})):
+        banco, erro = _banco_pronto()
+        if erro:
+            return erro
+        status_novo = str((corpo or {}).get("status") or "").strip()
+        try:
+            if not banco.atualizar_status_lote(lote_id, status_novo):
+                return JSONResponse(status_code=404, content={"erro": "lote nao encontrado"})
+            ativo = app.state.estado.lote_ativo
+            if status_novo == "concluido" and ativo and int(ativo["id"]) == lote_id:
+                _definir_lote_ativo(None)  # lote fechado nao recebe mais pecas
+            return {"lote": _com_alerta(banco.obter_lote(lote_id))}
+        except Exception as exc:
+            return _falha_banco(banco, exc)
 
     # ----------------------------------------------------------------- LLM
     @app.get("/api/llm/status")

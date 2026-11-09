@@ -20,3 +20,7 @@ jinja2>=3.1
 
 # Cliente do OpenRouter (API compativel com a da OpenAI)
 httpx>=0.27
+
+# Banco de dados (Supabase / PostgreSQL) - opcional, o sistema roda sem
+psycopg[binary]>=3.2
+psycopg_pool>=3.2
