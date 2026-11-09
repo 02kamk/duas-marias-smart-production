@@ -92,7 +92,7 @@ seja, nenhum tecido fica de fora do teste.
 
 ## Instalacao no Windows
 
-Abra o **PowerShell** na pasta que contem este README (`pontocerto`).
+Abra o **PowerShell** na pasta que contem este README (a raiz do repositorio).
 
 ```powershell
 # 1. Crie o ambiente virtual (uma unica vez)
@@ -123,8 +123,8 @@ comando recomendado**.
 
 ### Onde o sistema procura o dataset
 
-A chave `dados.raiz` do `config.yaml` vale `".."`, ou seja, **a pasta que contem
-a pasta `pontocerto`**. E la que devem estar as 11 pastas `A. Cotton-Poly`,
+A chave `dados.raiz` do `config.yaml` vale `"."`, ou seja, **a propria raiz do
+repositorio** (a pasta deste README). E la que devem estar as 11 pastas `A. Cotton-Poly`,
 `B. Linen-Poly`, ... `K. Polyester (coated)-Core`. Se o seu dataset estiver em
 outro lugar, edite essa unica chave.
 
@@ -181,7 +181,7 @@ devolvida em mensagem de erro — o cliente mascara qualquer ocorrencia dela.
 
 ## Fluxo completo de uso
 
-Todos os comandos rodam de dentro da pasta `pontocerto`, com o `.venv` ativo.
+Todos os comandos rodam a partir da raiz do repositorio, com o `.venv` ativo.
 
 | # | Comando | O que faz | Tempo aproximado |
 |---|---|---|---|
@@ -246,7 +246,7 @@ ordem de impacto:
 ## Estrutura de pastas
 
 ```
-pontocerto/
+duas-marias-smart-production/
 ├── config.yaml                  # configuracao unica do sistema (caminhos, treino, LLM, camera)
 ├── requirements.txt             # dependencias Python
 ├── .env.example                 # modelo do .env (copie e preencha a chave)

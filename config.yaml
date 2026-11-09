@@ -9,7 +9,8 @@ projeto:
 
 dados:
   # Pasta que contem "A. Cotton-Poly", "B. Linen-Poly", ... (o dataset bruto).
-  raiz: ".."
+  # "." = a raiz do repositorio (a mesma pasta deste config.yaml).
+  raiz: "."
   tamanho_imagem: 224
   # Manifesto gerado por scripts/01_preparar_dados.py
   manifesto: "artifacts/splits.csv"

@@ -14,7 +14,7 @@ from typing import Any, Iterator
 
 import yaml
 
-# .../pontocerto/src/pontocerto/config.py -> raiz = .../pontocerto
+# <repo>/src/pontocerto/config.py -> raiz = <repo> (raiz do repositorio)
 RAIZ = Path(__file__).resolve().parents[2]
 CONFIG_PADRAO = RAIZ / "config.yaml"
 

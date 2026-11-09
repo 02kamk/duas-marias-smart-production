@@ -10,7 +10,7 @@ dizer, o que a banca costuma perguntar e o plano B para quando a camera falhar.
 Faca isto **sempre**, mesmo que tenha funcionado ontem.
 
 ```powershell
-cd caminho\ate\pontocerto
+cd caminho\ate\duas-marias-smart-production
 .venv\Scripts\activate
 python scripts\00_verificar_ambiente.py
 ```

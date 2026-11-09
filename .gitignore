@@ -20,4 +20,4 @@ __pycache__/
 *.pyc
 
 # Capturas de tela geradas pelo app em execucao
-pontocerto/artifacts/capturas/
+artifacts/capturas/
