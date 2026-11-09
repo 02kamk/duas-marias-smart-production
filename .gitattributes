@@ -1,0 +1,17 @@
+# Preserve os bytes dos datasets usados nos hashes dos experimentos.
+pontocerto/artifacts/gestao_ml/dataset.csv -text whitespace=cr-at-eol
+pontocerto/artifacts/productivity_public/*.csv -text whitespace=cr-at-eol
+*.joblib binary
+pontocerto/artifacts/productivity_public/source.zip binary
+# Fontes vinculadas aos metadados dos experimentos.
+pontocerto/src/pontocerto/management/experiment.py text eol=lf
+pontocerto/src/pontocerto/business/productivity.py text eol=lf
+README.md text eol=lf
+docs/** text eol=lf
+frontend/** text eol=lf
+pontocerto/Iniciar-*.ps1 text eol=lf
+pontocerto/scripts/0[6-9]_*.py text eol=lf
+pontocerto/scripts/1[0-2]_*.py text eol=lf
+pontocerto/src/pontocerto/business/** text eol=lf
+pontocerto/src/pontocerto/management/** text eol=lf
+pontocerto/tests/** text eol=lf
