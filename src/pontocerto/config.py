@@ -21,7 +21,7 @@ CONFIG_PADRAO = RAIZ / "config.yaml"
 # Chaves cujo valor e um caminho e por isso precisa ser resolvido.
 _CHAVES_DE_CAMINHO = {
     "raiz", "manifesto", "saida", "historico", "saida_dir", "modelo",
-    "pasta_capturas", "pasta_relatorios", "correcoes", "pendentes",
+    "pasta_capturas", "pasta_relatorios", "correcoes", "pendentes", "lote_ativo",
 }
 
 

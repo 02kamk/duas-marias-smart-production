@@ -33,7 +33,11 @@
    * 00. CONSTANTES E ESTADO INTERNO
    * ===================================================================== */
 
-  var PAGINAS = ["ao-vivo", "testar", "historico", "treinamento", "relatorios", "ajustes"];
+  var PAGINAS = ["ao-vivo", "testar", "historico", "lotes", "treinamento", "relatorios", "ajustes"];
+
+  // Situacao do banco (chip da barra superior): consulta lenta, o servidor ja
+  // guarda o teste de conexao em cache.
+  var INTERVALO_BANCO_MS = 15000;
   var PAGINA_PADRAO = "ao-vivo";
 
   // Intervalo do polling da pagina ao vivo (5 Hz). Encadeado com setTimeout,
@@ -76,6 +80,8 @@
     analiseAtual: null,   // resultado da pagina Testar
     treino: { dados: null, historico: [], metricas: null },
     relatorioMarkdown: "",
+    banco: null,          // ultimo /api/db/status
+    lotes: { lista: [], porId: {}, clientes: [], ativo: null, detalheId: null, carregado: false },
     poll: { ativo: false, timer: null, abort: null, falhas: 0 },
     cache: {}             // memoria do ultimo valor escrito em cada elemento
   };
@@ -412,6 +418,9 @@
       iniciarPolling();
     } else if (pagina === "historico") {
       carregarHistorico();
+    } else if (pagina === "lotes") {
+      carregarLotes();
+      atualizarBanco(false);
     } else if (pagina === "treinamento") {
       carregarTreinamento();
     } else if (pagina === "ajustes") {
@@ -725,6 +734,7 @@
     renderEstatisticas(stats);
 
     if (d.camera) atualizarChipCamera(d.camera);
+    if ("lote_ativo" in d) renderChipLote(d.lote_ativo);
 
     var fps = $("fps");
     if (fps) {
@@ -1286,6 +1296,7 @@
     setTexto($("modal-confianca"), formatarPercentual(ev.confianca, 1));
     setTexto($("modal-hora"), ev.hora || formatarHora(ev.timestamp));
     setTexto($("modal-tecido"), ev.tecido || "Tecido nao informado");
+    setTexto($("modal-lote"), ev.lote_codigo ? "Lote " + ev.lote_codigo : "Sem lote (so local)");
 
     var sel = $("modal-select-rotulo");
     if (sel) sel.value = ev.rotulo_operador || ev.classe_key || "";
@@ -1977,6 +1988,446 @@
   }
 
   /* =======================================================================
+   * 13b. BANCO E LOTES
+   * ===================================================================== */
+
+  var NOMES_STATUS_LOTE = { aberto: "Aberto", em_inspecao: "Em inspecao", concluido: "Concluido" };
+
+  function formatarData(iso) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ""));
+    return m ? m[3] + "/" + m[2] + "/" + m[1] : "--";
+  }
+
+  function diasOuNulo(valor) {
+    if (valor === null || valor === undefined || valor === "") return null;
+    var n = Number(valor);
+    return isFinite(n) ? n : null;
+  }
+
+  function textoPrazo(dias) {
+    var n = diasOuNulo(dias);
+    if (n === null) return "";
+    if (n < 0) return "atrasado " + Math.abs(n) + (Math.abs(n) === 1 ? " dia" : " dias");
+    if (n === 0) return "vence hoje";
+    return "faltam " + n + (n === 1 ? " dia" : " dias");
+  }
+
+  /* --- Situacao do banco (chip da barra + card da pagina) ---------------- */
+
+  function iniciarMonitorBanco() {
+    atualizarBanco(false).then(function () {
+      setTimeout(iniciarMonitorBanco, INTERVALO_BANCO_MS);
+    });
+  }
+
+  function atualizarBanco(forcar) {
+    return fetchJSON("/api/db/status" + (forcar ? "?forcar=true" : ""), { timeout: 20000 })
+      .then(function (d) {
+        App.banco = d || {};
+        renderBanco(App.banco);
+        if ("lote_ativo" in App.banco) renderChipLote(App.banco.lote_ativo);
+      })
+      .catch(function (e) {
+        App.banco = null;
+        renderBanco({ configurado: false, erro: e.message, servidorFora: true });
+      });
+  }
+
+  function renderBanco(d) {
+    var chip = $("chip-banco");
+    var pend = numero(d.pendentes, 0);
+    var classe = "chip-neutro";
+    var texto = "Processamento local";
+    var titulo = "Banco nao configurado: tudo fica so neste computador.";
+    if (d.configurado) {
+      if (d.conectado && pend === 0) {
+        classe = "chip-ok"; texto = "Banco conectado";
+        titulo = "Supabase conectado" + (d.latencia_ms != null ? " (" + d.latencia_ms + " ms)" : "");
+      } else if (d.conectado) {
+        classe = "chip-ambar"; texto = "Enviando " + pend;
+        titulo = pend + " gravacao(oes) aguardando envio";
+      } else {
+        classe = "chip-ambar";
+        texto = "Banco offline" + (pend ? " - " + pend + " pendentes" : "");
+        titulo = (d.erro || "sem conexao com o banco") +
+          (pend ? ". As pecas ficam guardadas e sobem quando a conexao voltar." : "");
+      }
+    }
+    if (chip) {
+      chip.className = "chip chip-botao " + classe;
+      chip.title = titulo;
+      setTexto(chip.querySelector(".chip-texto"), texto);
+    }
+
+    var semBanco = $("lotes-sem-banco");
+    var conteudo = $("lotes-conteudo");
+    var mostrarSemBanco = !d.configurado && !d.servidorFora;
+    mostrar(semBanco, mostrarSemBanco);
+    mostrar(conteudo, !mostrarSemBanco);
+    habilitar($("btn-novo-lote"), !!d.configurado);
+    if (mostrarSemBanco && d.erro) {
+      setTexto($("lotes-sem-banco-motivo"),
+        d.erro + ". Preencha as variaveis SUPABASE_* no arquivo .env e reinicie o servidor. " +
+        "Sem isso a inspecao continua funcionando, so que sem lotes.");
+    }
+
+    var caixa = $("banco-status");
+    if (!caixa) return;
+    caixa.classList.remove("ok", "erro", "aviso");
+    if (!d.configurado) {
+      caixa.classList.add("aviso");
+      setHTML(caixa, '<p class="card-texto">' + esc(d.erro || "Banco nao configurado.") + "</p>", "banco-status");
+      return;
+    }
+    caixa.classList.add(d.conectado ? (pend ? "aviso" : "ok") : "erro");
+    var st = d.storage || {};
+    var sinc = d.sincronizacao || {};
+    var linhas = [];
+    linhas.push("<span><strong>Banco:</strong> " + (d.conectado
+      ? "conectado" + (d.latencia_ms != null ? " (" + esc(d.latencia_ms) + " ms)" : "")
+      : "desconectado - " + esc(d.erro || "sem conexao")) + "</span>");
+    linhas.push("<span><strong>Fotos (Storage):</strong> " + (st.ok
+      ? "ok, bucket " + esc(st.bucket)
+      : esc(st.erro || "nao configurado - as inspecoes sobem sem foto")) + "</span>");
+    linhas.push("<span><strong>Aguardando envio:</strong> " + esc(pend) +
+      (sinc.offline && sinc.proxima_tentativa_s ? " (nova tentativa em " + esc(sinc.proxima_tentativa_s) + " s)" : "") +
+      "</span>");
+    if (sinc.enviados) linhas.push("<span><strong>Enviadas nesta sessao:</strong> " + esc(sinc.enviados) + "</span>");
+    if (sinc.ultimo_erro) linhas.push("<span><strong>Ultimo erro:</strong> " + esc(sinc.ultimo_erro) + "</span>");
+    setHTML(caixa, '<div class="banco-linhas">' + linhas.join("") + "</div>", "banco-status");
+  }
+
+  /* --- Lote ativo ------------------------------------------------------- */
+
+  function renderChipLote(lote) {
+    App.lotes.ativo = lote || null;
+    var chip = $("chip-lote");
+    if (chip) {
+      chip.className = "chip chip-botao " + (lote ? "chip-terracota" : "chip-neutro");
+      setTexto(chip.querySelector(".chip-texto"), lote ? "Lote " + lote.codigo : "Sem lote - so local");
+      chip.title = lote
+        ? "Gravando no lote " + lote.codigo + (lote.cliente ? " (" + lote.cliente + ")" : "") + ". Toque para trocar."
+        : "Nenhum lote em producao: as pecas ficam so neste computador. Toque para escolher.";
+    }
+    var chipPagina = $("lote-ativo-chip");
+    if (chipPagina) {
+      chipPagina.className = "chip " + (lote ? "chip-terracota" : "chip-neutro");
+      setTexto(chipPagina, lote ? lote.codigo : "Nenhum");
+    }
+    setTexto($("lote-ativo-texto"), lote
+      ? "Cada peca inspecionada agora e gravada no lote " + lote.codigo +
+        (lote.cliente ? " do cliente " + lote.cliente : "") +
+        ". Fotos so das pecas com defeito."
+      : "Nenhum lote ativo: as pecas ficam so no historico deste computador.");
+    habilitar($("btn-parar-lote"), !!lote);
+  }
+
+  function usarLote(id, btn) {
+    if (!id) { toast("Escolha um lote na lista.", "aviso"); return; }
+    botaoCarregando(btn, true, "Ativando...");
+    postJSON("/api/lotes/ativo", { lote_id: Number(id) })
+      .then(function (d) {
+        botaoCarregando(btn, false);
+        renderChipLote(d.lote);
+        toast("Lote " + d.lote.codigo + " em producao. As proximas pecas vao para ele.", "ok");
+        carregarLotes();
+      })
+      .catch(function (e) {
+        botaoCarregando(btn, false);
+        toast("Nao consegui ativar o lote: " + e.message, "erro");
+      });
+  }
+
+  function pararLote() {
+    postJSON("/api/lotes/ativo", { lote_id: null })
+      .then(function () {
+        renderChipLote(null);
+        toast("Nenhum lote ativo: as pecas ficam so neste computador.", "info");
+        renderLotes();
+      })
+      .catch(function (e) { toast("Nao consegui parar: " + e.message, "erro"); });
+  }
+
+  /* --- Lista ------------------------------------------------------------ */
+
+  function carregarLotes() {
+    return fetchJSON("/api/lotes")
+      .then(function (d) {
+        App.lotes.lista = (d && d.lotes) || [];
+        App.lotes.porId = {};
+        App.lotes.lista.forEach(function (l) { App.lotes.porId[l.id] = l; });
+        App.lotes.carregado = true;
+        renderChipLote(d.ativo || null);
+        renderLotes();
+        if (App.lotes.detalheId && App.lotes.porId[App.lotes.detalheId]) abrirDetalheLote(App.lotes.detalheId);
+      })
+      .catch(function (e) {
+        if (e.status !== 503) toast("Nao consegui carregar os lotes: " + e.message, "erro");
+        App.lotes.lista = [];
+        renderLotes(e.status === 503 ? e.message : null);
+      });
+  }
+
+  function renderLotes(erroBanco) {
+    var grade = $("grade-lotes");
+    var vazio = $("lotes-vazio");
+    var lista = App.lotes.lista;
+    var ativoId = App.lotes.ativo ? App.lotes.ativo.id : null;
+
+    var sel = $("sel-lote-ativo");
+    if (sel) {
+      var abertos = lista.filter(function (l) { return l.status !== "concluido"; });
+      var opcoes = '<option value="">' + (abertos.length ? "Selecione um lote" : "Nenhum lote aberto") + "</option>" +
+        abertos.map(function (l) {
+          return '<option value="' + esc(l.id) + '"' + (l.id === ativoId ? " selected" : "") + ">" +
+            esc(l.codigo + " - " + (l.cliente || "") + " - " + (l.modelo_peca || "")) + "</option>";
+        }).join("");
+      setHTML(sel, opcoes, "sel-lote-ativo");
+    }
+
+    if (!grade) return;
+    if (erroBanco) {
+      setHTML(grade, "", "grade-lotes");
+      mostrar(vazio, true);
+      setHTML(vazio, '<p class="vazio-titulo">Banco indisponivel</p><p class="vazio-texto">' +
+        esc(erroBanco) + "</p>", "lotes-vazio");
+      return;
+    }
+    if (!lista.length) {
+      setHTML(grade, "", "grade-lotes");
+      mostrar(vazio, App.lotes.carregado);
+      setHTML(vazio, '<p class="vazio-titulo">Nenhum lote cadastrado</p><p class="vazio-texto">' +
+        "Toque em <strong>Novo lote</strong> para cadastrar o primeiro.</p>", "lotes-vazio");
+      return;
+    }
+    mostrar(vazio, false);
+    setHTML(grade, lista.map(function (l) { return loteCardHTML(l, l.id === ativoId); }).join(""), "grade-lotes");
+  }
+
+  function loteCardHTML(l, ativo) {
+    var qtd = numero(l.quantidade, 0);
+    var insp = numero(l.inspecionadas, 0);
+    var pct = qtd ? limitar(insp / qtd * 100, 0, 100) : 0;
+    var taxa = numero(l.taxa_defeito, 0);
+    var limite = numero(l.limite_defeito, 0.05);
+    var classes = "lote-card" + (ativo ? " ativo" : "") + (l.alerta ? " alerta" : "") +
+      (l.status === "concluido" ? " concluido" : "");
+    var chips = "";
+    if (ativo) chips += '<span class="chip chip-terracota">Em producao</span>';
+    else chips += '<span class="chip chip-neutro">' + esc(NOMES_STATUS_LOTE[l.status] || l.status) + "</span>";
+    if (l.alerta) chips += '<span class="chip chip-terracota">Defeito acima do limite</span>';
+    var dias = diasOuNulo(l.dias_restantes);
+    var prazoRuim = l.status !== "concluido" && dias !== null && dias < 0;
+
+    return '<button type="button" class="' + classes + '" data-lote="' + esc(l.id) + '" aria-label="' +
+      esc("Ver detalhes do lote " + l.codigo) + '">' +
+      '<div class="lote-topo"><div>' +
+      '<div class="lote-codigo">' + esc(l.codigo) + "</div>" +
+      '<div class="lote-sub">' + esc((l.cliente || "") + " - " + (l.modelo_peca || "") +
+        (l.tecido ? " - " + l.tecido : "")) + "</div>" +
+      '</div><div class="lote-chips">' + chips + "</div></div>" +
+      '<div class="barra-linha lote-progresso">' +
+      '<span class="barra-nome">' + esc(insp + " de " + qtd + " pecas") + "</span>" +
+      '<span class="barra-valor">' + esc(Math.round(pct) + "%") + "</span>" +
+      '<div class="barra-trilho"><div class="barra-preenche" style="width:' + pct.toFixed(1) + '%"></div></div>' +
+      "</div>" +
+      '<div class="lote-numeros">' +
+      loteNumeroHTML(numero(l.reprovadas, 0), "reprovadas", false) +
+      loteNumeroHTML(formatarPercentual(taxa, 1), "defeito (limite " + formatarPercentual(limite, 0) + ")", l.alerta) +
+      loteNumeroHTML(formatarData(l.prazo_entrega), textoPrazo(dias) || "prazo", prazoRuim) +
+      "</div></button>";
+  }
+
+  function loteNumeroHTML(valor, rotulo, ruim) {
+    return '<div class="lote-numero"><span class="lote-numero-valor' + (ruim ? " ruim" : "") + '">' +
+      esc(valor) + '</span><span class="lote-numero-rotulo">' + esc(rotulo) + "</span></div>";
+  }
+
+  /* --- Detalhe ---------------------------------------------------------- */
+
+  function abrirDetalheLote(id) {
+    App.lotes.detalheId = Number(id);
+    var card = $("card-detalhe-lote");
+    fetchJSON("/api/lotes/" + encodeURIComponent(id) + "?limite=60")
+      .then(function (d) {
+        renderDetalheLote(d);
+        mostrar(card, true);
+        if (card && card.scrollIntoView && App.lotes._rolar) {
+          card.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+        App.lotes._rolar = false;
+      })
+      .catch(function (e) { toast("Nao consegui abrir o lote: " + e.message, "erro"); });
+  }
+
+  function renderDetalheLote(d) {
+    var l = d.lote || {};
+    setTexto($("detalhe-lote-titulo"), "Lote " + (l.codigo || "") + (l.cliente ? " - " + l.cliente : ""));
+    var ativo = App.lotes.ativo && App.lotes.ativo.id === l.id;
+    var btnUsar = $("btn-detalhe-usar");
+    mostrar(btnUsar, l.status !== "concluido" && !ativo);
+    var btnStatus = $("btn-detalhe-status");
+    if (btnStatus) {
+      btnStatus.dataset.status = l.status === "concluido" ? "em_inspecao" : "concluido";
+      setTexto(btnStatus.querySelector("span"), l.status === "concluido" ? "Reabrir lote" : "Concluir lote");
+    }
+
+    var defeitos = (d.defeitos || []).filter(function (x) { return x.classe_final !== "normal"; });
+    var total = numero(l.inspecionadas, 0);
+    var lista = $("detalhe-defeitos");
+    if (lista) {
+      if (!defeitos.length) {
+        setHTML(lista, '<li class="lista-vazia">' + (total ? "Nenhum defeito ate agora." : "Nenhuma peca inspecionada ainda.") +
+          "</li>", "detalhe-defeitos");
+      } else {
+        setHTML(lista, defeitos.map(function (x) {
+          var n = numero(x.quantidade, 0);
+          var pct = total ? n / total * 100 : 0;
+          return '<li class="barra-item"><div class="barra-linha">' +
+            '<span class="barra-nome">' + esc(nomeDaClasse(x.classe_final)) + "</span>" +
+            '<span class="barra-valor">' + esc(n + " (" + pct.toFixed(1).replace(".", ",") + "%)") + "</span>" +
+            '<div class="barra-trilho"><div class="barra-preenche" style="width:' + limitar(pct, 0, 100).toFixed(1) +
+            '%"></div></div></div></li>';
+        }).join(""), "detalhe-defeitos");
+      }
+    }
+
+    var comFoto = (d.inspecoes || []).filter(function (i) { return i.imagem_path; });
+    var grade = $("detalhe-fotos");
+    if (grade) {
+      setHTML(grade, comFoto.map(function (i) {
+        var nome = nomeDaClasse(i.classe_final);
+        return '<a class="celula falha" href="/api/inspecoes/' + encodeURIComponent(i.evento_id) +
+          '/foto" target="_blank" rel="noopener" aria-label="' + esc("Abrir foto: " + nome) + '">' +
+          '<img src="/api/inspecoes/' + encodeURIComponent(i.evento_id) + '/foto" alt="" loading="lazy">' +
+          '<span class="selo">' + esc(nome) + "</span></a>";
+      }).join(""), "detalhe-fotos");
+    }
+    mostrar($("detalhe-fotos-vazio"), !comFoto.length);
+  }
+
+  function mudarStatusLote() {
+    var id = App.lotes.detalheId;
+    var btn = $("btn-detalhe-status");
+    if (!id || !btn) return;
+    var novo = btn.dataset.status;
+    botaoCarregando(btn, true, "Salvando...");
+    postJSON("/api/lotes/" + id + "/status", { status: novo })
+      .then(function (d) {
+        botaoCarregando(btn, false);
+        toast(novo === "concluido" ? "Lote " + d.lote.codigo + " concluido." : "Lote " + d.lote.codigo + " reaberto.", "ok");
+        if (novo === "concluido" && App.lotes.ativo && App.lotes.ativo.id === id) renderChipLote(null);
+        carregarLotes();
+      })
+      .catch(function (e) {
+        botaoCarregando(btn, false);
+        toast("Nao consegui mudar o status: " + e.message, "erro");
+      });
+  }
+
+  /* --- Cadastro --------------------------------------------------------- */
+
+  function mostrarFormLote(visivel) {
+    var card = $("card-novo-lote");
+    mostrar(card, visivel);
+    if (!visivel) return;
+    carregarClientes();
+    var prazo = $("lote-prazo");
+    if (prazo && !prazo.value) {
+      var d = new Date(Date.now() + 14 * 86400000);
+      prazo.value = d.toISOString().slice(0, 10);
+    }
+    var codigo = $("lote-codigo");
+    if (codigo) codigo.focus();
+  }
+
+  function carregarClientes(selecionar) {
+    return fetchJSON("/api/clientes")
+      .then(function (d) {
+        App.lotes.clientes = (d && d.clientes) || [];
+        var sel = $("lote-cliente");
+        if (!sel) return;
+        var atual = selecionar != null ? String(selecionar) : sel.value;
+        setHTML(sel, '<option value="">' + (App.lotes.clientes.length ? "Selecione o cliente" : "Cadastre um cliente") +
+          "</option>" + App.lotes.clientes.map(function (c) {
+            return '<option value="' + esc(c.id) + '">' + esc(c.nome + (c.cnpj ? " (" + c.cnpj + ")" : "")) + "</option>";
+          }).join(""), "lote-cliente");
+        sel.value = atual;
+        if (!App.lotes.clientes.length) mostrar($("caixa-novo-cliente"), true);
+      })
+      .catch(function (e) { toast("Nao consegui carregar os clientes: " + e.message, "erro"); });
+  }
+
+  function salvarCliente() {
+    var nome = ($("cliente-nome") || {}).value || "";
+    var cnpj = ($("cliente-cnpj") || {}).value || "";
+    if (!nome.trim()) { toast("Informe o nome do cliente.", "aviso"); return; }
+    var btn = $("btn-salvar-cliente");
+    botaoCarregando(btn, true, "Salvando...");
+    postJSON("/api/clientes", { nome: nome.trim(), cnpj: cnpj.trim() || null })
+      .then(function (d) {
+        botaoCarregando(btn, false);
+        $("cliente-nome").value = "";
+        $("cliente-cnpj").value = "";
+        mostrar($("caixa-novo-cliente"), false);
+        toast("Cliente " + d.cliente.nome + " cadastrado.", "ok");
+        return carregarClientes(d.cliente.id);
+      })
+      .catch(function (e) {
+        botaoCarregando(btn, false);
+        toast("Nao consegui cadastrar o cliente: " + e.message, "erro");
+      });
+  }
+
+  function valorCampo(id) {
+    var el = $(id);
+    return el ? String(el.value || "").trim() : "";
+  }
+
+  function salvarLote(ev) {
+    if (ev) ev.preventDefault();
+    var obrigatorios = [["lote-cliente", "o cliente"], ["lote-codigo", "o codigo"], ["lote-modelo", "o modelo da peca"],
+      ["lote-quantidade", "a quantidade"], ["lote-prazo", "o prazo de entrega"]];
+    for (var i = 0; i < obrigatorios.length; i++) {
+      if (!valorCampo(obrigatorios[i][0])) {
+        toast("Informe " + obrigatorios[i][1] + ".", "aviso");
+        var el = $(obrigatorios[i][0]);
+        if (el) el.focus();
+        return;
+      }
+    }
+    var limitePct = numero(valorCampo("lote-limite"), 5);
+    var corpo = {
+      cliente_id: Number(valorCampo("lote-cliente")),
+      codigo: valorCampo("lote-codigo"),
+      modelo_peca: valorCampo("lote-modelo"),
+      tecido: valorCampo("lote-tecido") || null,
+      quantidade: Number(valorCampo("lote-quantidade")),
+      prazo_entrega: valorCampo("lote-prazo"),
+      limite_defeito: limitePct / 100,
+      observacoes: valorCampo("lote-obs") || null
+    };
+    var btn = $("btn-salvar-lote");
+    botaoCarregando(btn, true, "Salvando...");
+    postJSON("/api/lotes", corpo)
+      .then(function (d) {
+        botaoCarregando(btn, false);
+        var form = $("form-novo-lote");
+        if (form) form.reset();
+        mostrarFormLote(false);
+        toast("Lote " + d.lote.codigo + " cadastrado. Toque em Usar lote para comecar a gravar nele.", "ok");
+        return carregarLotes().then(function () {
+          var sel = $("sel-lote-ativo");
+          if (sel && !App.lotes.ativo) sel.value = String(d.lote.id);
+        });
+      })
+      .catch(function (e) {
+        botaoCarregando(btn, false);
+        toast("Nao consegui cadastrar o lote: " + e.message, "erro");
+      });
+  }
+
+  /* =======================================================================
    * 14. INICIALIZACAO E LISTENERS (registrados uma unica vez)
    * ===================================================================== */
 
@@ -1997,6 +2448,19 @@
       var story = ev.target.closest ? ev.target.closest(".story[data-classe]") : null;
       if (story) {
         filtrarHistorico(story.getAttribute("data-classe"));
+        return;
+      }
+      // Chips que levam para outra pagina (banco, lote)
+      var atalho = ev.target.closest ? ev.target.closest("[data-pagina-destino]") : null;
+      if (atalho) {
+        irPara(atalho.getAttribute("data-pagina-destino"));
+        return;
+      }
+      // Cards de lote
+      var cardLote = ev.target.closest ? ev.target.closest(".lote-card[data-lote]") : null;
+      if (cardLote) {
+        App.lotes._rolar = true;
+        abrirDetalheLote(cardLote.getAttribute("data-lote"));
         return;
       }
       // Miniaturas do historico
@@ -2110,6 +2574,38 @@
     ligar($("btn-salvar-ajustes"), "click", salvarAjustes);
     ligar($("btn-testar-llm"), "click", testarLLM);
 
+    /* --- Lotes ----------------------------------------------------------- */
+    ligar($("btn-novo-lote"), "click", function () {
+      var card = $("card-novo-lote");
+      mostrarFormLote(!(card && !card.hidden));
+    });
+    ligar($("btn-cancelar-lote"), "click", function () { mostrarFormLote(false); });
+    ligar($("form-novo-lote"), "submit", salvarLote);
+    ligar($("btn-novo-cliente"), "click", function () {
+      var caixa = $("caixa-novo-cliente");
+      mostrar(caixa, !!(caixa && caixa.hidden));
+      if (caixa && !caixa.hidden && $("cliente-nome")) $("cliente-nome").focus();
+    });
+    ligar($("btn-cancelar-cliente"), "click", function () { mostrar($("caixa-novo-cliente"), false); });
+    ligar($("btn-salvar-cliente"), "click", salvarCliente);
+    ligar($("btn-usar-lote"), "click", function () {
+      usarLote(valorCampo("sel-lote-ativo"), $("btn-usar-lote"));
+    });
+    ligar($("btn-parar-lote"), "click", pararLote);
+    ligar($("btn-testar-banco"), "click", function () {
+      var btn = $("btn-testar-banco");
+      botaoCarregando(btn, true, "Testando...");
+      atualizarBanco(true).then(function () { botaoCarregando(btn, false); });
+    });
+    ligar($("btn-detalhe-usar"), "click", function () {
+      usarLote(App.lotes.detalheId, $("btn-detalhe-usar"));
+    });
+    ligar($("btn-detalhe-status"), "click", mudarStatusLote);
+    ligar($("btn-detalhe-fechar"), "click", function () {
+      App.lotes.detalheId = null;
+      mostrar($("card-detalhe-lote"), false);
+    });
+
     /* --- Janela ---------------------------------------------------------- */
     var tempoResize = null;
     window.addEventListener("resize", function () {
@@ -2143,6 +2639,8 @@
     habilitar($("btn-teste-diagnostico"), false);
     atualizarChipCamera({ ativa: false });
     renderVeredito({ estado: "aquecendo" }, null);
+    renderChipLote(null);
+    iniciarMonitorBanco();
 
     // Ordem do bootstrap: taxonomia primeiro (os outros renders dependem dela).
     carregarTaxonomia()

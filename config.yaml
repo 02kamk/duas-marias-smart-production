@@ -118,5 +118,8 @@ banco:
   tamanho_fila: 500
   intervalo_reenvio_s: 30          # tenta reenviar os pendentes a cada N segundos
   pendentes: "artifacts/pendentes.jsonl"
+  max_tentativas: 20               # depois disso o item vai para pendentes_descartados.jsonl
+  # Lote em producao escolhido na tela (sobrevive a reinicio do servidor)
+  lote_ativo: "artifacts/lote_ativo.json"
   # Regras do modulo de lotes
   min_pecas_alerta: 20             # so alerta de qualidade com pelo menos N pecas

@@ -1,8 +1,3 @@
--- ---------------------------------------------------------------------------
--- Ponto Certo - esquema do banco (Supabase / PostgreSQL)
--- Cole no SQL Editor do Supabase e clique em "Run". Pode rodar de novo sem erro.
--- ---------------------------------------------------------------------------
-
 -- Clientes: as empresas contratantes que enviam lotes para a faccao
 create table if not exists public.clientes (
     id          bigint generated always as identity primary key,
