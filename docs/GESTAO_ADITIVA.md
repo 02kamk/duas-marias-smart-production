@@ -81,11 +81,11 @@ Treino em 20/10/2026, scikit-learn 1.9.1, numpy 2.5.4. Teste sintético independ
 
 Para ritmo futuro, erro absoluto médio: RF 31,55 peças/dia, baseline 34,57 peças/dia. A Random Forest de atraso **não superou** a regra de capacidade neste experimento. A interface mantém os dois resultados separados; não recomenda trocar a regra por ML com base nesses números.
 
-Precisão, recall, matriz de confusão, PR-AUC por average precision, Brier score e validação estão em `pontocerto/artifacts/gestao_ml/metadata.json`. Dataset, partições e hashes também estão preservados; o artefato contém os dois modelos. Desempenho sob gerador alternativo, calibração, validação temporal e validação local continuam pendentes.
+Precisão, recall, matriz de confusão, PR-AUC por average precision, Brier score e validação estão em `artifacts/gestao_ml/metadata.json`. Dataset, partições e hashes também estão preservados; o artefato contém os dois modelos. Desempenho sob gerador alternativo, calibração, validação temporal e validação local continuam pendentes.
 
 ## Reproduzir e verificar
 
-Na pasta pontocerto, usando o mesmo ambiente:
+Na raiz do repositorio, usando o mesmo ambiente:
 
 ```powershell
 C:\Users\kamil\Documents\Codex\venvs\pc\Scripts\python.exe scripts\06_treinar_gestao.py

@@ -18,7 +18,9 @@ if __name__=='__main__':
                 raise RuntimeError(f'{path}: HTTP {response.status_code}')
             results[path]=response.status_code
         original=(root/'src/pontocerto/app/static/index.html').read_text(encoding='utf-8')
-        served=client.get('/').text.replace('\r\n','\n')
+        from pontocerto.management.app import NAV_GESTAO
+        # Os itens de menu das extensoes sao o unico acrescimo esperado no HTML.
+        served=client.get('/').text.replace('\r\n','\n').replace(NAV_GESTAO,'')
         if not all(fragment in served for fragment in original.split('</body>')):
             raise RuntimeError('A extensão não preservou o HTML original.')
         results['originalHtmlPreserved']=True

@@ -7,6 +7,13 @@ from .api import create_router
 
 ROOT=Path(__file__).resolve().parents[3]
 STATIC=Path(__file__).resolve().parent/'static'
+NAV_MARCA='<!--nav-extensoes-->'
+NAV_BUSINESS=('<a class="nav-item" href="/financeiro" title="Financeiro local">'
+             '<span class="nav-icone" aria-hidden="true"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false"><path d="M12 2v20"/><path d="M17 6.5c0-1.9-2.2-3-5-3s-5 1.1-5 3 2.2 2.8 5 3.5 5 1.6 5 3.5-2.2 3-5 3-5-1.1-5-3"/></svg></span>'
+             '<span class="nav-texto">Financeiro</span></a>'
+             '<a class="nav-item" href="/produtividade" title="Produtividade (dados publicos UCI)">'
+             '<span class="nav-icone" aria-hidden="true"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg></span>'
+             '<span class="nav-texto">Produtividade</span></a>')
 
 
 def extend_business(app,root=ROOT):
@@ -37,8 +44,13 @@ def extend_business(app,root=ROOT):
         response=await call_next(request)
         if request.url.path in ('/','/gestao','/gestao/') and response.status_code==200:
             body=b''.join([part async for part in response.body_iterator]).decode('utf-8')
-            link='<a href="/financeiro" style="position:fixed;right:20px;bottom:82px;z-index:9999;background:#225747;color:white;border-radius:8px;padding:10px 14px;font:600 13px system-ui;text-decoration:none">Financeiro e produtividade pública →</a>'
-            return HTMLResponse(body.replace('</body>',link+'</body>'),background=response.background)
+            if NAV_MARCA in body:
+                # Pagina da inspecao: itens no menu lateral.
+                body=body.replace(NAV_MARCA,NAV_BUSINESS+NAV_MARCA)
+            else:
+                link='<a href="/financeiro" style="position:fixed;right:20px;bottom:82px;z-index:9999;background:#225747;color:white;border-radius:8px;padding:10px 14px;font:600 13px system-ui;text-decoration:none">Financeiro e produtividade pública →</a>'
+                body=body.replace('</body>',link+'</body>')
+            return HTMLResponse(body,background=response.background)
         return response
     return app
 

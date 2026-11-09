@@ -14,7 +14,7 @@ Nenhum dado financeiro local, arquivo .env, ambiente Python ou node_modules faz 
 
 ## Executar
 
-Use as dependências Python de pontocerto/requirements.txt no ambiente preparado. Na pasta pontocerto:
+Use as dependências Python de requirements.txt no ambiente preparado. Na raiz do repositorio:
 
 ```powershell
 python scripts/11_rodar_completo.py

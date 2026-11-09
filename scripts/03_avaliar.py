@@ -45,7 +45,7 @@ Possiveis causas e solucoes:
   3. O manifesto ainda nao foi gerado:
          python scripts/01_preparar_dados.py
 
-  4. Voce esta fora da pasta do projeto. Entre na pasta 'pontocerto'
+  4. Voce esta fora da pasta do projeto. Entre na raiz do repositorio
      (a que contem o config.yaml) e rode de novo.
 
 Rode 'python scripts/00_verificar_ambiente.py' para um diagnostico completo.

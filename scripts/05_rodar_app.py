@@ -36,7 +36,7 @@ Possiveis causas e solucoes:
   1. Dependencias faltando (fastapi, uvicorn, python-multipart, opencv-python):
          pip install -r requirements.txt
 
-  2. Voce esta fora da pasta do projeto. Entre na pasta 'pontocerto'
+  2. Voce esta fora da pasta do projeto. Entre na raiz do repositorio
      (a que contem o config.yaml) e rode de novo.
 
   3. O ambiente virtual nao esta ativo:

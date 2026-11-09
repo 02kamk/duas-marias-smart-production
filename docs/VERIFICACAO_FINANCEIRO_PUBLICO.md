@@ -30,7 +30,7 @@ npx.cmd tsc --noEmit
 npx.cmd vite build --config vite.business.config.ts
 ```
 
-Na pasta pontocerto, com o ambiente existente:
+Na raiz do repositorio, com o ambiente existente:
 
 ```powershell
 C:\Users\kamil\Documents\Codex\venvs\pc\Scripts\python.exe scripts\08_testar_gestao.py

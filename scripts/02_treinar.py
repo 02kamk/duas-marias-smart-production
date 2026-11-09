@@ -43,7 +43,7 @@ Possiveis causas e solucoes:
   2. O manifesto ainda nao foi gerado. Rode antes:
          python scripts/01_preparar_dados.py
 
-  3. Voce esta fora da pasta do projeto. Entre na pasta 'pontocerto'
+  3. Voce esta fora da pasta do projeto. Entre na raiz do repositorio
      (a que contem o config.yaml) e rode de novo.
 
   4. O ambiente virtual nao esta ativo:

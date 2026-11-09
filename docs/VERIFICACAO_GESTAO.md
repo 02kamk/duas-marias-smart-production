@@ -2,7 +2,7 @@
 
 ## Executado
 
-- Treino sintético: 2.400 lotes, dois modelos Random Forest, baseline de capacidade e regressão logística; artefatos, dataset, partições e metadados salvos em pontocerto/artifacts/gestao_ml.
+- Treino sintético: 2.400 lotes, dois modelos Random Forest, baseline de capacidade e regressão logística; artefatos, dataset, partições e metadados salvos em artifacts/gestao_ml.
 - TypeScript: `npx tsc --noEmit` aprovado.
 - Bundle adicional: `npx vite build --config vite.gestao.config.ts` aprovado; JS ~248 kB, gzip ~77 kB.
 - Vitest: **12 testes passaram**, incluindo os oito anteriores e quatro da nova gestão. Conferem navegação, acesso à inspeção, apresentação de ML sintético, indisponibilidade explícita, envio do apontamento e exclusões de elegibilidade.

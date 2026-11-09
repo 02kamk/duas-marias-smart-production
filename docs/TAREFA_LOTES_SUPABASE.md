@@ -26,7 +26,7 @@ cadastrar um lote real e inspecionar peças dele.
     tabelas), então o RLS não o bloqueia. **Não crie policies e não use a API REST
     pública para as tabelas.**
 - O bucket privado `capturas` já existe no Storage.
-- O `.env` na raiz de `pontocerto/` já tem:
+- O `.env` na raiz do repositorio já tem:
   ```
   SUPABASE_DB_URL=...      # connection string do Session pooler (porta 5432)
   SUPABASE_URL=...

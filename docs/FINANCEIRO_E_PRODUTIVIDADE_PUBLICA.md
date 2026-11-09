@@ -28,7 +28,7 @@ Dois ambientes separados por arquivos:
 - **DEMO:** 18 meses fictícios determinísticos, com 72 documentos e saldo inicial ilustrativo. Serve para testar telas, métodos e regras, não representa dinheiro da empresa.
 - **Dados locais da empresa:** começa vazio. Nenhum lançamento demo é copiado. Dados fornecidos pelo operador são identificados como não conciliados/validados independentemente.
 
-`pontocerto/artifacts/finance_local/demo.json` e `real.json` são ignorados pelo Git. Gravação atômica e lock atendem uma instância local; não substituem PostgreSQL, autenticação, permissões, backup ou auditoria contábil. Não publicar o servidor na rede com dados da empresa. Não há envio de lançamentos a OpenRouter/OpenAI ou qualquer IA externa; APIs de análise e modelos rodam localmente.
+`artifacts/finance_local/demo.json` e `real.json` são ignorados pelo Git. Gravação atômica e lock atendem uma instância local; não substituem PostgreSQL, autenticação, permissões, backup ou auditoria contábil. Não publicar o servidor na rede com dados da empresa. Não há envio de lançamentos a OpenRouter/OpenAI ou qualquer IA externa; APIs de análise e modelos rodam localmente.
 
 ### Cadastro e importação
 
@@ -124,7 +124,7 @@ Random Forest foi selecionada **na validação**, embora Ridge tenha menor MAE n
 
 O simulador usa códigos da fonte pública e recusa categorias/intervalos desconhecidos. Mostra índice de produtividade, jamais converte automaticamente para peças/dia ou atraso. Não alimenta orçamento e não altera o modelo sintético anterior de atraso. Equipes reaparecem em datas futuras; o teste não mede generalização para uma fábrica/equipe nova. Ainda não há validação na Duas Marias.
 
-Arquivos em `pontocerto/artifacts/productivity_public`: fonte original, CSV, partições, modelo, metadados e licença/atribuição. Para repetir:
+Arquivos em `artifacts/productivity_public`: fonte original, CSV, partições, modelo, metadados e licença/atribuição. Para repetir:
 
 ```powershell
 C:\Users\kamil\Documents\Codex\venvs\pc\Scripts\python.exe scripts\10_treinar_produtividade_publica.py

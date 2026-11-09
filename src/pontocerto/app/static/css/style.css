@@ -321,6 +321,11 @@ body {
 
 .nav-item:hover { background: var(--areia); }
 
+/* Links das extensoes (/gestao, /financeiro) injetados no menu pelo servidor */
+a.nav-item { text-decoration: none; }
+.nav-extensoes { border-top: 1px solid var(--linha); margin-top: var(--e2); padding-top: var(--e2); }
+.nav-extensoes:not(:has(a)) { display: none; }
+
 .nav-icone {
   flex: none;
   display: inline-flex;

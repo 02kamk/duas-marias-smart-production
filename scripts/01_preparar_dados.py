@@ -35,7 +35,7 @@ Possiveis causas e solucoes:
          pip install -r requirements.txt
      (esta etapa precisa de pandas, numpy e pyyaml)
 
-  2. Voce esta rodando de fora da pasta do projeto. Entre na pasta 'pontocerto'
+  2. Voce esta rodando de fora da pasta do projeto. Entre na raiz do repositorio
      (a que contem o config.yaml) e rode de novo:
          cd caminho\\ate\\pontocerto
          python scripts/01_preparar_dados.py

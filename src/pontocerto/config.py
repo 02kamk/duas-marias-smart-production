@@ -60,7 +60,7 @@ def carregar_config(caminho: str | os.PathLike | None = None) -> Secao:
     if not destino.exists():
         raise FileNotFoundError(
             f"config.yaml nao encontrado em {destino}. "
-            "Rode os comandos a partir da pasta 'pontocerto' do projeto."
+            "Rode os comandos a partir da raiz do repositorio."
         )
     with open(destino, "r", encoding="utf-8") as fh:
         bruto = yaml.safe_load(fh) or {}

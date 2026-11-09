@@ -46,7 +46,7 @@ Possiveis causas e solucoes:
   2. O manifesto ainda nao foi gerado (a auditoria sorteia do split 'treino'):
          python scripts/01_preparar_dados.py
 
-  3. Voce esta fora da pasta do projeto. Entre na pasta 'pontocerto'
+  3. Voce esta fora da pasta do projeto. Entre na raiz do repositorio
      (a que contem o config.yaml) e rode de novo.
 
 Lembrete: esta etapa e opcional. Ela so funciona com OPENROUTER_API_KEY
