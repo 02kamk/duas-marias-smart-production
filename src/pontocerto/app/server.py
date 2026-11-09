@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import base64
 import json
+import re
 import sys
 import threading
 import time
@@ -106,6 +107,12 @@ try:
 except Exception as _exc:  # pragma: no cover
     revisar_predicao = None  # type: ignore[assignment]
     IMPORTS_FALHOS["review"] = f"{type(_exc).__name__}: {_exc}"
+
+try:
+    from pontocerto.app.db import BancoSupabase  # type: ignore
+except Exception as _exc:  # pragma: no cover
+    BancoSupabase = None  # type: ignore[assignment]
+    IMPORTS_FALHOS["db"] = f"{type(_exc).__name__}: {_exc}"
 
 
 # ---------------------------------------------------------------------------
@@ -562,6 +569,21 @@ def criar_app(cfg: Any = None) -> FastAPI:
         else:
             app.state.cliente = None
 
+        # Banco (Supabase): nunca impede a subida. O primeiro teste de conexao
+        # roda em segundo plano para nao atrasar o servidor sem internet.
+        app.state.banco = None
+        if BancoSupabase is not None:
+            try:
+                app.state.banco = BancoSupabase(cfg)
+                if app.state.banco.configurado:
+                    threading.Thread(
+                        target=app.state.banco.status, kwargs={"forcar": True},
+                        name="banco-teste-inicial", daemon=True,
+                    ).start()
+            except Exception as exc:
+                app.state.banco = None
+                app.state.erros_import["db"] = f"{type(exc).__name__}: {exc}"
+
         app.state.motor = Motor(cfg, app.state.camera, app.state.preditor, app.state.estado)
         app.state.motor.iniciar()  # a camera NAO e aberta automaticamente
         try:
@@ -574,6 +596,11 @@ def criar_app(cfg: Any = None) -> FastAPI:
                 pass
             try:
                 app.state.camera.parar()
+            except Exception:
+                pass
+            try:
+                if app.state.banco is not None:
+                    app.state.banco.fechar()
             except Exception:
                 pass
 
@@ -595,8 +622,21 @@ def criar_app(cfg: Any = None) -> FastAPI:
     pasta_capturas = garantir_pasta(cfg.app.pasta_capturas)
     garantir_pasta(cfg.app.pasta_relatorios)
     garantir_pasta(PASTA_STATIC)
-    app.mount("/capturas", StaticFiles(directory=str(pasta_capturas)), name="capturas")
     app.mount("/static", StaticFiles(directory=str(PASTA_STATIC)), name="static")
+
+    # Fotos sem cache no navegador: uma foto apagada pelo operador nao pode
+    # continuar aparecendo a partir de uma copia guardada pelo browser.
+    SEM_CACHE = {"Cache-Control": "no-store, private", "Pragma": "no-cache"}
+
+    @app.get("/capturas/{nome}", include_in_schema=False)
+    def captura_local(nome: str):
+        if not re.fullmatch(r"[A-Za-z0-9_\-]+\.jpg", nome):
+            return JSONResponse(status_code=404, content={"erro": "foto nao encontrada"})
+        arquivo = pasta_capturas / nome
+        if not arquivo.is_file():
+            return JSONResponse(status_code=404, content={"erro": "foto nao encontrada"},
+                                headers=SEM_CACHE)
+        return FileResponse(str(arquivo), media_type="image/jpeg", headers=SEM_CACHE)
 
     # ------------------------------------------------------------- pagina
     @app.get("/", include_in_schema=False)
@@ -637,6 +677,11 @@ def criar_app(cfg: Any = None) -> FastAPI:
             "llm": {
                 "configurado": bool(getattr(cliente, "configurado", False)),
                 "modelo": str(cfg.llm.get("modelo_visao", "")) if cliente is not None else None,
+            },
+            "banco": {
+                # so le o estado atual: quem testa a conexao e /api/db/status
+                "configurado": bool(getattr(app.state.banco, "configurado", False)),
+                "conectado": bool(getattr(app.state.banco, "disponivel", False)),
             },
             "versao": VERSAO,
             "modulos_indisponiveis": app.state.erros_import,
@@ -841,6 +886,61 @@ def criar_app(cfg: Any = None) -> FastAPI:
             "estatisticas": app.state.estado.estatisticas(),
         }
 
+    @app.get("/api/inspecoes/{evento_id}/foto", include_in_schema=False)
+    def foto_inspecao(evento_id: str):
+        """Foto de uma inspecao gravada no Supabase, servida pelo proprio app.
+
+        O navegador nunca recebe link direto do Storage: cada pedido consulta o
+        banco, entao uma foto apagada fica inacessivel imediatamente.
+        """
+        banco = app.state.banco
+        if banco is None or not banco.configurado:
+            return JSONResponse(status_code=503, content={"erro": "banco desconectado"},
+                                headers=SEM_CACHE)
+        try:
+            conteudo = banco.foto_da_inspecao(evento_id)
+        except Exception as exc:
+            return JSONResponse(status_code=503, headers=SEM_CACHE,
+                                content={"erro": banco.mascarar(str(exc))})
+        if conteudo is None:
+            return JSONResponse(status_code=404, content={"erro": "foto nao encontrada"},
+                                headers=SEM_CACHE)
+        return Response(content=conteudo, media_type="image/jpeg", headers=SEM_CACHE)
+
+    @app.delete("/api/eventos/{evento_id}/foto")
+    def remover_foto(evento_id: str):
+        """Apaga a foto de um evento (disco local e, se houver, bucket do Supabase).
+
+        O evento continua no historico e nas estatisticas: so a imagem some.
+        """
+        try:
+            resultado = app.state.estado.remover_captura(evento_id)
+        except OSError as exc:
+            return JSONResponse(status_code=409, content={
+                "erro": "nao consegui apagar o arquivo da foto (esta aberto em outro "
+                        f"programa?): {type(exc).__name__}"})
+        if resultado is None:
+            return JSONResponse(status_code=404, content={"erro": "evento nao encontrado"})
+
+        # Se este era o ultimo evento mostrado no "Ao vivo", tira a foto de la tambem.
+        motor = app.state.motor
+        with motor._lock:
+            if motor._ultimo_evento and motor._ultimo_evento.get("id") == evento_id:
+                motor._ultimo_evento["imagem"] = None
+
+        # Banco: sempre tenta quando ha Supabase configurado (uma foto esquecida na
+        # nuvem e pior que alguns segundos de espera). Falha aqui nao desfaz a
+        # remocao local e volta como aviso para a tela.
+        banco = app.state.banco
+        nuvem = {"tentou": False, "removida": False, "erro": None}
+        if banco is not None and banco.configurado:
+            nuvem["tentou"] = True
+            try:
+                nuvem["removida"] = banco.remover_foto_inspecao(evento_id)
+            except Exception as exc:
+                nuvem["erro"] = banco.mascarar(str(exc))
+        return {"ok": True, "removida_local": bool(resultado), "nuvem": nuvem}
+
     @app.post("/api/eventos/{evento_id}/rotulo")
     def rotular(evento_id: str, corpo: dict = Body(default={})):
         corpo = corpo or {}
@@ -939,6 +1039,24 @@ def criar_app(cfg: Any = None) -> FastAPI:
             return {"erro": f"falha na revisao: {exc}"}
         app.state.estado.anexar_revisao(evento_id, resultado)
         return {"revisao": resultado}
+
+    # --------------------------------------------------------------- banco
+    @app.get("/api/db/status")
+    def db_status(forcar: bool = Query(False, description="ignora o cache e testa agora")):
+        """Banco conectado?, motivo do erro (sem segredo) e pendencias na fila."""
+        banco = app.state.banco
+        if banco is None:
+            return {
+                "configurado": False,
+                "conectado": False,
+                "erro": "modulo do banco indisponivel: "
+                        + app.state.erros_import.get("db", "nao carregado"),
+                "latencia_ms": None,
+                "storage": {"configurado": False, "ok": False, "bucket": None, "erro": None},
+                "pendentes": 0,
+                "verificado_em": None,
+            }
+        return banco.status(forcar=forcar)
 
     # ----------------------------------------------------------------- LLM
     @app.get("/api/llm/status")

@@ -1239,7 +1239,8 @@
     var html = eventos.map(function (ev) {
       var nome = ev.nome || nomeDaClasse(ev.classe_key);
       var corrigido = ev.rotulo_operador ? " corrigido" : "";
-      return '<button type="button" class="celula' + corrigido + '" data-id="' + esc(ev.id) +
+      var semFoto = ev.imagem ? "" : " sem-foto";
+      return '<button type="button" class="celula' + corrigido + semFoto + '" data-id="' + esc(ev.id) +
         '" data-gravidade="' + esc(ev.gravidade || "") + '" aria-label="' +
         esc(nome + " as " + (ev.hora || formatarHora(ev.timestamp))) + '">' +
         '<img src="' + esc(ev.imagem || PIXEL_VAZIO) + '" alt="" loading="lazy">' +
@@ -1272,6 +1273,7 @@
 
     var img = $("modal-img");
     if (img) { img.src = ev.imagem || PIXEL_VAZIO; img.alt = esc(ev.nome || ""); }
+    atualizarFotoDoModal(ev);
 
     var heat = $("modal-heatmap");
     if (heat) {
@@ -1336,6 +1338,77 @@
       .catch(function (e) {
         botaoCarregando(botao, false);
         toast("Nao consegui salvar o rotulo: " + e.message, "erro");
+      });
+  }
+
+  /** Mostra/esconde o botao "Apagar foto" e o aviso "Foto apagada" no modal. */
+  function atualizarFotoDoModal(ev) {
+    var temFoto = !!(ev && ev.imagem);
+    var midia = document.querySelector("#modal-evento .modal-midia");
+    if (midia) midia.classList.toggle("sem-foto", !temFoto);
+    var btn = $("btn-modal-apagar-foto");
+    if (btn) {
+      desarmarApagarFoto(btn);
+      btn.hidden = !temFoto;
+    }
+    setTexto($("modal-foto-texto"), temFoto
+      ? "A peca continua no historico; so a imagem e apagada deste computador e do banco."
+      : "A foto desta peca foi apagada. A inspecao continua contando nas estatisticas.");
+  }
+
+  function desarmarApagarFoto(btn) {
+    if (!btn) return;
+    clearTimeout(btn._tempoConfirmar);
+    btn.classList.remove("confirmando");
+    if (btn.dataset.rotuloOriginal != null && !btn.disabled) {
+      btn.innerHTML = btn.dataset.rotuloOriginal;
+      delete btn.dataset.rotuloOriginal;
+    }
+  }
+
+  /**
+   * Apagar a foto de um evento. Primeiro clique arma ("Clique de novo para
+   * apagar"), segundo clique em ate 4 s apaga de vez: nao ha como desfazer.
+   */
+  function apagarFotoDoModal() {
+    var ev = App.eventoAberto;
+    var btn = $("btn-modal-apagar-foto");
+    if (!ev || !btn || !ev.imagem) return;
+
+    if (!btn.classList.contains("confirmando")) {
+      btn.dataset.rotuloOriginal = btn.innerHTML;
+      btn.classList.add("confirmando");
+      btn.innerHTML = "<span>Clique de novo para apagar</span>";
+      btn._tempoConfirmar = setTimeout(function () { desarmarApagarFoto(btn); }, 4000);
+      return;
+    }
+
+    clearTimeout(btn._tempoConfirmar);
+    btn.classList.remove("confirmando");
+    var original = btn.dataset.rotuloOriginal;
+    delete btn.dataset.rotuloOriginal;
+    btn.innerHTML = original;
+    botaoCarregando(btn, true, "Apagando...");
+
+    fetchJSON("/api/eventos/" + encodeURIComponent(ev.id) + "/foto", { method: "DELETE", timeout: 30000 })
+      .then(function (d) {
+        botaoCarregando(btn, false);
+        if (d && d.erro) { toast(d.erro, "erro"); return; }
+        ev.imagem = null;
+        if (historico.porId[ev.id]) historico.porId[ev.id].imagem = null;
+        var nuvem = (d && d.nuvem) || {};
+        if (nuvem.erro) {
+          toast("Foto apagada deste computador, mas nao do banco: " + nuvem.erro, "aviso");
+        } else {
+          toast("Foto apagada.", "ok");
+        }
+        atualizarFotoDoModal(ev);
+        renderGrade(historico.eventos);
+        carregarHistorico(); // atualiza as capas dos filtros (stories)
+      })
+      .catch(function (e) {
+        botaoCarregando(btn, false);
+        toast("Nao consegui apagar a foto: " + e.message, "erro");
       });
   }
 
@@ -2010,6 +2083,7 @@
       enviarRotulo(sel ? sel.value : null, $("btn-modal-corrigir"));
     });
     ligar($("btn-modal-diagnostico"), "click", diagnosticoDoModal);
+    ligar($("btn-modal-apagar-foto"), "click", apagarFotoDoModal);
 
     var modal = $("modal-evento");
     if (modal) {

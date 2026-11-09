@@ -430,6 +430,39 @@ body {
 .btn-secundario:hover { background: var(--osso); border-color: var(--grafite-claro); }
 .btn-secundario:active { transform: translateY(4px); box-shadow: 0 0 0 var(--linha); }
 
+/* Perigo (acao destrutiva: apagar foto). Clique duplo de confirmacao no JS. */
+.btn-perigo {
+  background: var(--branco);
+  color: var(--terracota-escuro);
+  border-color: var(--terracota-claro);
+  box-shadow: 0 4px 0 var(--terracota-tinta);
+}
+.btn-perigo:hover { background: var(--terracota-tinta); }
+.btn-perigo:active { transform: translateY(4px); box-shadow: 0 0 0 var(--terracota-tinta); }
+.btn-perigo.confirmando {
+  background: var(--terracota);
+  color: var(--branco);
+  border-color: var(--terracota-escuro);
+  box-shadow: 0 4px 0 var(--terracota-escuro);
+}
+
+/* Celula / modal de evento cuja foto foi apagada pelo operador */
+.celula.sem-foto img { visibility: hidden; }
+.celula.sem-foto::before,
+.modal-midia.sem-foto::before {
+  content: "Foto apagada";
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--grafite);
+  font-size: var(--t-sm);
+  background: var(--areia);
+}
+.modal-midia.sem-foto { position: relative; }
+.modal-midia.sem-foto img { visibility: hidden; }
+
 /* Fantasma */
 .btn-fantasma {
   background: transparent;

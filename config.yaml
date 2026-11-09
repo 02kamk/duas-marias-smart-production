@@ -104,3 +104,19 @@ app:
   pasta_relatorios: "artifacts/relatorios"
   # Rotulos corrigidos pelo operador na tela de Historico
   correcoes: "artifacts/correcoes_operador.csv"
+
+banco:
+  # Supabase (PostgreSQL + Storage). As credenciais ficam SO no .env:
+  # SUPABASE_DB_URL, SUPABASE_URL, SUPABASE_SECRET_KEY, SUPABASE_BUCKET.
+  # Sem elas o sistema funciona normalmente, apenas sem gravar nada no banco.
+  ativo: true
+  pool_max: 4                      # conexoes simultaneas no pool
+  timeout_conexao_s: 6             # desiste rapido quando a internet cai
+  timeout_storage_s: 20            # upload/assinatura de fotos no Storage
+  intervalo_status_s: 15           # cache do teste de conexao de /api/db/status
+  # Fila de gravacao (thread dedicada, fora da thread de inferencia)
+  tamanho_fila: 500
+  intervalo_reenvio_s: 30          # tenta reenviar os pendentes a cada N segundos
+  pendentes: "artifacts/pendentes.jsonl"
+  # Regras do modulo de lotes
+  min_pecas_alerta: 20             # so alerta de qualidade com pelo menos N pecas

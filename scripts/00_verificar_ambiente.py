@@ -58,6 +58,8 @@ MODULO_DA_DISTRIBUICAO = {
     "python-multipart": "multipart",
     "jinja2": "jinja2",
     "httpx": "httpx",
+    "psycopg": "psycopg",
+    "psycopg_pool": "psycopg_pool",
 }
 
 LARGURA = 78
@@ -374,6 +376,53 @@ def checar_chave(rel: Relatorio) -> bool:
     return False
 
 
+def checar_banco(rel: Relatorio, cfg) -> bool:
+    """Testa o Supabase de verdade (banco e bucket) sem nunca mostrar credencial."""
+    cabecalho("6b. Banco de dados Supabase (opcional)")
+    try:
+        from pontocerto.app.db import BancoSupabase
+
+        banco = BancoSupabase(cfg)
+    except Exception as exc:
+        rel.falta("Modulo do banco nao carregou", f"{type(exc).__name__}: {exc}", bloqueia=False)
+        return False
+
+    if not banco.configurado:
+        rel.falta(
+            "Supabase nao configurado",
+            f"{banco.erro} (cadastro de lotes e historico permanente ficam desligados)",
+            bloqueia=False,
+        )
+        return False
+
+    try:
+        info = banco.status(forcar=True)
+    finally:
+        banco.fechar()
+
+    ok = True
+    if info["conectado"]:
+        rel.ok("Banco conectado", f"respondeu em {info['latencia_ms']} ms")
+    else:
+        rel.falta("Banco inacessivel", str(info["erro"]), bloqueia=False)
+        ok = False
+
+    sto = info["storage"]
+    if sto["ok"]:
+        rel.ok("Bucket de capturas acessivel", f"bucket '{sto['bucket']}'")
+    elif info["conectado"]:
+        rel.falta("Bucket de capturas inacessivel", str(sto["erro"]), bloqueia=False)
+        ok = False
+
+    if info["pendentes"]:
+        rel.falta(
+            f"{info['pendentes']} gravacao(oes) pendente(s) na fila offline",
+            "serao reenviadas com o app no ar e o banco conectado",
+            bloqueia=False,
+        )
+    return ok
+
+
 def checar_manifesto(rel: Relatorio, cfg) -> bool:
     cabecalho("7. Manifesto de divisao (artifacts/splits.csv)")
     if cfg is None:
@@ -578,6 +627,7 @@ def main(argv: list[str] | None = None) -> int:
     cfg = checar_config(rel)
     total_imagens = checar_dataset(rel, cfg)
     checar_chave(rel)
+    checar_banco(rel, cfg)
     tem_manifesto = checar_manifesto(rel, cfg)
     tem_modelo = checar_modelo(rel, cfg)
     checar_interface(rel)

@@ -166,6 +166,26 @@ class EstadoSessao:
         destino = self._pasta_capturas / Path(ev.imagem).name
         return destino if destino.exists() else None
 
+    def remover_captura(self, evento_id: str) -> bool | None:
+        """Apaga a foto de um evento do disco e tira a referencia dele.
+
+        O evento continua no historico e nas estatisticas (a peca foi
+        inspecionada), so a imagem deixa de existir. Devolve None se o evento nao
+        existe, False se ele ja estava sem foto e True se a foto foi apagada.
+        Levanta OSError se o arquivo nao pode ser apagado (ex.: aberto em outro
+        programa no Windows); nesse caso o evento continua apontando para a foto.
+        """
+        with self._lock:
+            ev = self._indice.get(str(evento_id))
+            if ev is None:
+                return None
+            if not ev.imagem:
+                return False
+            destino = self._pasta_capturas / Path(ev.imagem).name
+            destino.unlink(missing_ok=True)
+            ev.imagem = None
+        return True
+
     # ----------------------------------------------------------------- leitura
 
     def eventos(self, limite: int = 60, classe: str | None = None) -> list[dict]:

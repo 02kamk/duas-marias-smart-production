@@ -21,7 +21,7 @@ CONFIG_PADRAO = RAIZ / "config.yaml"
 # Chaves cujo valor e um caminho e por isso precisa ser resolvido.
 _CHAVES_DE_CAMINHO = {
     "raiz", "manifesto", "saida", "historico", "saida_dir", "modelo",
-    "pasta_capturas", "pasta_relatorios", "correcoes",
+    "pasta_capturas", "pasta_relatorios", "correcoes", "pendentes",
 }
 
 
@@ -82,21 +82,50 @@ def garantir_pasta(p: str | os.PathLike) -> Path:
     return destino
 
 
-def chave_openrouter() -> str | None:
-    """Le a chave do OpenRouter do ambiente (ou do .env da raiz do projeto)."""
-    chave = os.environ.get("OPENROUTER_API_KEY")
-    if chave:
-        return chave.strip()
+def variavel_env(nome: str) -> str | None:
+    """Le uma variavel do ambiente ou, se nao houver, do .env da raiz do projeto.
+
+    O valor lido do .env e copiado para os.environ (sem sobrescrever) para que
+    as proximas leituras nao precisem abrir o arquivo de novo. Valor vazio conta
+    como ausente.
+    """
+    valor = os.environ.get(nome)
+    if valor and valor.strip():
+        return valor.strip()
     env = RAIZ / ".env"
     if env.exists():
-        for linha in env.read_text(encoding="utf-8").splitlines():
+        # utf-8-sig: o Bloco de Notas do Windows pode gravar o .env com BOM.
+        for linha in env.read_text(encoding="utf-8-sig").splitlines():
             linha = linha.strip()
             if not linha or linha.startswith("#") or "=" not in linha:
                 continue
-            nome, _, valor = linha.partition("=")
-            if nome.strip() == "OPENROUTER_API_KEY":
-                valor = valor.strip().strip('"').strip("'")
-                if valor:
-                    os.environ.setdefault("OPENROUTER_API_KEY", valor)
-                    return valor
+            chave, _, bruto = linha.partition("=")
+            if chave.strip() == nome:
+                bruto = bruto.strip().strip('"').strip("'")
+                if bruto:
+                    os.environ.setdefault(nome, bruto)
+                    return bruto
     return None
+
+
+def chave_openrouter() -> str | None:
+    """Le a chave do OpenRouter do ambiente (ou do .env da raiz do projeto)."""
+    return variavel_env("OPENROUTER_API_KEY")
+
+
+def credenciais_supabase() -> dict[str, str | None]:
+    """Le as variaveis do Supabase (ambiente ou .env). Ausentes viram None.
+
+    - SUPABASE_DB_URL: connection string do Session pooler (porta 5432)
+    - SUPABASE_URL: https://<projeto>.supabase.co (usado so para o Storage)
+    - SUPABASE_SECRET_KEY: chave secreta (sb_secret_...) para o Storage
+    - SUPABASE_BUCKET: nome do bucket privado das capturas
+
+    Esses valores sao segredos: quem os recebe nunca deve imprimi-los.
+    """
+    return {
+        "db_url": variavel_env("SUPABASE_DB_URL"),
+        "url": variavel_env("SUPABASE_URL"),
+        "secret_key": variavel_env("SUPABASE_SECRET_KEY"),
+        "bucket": variavel_env("SUPABASE_BUCKET"),
+    }
