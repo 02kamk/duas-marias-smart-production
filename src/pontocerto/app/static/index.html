@@ -1,6 +1,8 @@
 <!doctype html>
 <html lang="pt-BR">
 <head>
+<link rel="manifest" href="/manifest.webmanifest">
+<script src="/static/js/operacao.js" defer></script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Ponto Certo - Inspecao de costura em tempo real</title>
@@ -68,21 +70,10 @@
           <path d="M15.5 11 21 7.8v8.4L15.5 13z"/>
         </svg>
       </span>
-      <span class="nav-texto">Ao vivo</span>
+      <span class="nav-texto">Inspeção</span>
     </button>
 
-    <button class="nav-item" type="button" data-pagina="testar" title="Testar imagem">
-      <span class="nav-icone" aria-hidden="true">
-        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor"
-             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false">
-          <circle cx="11" cy="11" r="7"/>
-          <path d="m20.5 20.5-4.1-4.1"/>
-        </svg>
-      </span>
-      <span class="nav-texto">Testar imagem</span>
-    </button>
-
-    <button class="nav-item" type="button" data-pagina="historico" title="Historico">
+<button class="nav-item" type="button" data-pagina="historico" title="Historico">
       <span class="nav-icone" aria-hidden="true">
         <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor"
              stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false">
@@ -115,20 +106,9 @@
   <div class="nav-divisor" role="presentation"></div>
 
   <div class="nav-grupo">
-    <p class="nav-titulo">Modelo</p>
 
-    <button class="nav-item" type="button" data-pagina="treinamento" title="Treinamento">
-      <span class="nav-icone" aria-hidden="true">
-        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor"
-             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false">
-          <path d="M4 3.5v17h16.5"/>
-          <path d="m7.5 15.5 3.5-4.5 3 2.5 5-6.5"/>
-        </svg>
-      </span>
-      <span class="nav-texto">Treinamento</span>
-    </button>
 
-    <button class="nav-item" type="button" data-pagina="relatorios" title="Relatorios">
+<button class="nav-item" type="button" data-pagina="relatorios" title="Relatorios">
       <span class="nav-icone" aria-hidden="true">
         <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor"
              stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false">
@@ -156,7 +136,7 @@
     </button>
   </div>
 
-  <div class="nav-rodape">
+  <div class="nav-rodape"><button id="sair-conta" type="button">Sair da conta</button><button id="instalar-app" type="button" hidden>Instalar aplicativo</button>
     <p class="nav-rodape-titulo">Ponto Certo</p>
     <p class="nav-rodape-texto">11 tipos de falha de costura. Deteccao em tempo real nesta maquina.</p>
   </div>
@@ -173,7 +153,7 @@
   <section id="pagina-ao-vivo" class="pagina ativa" aria-label="Inspecao ao vivo">
     <div class="pagina-cabecalho">
       <div class="pagina-titulos">
-        <h1>Inspecao ao vivo</h1>
+        <h1>Inspeção de qualidade</h1>
         <p class="pagina-sub">A camera analisa a costura quadro a quadro e aprova ou reprova cada peca.</p>
       </div>
       <div class="pagina-acoes">
@@ -371,21 +351,17 @@
         </div>
       </div>
     </div>
-  </section>
-
-  <!-- ======================================================
-       PAGINA: TESTAR
-       ====================================================== -->
-  <section id="pagina-testar" class="pagina" aria-label="Testar uma imagem">
+  <div id="pagina-testar" class="inspecao-upload" aria-label="Testar uma imagem">
     <div class="pagina-cabecalho">
       <div class="pagina-titulos">
-        <h1>Testar imagem</h1>
+        <h2>Anexar imagem ou usar a câmera do aparelho</h2>
         <p class="pagina-sub">Envie uma foto da costura para classificar sem usar a camera.</p>
       </div>
     </div>
 
     <div class="grade-testar">
       <div class="card">
+        <div class="bloco"><button id="aparelho-ligar" type="button">Abrir câmera deste aparelho</button><button id="aparelho-capturar" type="button" disabled>Fotografar e analisar</button><button id="aparelho-parar" type="button" disabled>Fechar câmera do aparelho</button><video id="aparelho-video" autoplay playsinline muted style="width:100%;max-height:380px" hidden></video><p id="aparelho-erro" role="alert"></p><label>Fotografar pelo celular<input id="aparelho-arquivo" type="file" accept="image/*" capture="environment"></label></div>
         <div id="drop-zone" class="drop-zone" tabindex="0" role="button"
              aria-label="Area para soltar a imagem ou escolher um arquivo">
           <svg viewBox="0 0 24 24" width="44" height="44" fill="none" stroke="currentColor"
@@ -451,6 +427,7 @@
             </button>
           </div>
 
+          <div id="conferencia-upload" class="bloco"><h4>Conferência humana obrigatória</h4><p>A IA sugere a classe e a possível solução. Confirme ou corrija antes de considerar o diagnóstico validado.</p><select id="upload-classe" aria-label="Classe conferida"></select><label>Observação da conferência<input id="upload-observacao" maxlength="1000"></label><button id="upload-confirmar" type="button">Confirmar sugestão</button><button id="upload-corrigir" type="button">Registrar correção</button><p id="upload-revisao-status" role="status"></p></div><h4>Peça analisada</h4><img id="peca-analisada" class="teste-img" alt="Peça enviada para inspeção"><p>O mapa de calor indica regiões que influenciaram o modelo; não comprova a localização exata da costura.</p>
           <div id="teste-ia" class="ia-conteudo"></div>
         </div>
 
@@ -465,7 +442,13 @@
         </div>
       </div>
     </div>
+  </div>
   </section>
+
+  <!-- ======================================================
+       PAGINA: TESTAR
+       ====================================================== -->
+
 
   <!-- ======================================================
        PAGINA: HISTORICO
@@ -478,6 +461,7 @@
       </div>
     </div>
 
+    <div class="card" style="padding:16px;margin-bottom:16px"><label>Dia das inspeções <input id="historico-dia" type="date"></label><label><input id="historico-defeitos" type="checkbox"> Somente peças com defeito</label><button id="historico-atualizar" type="button">Consultar dia</button></div>
     <div id="stories" class="stories" role="group" aria-label="Filtrar historico por tipo de falha"></div>
 
     <div id="grade-historico" class="grade-historico"></div>
@@ -583,7 +567,7 @@
   <!-- ======================================================
        PAGINA: LOTES
        ====================================================== -->
-  <section id="pagina-lotes" class="pagina" aria-label="Lotes de producao">
+  <section id="pagina-lotes" class="pagina" aria-label="Lotes de producao"><div class="card integracao-card"><h2>Conexão dos lotes de inspeção</h2><p>Estes lotes usam o Supabase. O recebimento e o cadastro de produção ficam na Gestão.</p><a class="btn btn-principal" href="/gestao#recebimento">Cadastrar ou receber lote na Gestão</a><button id="testar-conexao-banco" class="btn btn-fantasma" type="button">Verificar conexão Supabase</button><div id="supabase-orientacao" role="status"></div></div>
     <div class="pagina-cabecalho">
       <div class="pagina-titulos">
         <h1>Lotes</h1>
@@ -865,6 +849,7 @@
        PAGINA: RELATORIOS
        ====================================================== -->
   <section id="pagina-relatorios" class="pagina" aria-label="Relatorios">
+    <div class="card relatorio-visual"><h2>Resumo visual das inspeções</h2><label>Dia do relatório<input id="relatorio-dia" type="date"></label><button id="relatorio-atualizar" class="btn btn-principal" type="button">Atualizar indicadores</button><a id="relatorio-pdf" class="btn btn-principal" href="/api/relatorios/pdf" download>Exportar inspeções em PDF</a><a class="btn btn-fantasma" href="/api/gestao/report.pdf" download>Exportar produção em PDF</a><div id="relatorio-indicadores" class="relatorio-indicadores" aria-live="polite"></div><div id="relatorio-classes"></div></div>
     <div class="pagina-cabecalho">
       <div class="pagina-titulos">
         <h1>Relatorios</h1>
@@ -1021,20 +1006,10 @@
         <path d="M15.5 11 21 7.8v8.4L15.5 13z"/>
       </svg>
     </span>
-    <span class="tab-texto">Ao vivo</span>
+    <span class="tab-texto">Inspeção</span>
   </button>
 
-  <button class="nav-item" type="button" data-pagina="testar" aria-label="Testar imagem">
-    <span class="nav-icone" aria-hidden="true">
-      <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor"
-           stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false">
-        <circle cx="11" cy="11" r="7"/><path d="m20.5 20.5-4.1-4.1"/>
-      </svg>
-    </span>
-    <span class="tab-texto">Testar</span>
-  </button>
-
-  <button class="nav-item" type="button" data-pagina="historico" aria-label="Historico">
+<button class="nav-item" type="button" data-pagina="historico" aria-label="Historico">
     <span class="nav-icone" aria-hidden="true">
       <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor"
            stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false">
@@ -1059,17 +1034,7 @@
     <span class="tab-texto">Lotes</span>
   </button>
 
-  <button class="nav-item" type="button" data-pagina="treinamento" aria-label="Treinamento">
-    <span class="nav-icone" aria-hidden="true">
-      <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor"
-           stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false">
-        <path d="M4 3.5v17h16.5"/><path d="m7.5 15.5 3.5-4.5 3 2.5 5-6.5"/>
-      </svg>
-    </span>
-    <span class="tab-texto">Treino</span>
-  </button>
-
-  <button class="nav-item" type="button" data-pagina="ajustes" aria-label="Ajustes">
+<button class="nav-item" type="button" data-pagina="ajustes" aria-label="Ajustes">
     <span class="nav-icone" aria-hidden="true">
       <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor"
            stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false">

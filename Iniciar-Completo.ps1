@@ -2,6 +2,7 @@ param([int]$Porta=8000,[string]$Python='')
 $ErrorActionPreference='Stop'
 if(-not $Python){
     $candidates=@(
+        (Join-Path $env:TEMP 'duas-marias-venv/Scripts/python.exe'),
         (Join-Path $env:USERPROFILE 'Documents/Codex/venvs/pc/Scripts/python.exe'),
         (Join-Path $PSScriptRoot '.venv/Scripts/python.exe')
     )

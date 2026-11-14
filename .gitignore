@@ -25,3 +25,15 @@ artifacts/capturas/
 # Fila do banco (Supabase) e lote em producao - estado local desta maquina
 artifacts/pendentes*.jsonl
 artifacts/lote_ativo.json
+
+# Arquivos locais de execução e revisão de documentos
+debug.log
+.npm-cache/
+tmp/
+artifacts/local/
+artifacts/*.sqlite3*
+artifacts/gestao_demo/
+artifacts/relatorios/relatorio_*.md
+
+# Fontes recebidas podem conter fotos de OPs e dados internos; ficam locais.
+docs/testes/fontes/*.pdf

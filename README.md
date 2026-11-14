@@ -1,5 +1,11 @@
 # Duas Marias Smart Production
 
+## Execução operacional atual
+
+No Windows, execute `.\Iniciar-Completo.ps1` e abra **http://127.0.0.1:8000/login**. No primeiro acesso, crie a conta local com senha forte; não existe senha padrão. A entrada da porta 5173 redireciona para esse servidor. O financeiro fica reservado à segunda fase.
+
+O fluxo atual inclui inspeção real com câmera e upload, histórico persistente por dia, revisão humana, colaboradores, recebimento de grade/aviamentos e redistribuição. A versão mobile é uma PWA instalável; a inferência depende do servidor. Supabase e Outlook exigem configuração externa descrita em [Configuração local](docs/testes/CONFIGURACAO_LOCAL.md). Os registros antigos abaixo são mantidos como referência do desenvolvimento.
+
 Sistema da Duas Marias para a produção de costura. Tem três partes:
 
 | Parte | O que é | Onde fica |
@@ -73,7 +79,11 @@ Abra http://127.0.0.1:5173 e entre com email e senha **fictícios**. Para compil
 
 O protótipo usa dados fictícios em memória: cadastros reiniciam ao recarregar, o upload de imagem não faz análise real e os scores de risco são fixos. Indicadores, regras e próximas etapas estão em [docs/ENTREGA_ATUAL.md](docs/ENTREGA_ATUAL.md), [docs/VERIFICACAO_F0.md](docs/VERIFICACAO_F0.md) e [docs/CONTINUIDADE_E_DATASETS.md](docs/CONTINUIDADE_E_DATASETS.md).
 
-## Estrutura
+## Registros de teste
+
+Os relatos, critérios de aceite e roteiros de reteste ficam em [docs/testes](docs/testes/README.md), com [orientações de configuração local](docs/testes/CONFIGURACAO_LOCAL.md). O relatório de 14/11/2026 tem fonte Markdown e PDF de leitura. Para regenerar o PDF, instale `reportlab` no ambiente de documentação e execute `python scripts/13_gerar_relatorio_testes.py`.
+
+## Estrutura do repositório
 
 ```
 .

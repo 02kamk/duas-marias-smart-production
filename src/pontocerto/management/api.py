@@ -1,4 +1,5 @@
-from datetime import date
+from datetime import date, timedelta
+import math
 from pathlib import Path
 from uuid import uuid4
 from typing import Literal
@@ -51,17 +52,50 @@ class AssignmentInput(Input):
     reason: str = Field(min_length=3,max_length=300)
 
 
+class EmployeeInput(Input):
+    name: str = Field(min_length=2, max_length=100)
+    availableMinutes: int = Field(strict=True, ge=1, le=480)
+    operations: list[str] = Field(min_length=1)
+
+    @model_validator(mode='after')
+    def valid_operations(self):
+        if len(set(self.operations)) != len(self.operations) or any(op not in OPERATIONS for op in self.operations):
+            raise ValueError('Selecione operações válidas, sem repetições.')
+        return self
+
+
+class ReallocationInput(Input):
+    employeeId: str
+    period: date
+    minutes: int = Field(strict=True,gt=0,le=480)
+    reason: str = Field(min_length=3,max_length=300)
+
+
 def create_router(store: Store, model: DelayModel):
     router = APIRouter(prefix='/api/gestao', tags=['Gestão demonstrativa'])
 
     @router.get('/state')
     def state():
         return {**store.read(), 'operations': OPERATIONS, 'referenceDate': date.today().isoformat(),
-                'notice': 'Ambiente local demonstrativo; registros fictícios persistidos em JSON. Sem autenticação real.'}
+                'notice': 'Ambiente de testes. Confira a origem dos dados antes de tomar decisões operacionais.',
+                'storage':getattr(store,'backend','local')}
 
     @router.get('/model')
     def model_status():
         return model.status()
+
+    @router.post('/employees', status_code=201)
+    def create_employee(body: EmployeeInput):
+        def change(state):
+            if any(e['name'].casefold() == body.name.casefold() for e in state['employees']):
+                raise ValueError('Nome de colaborador já cadastrado nesta demonstração.')
+            employee = {'id': str(uuid4()), 'name': body.name, 'active': True,
+                        'availableMinutes': body.availableMinutes,
+                        'skills': {op: {'rate': None, 'quality': None, 'experience': None}
+                                   for op in body.operations}}
+            state['employees'].append(employee)
+            return employee
+        return mutate('create_employee', 'Cadastro local sem histórico de produtividade', change)
 
     @router.post('/orders',status_code=201)
     def create_order(body: OrderInput):
@@ -113,7 +147,8 @@ def create_router(store: Store, model: DelayModel):
         result={'executionMode':'model','inputDataOrigin':'mock','trainingDataOrigin':'synthetic',
                 'modelVersion':VERSION,'generatedAt':now(),'orderId':order_id,
                 'snapshot':baseline,'featureSnapshot':dict(zip(['remaining','days','capacityPerDay','recentRate','reworkRate'],row)),
-                'notice':NOTICE,'calibrated':False,'mlAvailable':False,'ml':None}
+                'notice':NOTICE,'calibrated':False,'mlAvailable':False,'ml':None,
+                'estimatedDeliveryDate':None}
         if conditions:
             result['reason']=' '.join(conditions)
         else:
@@ -121,6 +156,8 @@ def create_router(store: Store, model: DelayModel):
                 prediction=model.predict(row)
                 result['ml']={**prediction,'estimatedDays':baseline['remaining']/prediction['futureRate'] if prediction['futureRate']>0 else None}
                 result['mlAvailable']=True
+                if prediction['futureRate']>0:
+                    result['estimatedDeliveryDate']=(reference+timedelta(days=math.ceil(baseline['remaining']/prediction['futureRate']))).isoformat()
             except Exception as exc:
                 result['reason']=str(exc)
         result['suggestions']=[
@@ -131,6 +168,8 @@ def create_router(store: Store, model: DelayModel):
 
     @router.get('/recommendations')
     def recommend(operation:str,period:date,minutes:int=60):
+        if period < date.today():
+            raise HTTPException(422,'Use um período atual ou futuro.')
         if operation not in OPERATIONS or not 1<=minutes<=480:
             raise HTTPException(422,'Operação ou duração inválida.')
         return recommendations(store.read(),operation,minutes,period.isoformat())
@@ -152,6 +191,29 @@ def create_router(store: Store, model: DelayModel):
                 state['assignments'].append(decision)
             return decision
         return mutate('assignment_decision',body.reason,change)
+
+    @router.post('/assignments/{assignment_id}/reallocate')
+    def reallocate(assignment_id:str,body:ReallocationInput):
+        if body.period<date.today():
+            raise HTTPException(422,'Use um período atual ou futuro.')
+        def change(state):
+            previous=next((a for a in state['assignments'] if a['id']==assignment_id),None)
+            if previous is None:
+                raise ValueError('Alocação não encontrada ou já redistribuída.')
+            if date.fromisoformat(previous['period'])<date.today():
+                raise ValueError('Alocação passada não pode ser redistribuída.')
+            order=find(state,previous['orderId'])
+            if order['status']=='Concluído':
+                raise ValueError('Lote concluído não pode ser redistribuído.')
+            state['assignments'].remove(previous)
+            eligible=recommendations(state,previous['operation'],body.minutes,body.period.isoformat())['eligible']
+            if not any(e['employeeId']==body.employeeId for e in eligible):
+                raise ValueError('Destino sem habilitação ou minutos disponíveis.')
+            current={**previous,**body.model_dump(mode='json'),'id':str(uuid4()),'at':now()}
+            state['assignments'].append(current)
+            state['decisions'].append({'id':str(uuid4()),'type':'reallocation','before':previous,'after':current,'at':now(),'reason':body.reason})
+            return current
+        return mutate('reallocation',body.reason,change)
 
     def mutate(action,reason,callback):
         try:

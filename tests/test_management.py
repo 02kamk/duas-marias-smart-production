@@ -80,6 +80,38 @@ class ManagementTest(unittest.TestCase):
         body['employeeId']='3'
         self.assertEqual(self.client.post('/api/gestao/assignments',json=body).status_code,422)
 
+    def test_new_employee_manual_allocation_and_persistence(self):
+        body={'name':'Teste Cadastro','availableMinutes':120,'operations':['Gola']}
+        response=self.client.post('/api/gestao/employees',json=body)
+        self.assertEqual(response.status_code,201)
+        employee=response.json()
+        self.assertIsNone(employee['skills']['Gola']['rate'])
+        self.assertEqual(Store(self.root/'demo.json').read()['employees'][-1]['id'],employee['id'])
+        self.assertEqual(self.client.post('/api/gestao/employees',json=body).status_code,422)
+        day=date.today().isoformat()
+        query={'operation':'Gola','period':day,'minutes':90}
+        candidates=self.client.get('/api/gestao/recommendations',params=query).json()['eligible']
+        candidate=next(e for e in candidates if e['employeeId']==employee['id'])
+        self.assertTrue(candidate['manualReview'])
+        self.assertIsNone(candidate['score'])
+        allocation={'orderId':'1','employeeId':employee['id'],'operation':'Gola','minutes':90,
+                    'period':day,'decision':'accepted','reason':'Alocação revisada manualmente'}
+        self.assertEqual(self.client.post('/api/gestao/assignments',json=allocation).status_code,201)
+        self.assertEqual(self.client.post('/api/gestao/assignments',json=allocation).status_code,422)
+        result=self.client.get('/api/gestao/recommendations',params=query).json()
+        self.assertTrue(any(e['employeeId']==employee['id'] for e in result['excluded']))
+
+    def test_invalid_employees_and_past_recommendation_are_rejected(self):
+        before=self.store.read()
+        for body in [{'name':'  ','availableMinutes':120,'operations':['Gola']},
+                     {'name':'Teste','availableMinutes':481,'operations':['Gola']},
+                     {'name':'Teste','availableMinutes':120,'operations':['Inexistente']},
+                     {'name':'Teste','availableMinutes':120,'operations':[]}]:
+            self.assertEqual(self.client.post('/api/gestao/employees',json=body).status_code,422)
+        self.assertEqual(before,self.store.read())
+        self.assertEqual(self.client.get('/api/gestao/recommendations',params={
+            'operation':'Gola','minutes':60,'period':(date.today()-timedelta(days=1)).isoformat()}).status_code,422)
+
     def test_missing_model_is_explicit_and_baseline_separate(self):
         response=self.client.get('/api/gestao/orders/1/analysis').json()
         self.assertFalse(response['mlAvailable'])
