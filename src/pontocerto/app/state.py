@@ -194,7 +194,7 @@ class EstadoSessao:
             tecido=tecido,
             origem=origem,
             imagem=imagem_url,
-            lote_id=int(lote["id"]) if lote else None,
+            lote_id=int(lote["id"]) if lote and lote.get("id") is not None else None,
             lote_codigo=str(lote.get("codigo") or "") if lote else None,
         )
 
@@ -294,6 +294,21 @@ class EstadoSessao:
         if pendentes:
             itens = [e for e in itens if e.precisa_revisao]
         return [e.to_dict() for e in itens[:limite]]
+
+    def resumo_por_lote(self) -> dict[str, dict]:
+        """Peças inspecionadas, com defeito e aguardando conferência por código de lote."""
+        with self._connect() as db:
+            rows = db.execute('SELECT payload FROM eventos').fetchall()
+        resumo: dict[str, dict] = {}
+        for row in rows:
+            ev = Evento(**json.loads(row[0]))
+            if not ev.lote_codigo:
+                continue
+            item = resumo.setdefault(ev.lote_codigo, {'inspecionadas': 0, 'defeitos': 0, 'pendentes': 0})
+            item['inspecionadas'] += 1
+            item['defeitos'] += ev.classe_final != 'normal'
+            item['pendentes'] += ev.precisa_revisao
+        return resumo
 
     def evento(self, evento_id: str) -> Evento | None:
         with self._lock:

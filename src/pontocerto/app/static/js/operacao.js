@@ -1,6 +1,6 @@
 'use strict';
 // Partes operacionais fora da inspeção: aplicativo instalável, sair da conta,
-// menu "Mais" do celular, resumo dos relatórios e orientação do banco.
+// menu "Mais" do celular e resumo dos relatórios.
 document.addEventListener('DOMContentLoaded', () => {
   const $ = id => document.getElementById(id);
   let installPrompt = null;
@@ -82,20 +82,4 @@ document.addEventListener('DOMContentLoaded', () => {
   window.addEventListener('hashchange', () => { if (location.hash === '#relatorios') reportSummary(); });
   if (location.hash === '#relatorios') reportSummary();
 
-  async function connection() {
-    const host = $('supabase-orientacao');
-    if (!host) return;
-    try {
-      const config = await api('/api/gestao/configuration');
-      host.replaceChildren();
-      const title = document.createElement('p');
-      title.textContent = config.supabaseMissing.length ? 'Banco não configurado. Fale com o responsável pelo sistema.' : 'Banco configurado.';
-      host.append(title);
-      const status = await api('/api/db/status?forcar=true');
-      const p = document.createElement('p');
-      p.textContent = status.conectado ? 'Banco conectado.' : ('Banco desconectado. ' + (status.erro || ''));
-      host.append(p);
-    } catch (e) { host.textContent = e.message; }
-  }
-  if ($('testar-conexao-banco')) $('testar-conexao-banco').onclick = connection;
 });

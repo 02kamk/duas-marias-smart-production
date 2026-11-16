@@ -378,189 +378,31 @@
   </section>
 
   <!-- ======================================================
-       PAGINA: LOTES
+       PÁGINA: LOTE EM PRODUÇÃO
        ====================================================== -->
-  <section id="pagina-lotes" class="pagina" aria-label="Lotes de producao"><div class="card integracao-card"><h2>Conexão dos lotes de inspeção</h2><p>Estes lotes usam o Supabase. O recebimento e o cadastro de produção ficam na Gestão.</p><a class="btn btn-principal" href="/gestao#recebimento">Cadastrar ou receber lote na Gestão</a><button id="testar-conexao-banco" class="btn btn-fantasma" type="button">Verificar conexão Supabase</button><div id="supabase-orientacao" role="status"></div></div>
+  <section id="pagina-lotes" class="pagina" aria-label="Lote em produção">
     <div class="pagina-cabecalho">
       <div class="pagina-titulos">
-        <h1>Lotes</h1>
-        <p class="pagina-sub">Escolha o lote em producao: cada peca inspecionada e gravada nele no banco.</p>
+        <h1>Lote em produção</h1>
+        <p class="pagina-sub">Escolha a OP que está sendo inspecionada. Cada peça fica registrada nela.</p>
       </div>
       <div class="pagina-acoes">
-        <button id="btn-novo-lote" class="btn btn-principal" type="button">
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
-               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
-            <path d="M12 5v14"/><path d="M5 12h14"/>
-          </svg>
-          <span>Novo lote</span>
-        </button>
+        <a class="btn btn-secundario" href="/gestao#receber">Receber nova OP</a>
       </div>
     </div>
 
-    <!-- Banco nao configurado -->
-    <div id="lotes-sem-banco" class="bloco-vazio bloco-vazio-alto" hidden>
-      <svg viewBox="0 0 24 24" width="44" height="44" fill="none" stroke="currentColor"
-           stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
-        <ellipse cx="12" cy="5.5" rx="7.5" ry="2.8"/>
-        <path d="M4.5 5.5v6.5c0 1.5 3.4 2.8 7.5 2.8s7.5-1.3 7.5-2.8V5.5"/>
-        <path d="M4.5 12v6.5c0 1.5 3.4 2.8 7.5 2.8s7.5-1.3 7.5-2.8V12"/>
-      </svg>
-      <p class="vazio-titulo">Banco de dados nao configurado</p>
-      <p id="lotes-sem-banco-motivo" class="vazio-texto">
-        Preencha SUPABASE_DB_URL, SUPABASE_URL, SUPABASE_SECRET_KEY e SUPABASE_BUCKET no arquivo
-        <code>.env</code> e reinicie o servidor. Sem isso a inspecao continua funcionando, so que sem lotes.
-      </p>
+    <div id="card-lote-ativo" class="card card-lote-ativo">
+      <div class="card-cabecalho">
+        <h3>Inspecionando agora</h3>
+        <button id="btn-parar-lote" class="btn btn-fantasma" type="button" hidden>Parar</button>
+      </div>
+      <p id="lote-ativo-texto" class="card-texto">Nenhum lote escolhido. As peças ficam no histórico sem lote.</p>
     </div>
 
-    <div id="lotes-conteudo">
-      <div class="grade-lotes-topo">
-        <!-- Lote em producao -->
-        <div class="card">
-          <div class="card-cabecalho">
-            <h3>Lote em producao</h3>
-            <span id="lote-ativo-chip" class="chip chip-neutro">Nenhum</span>
-          </div>
-          <p id="lote-ativo-texto" class="card-texto">
-            Nenhum lote ativo: as pecas ficam so no historico deste computador.
-          </p>
-          <div class="linha-botoes">
-            <label class="campo campo-inline" for="sel-lote-ativo">
-              <span class="campo-rotulo">Trocar para</span>
-              <select id="sel-lote-ativo" class="entrada">
-                <option value="">Selecione um lote</option>
-              </select>
-            </label>
-            <button id="btn-usar-lote" class="btn btn-principal" type="button">
-              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
-                   stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
-                <path d="M7 4.5v15l12-7.5z"/>
-              </svg>
-              <span>Usar lote</span>
-            </button>
-            <button id="btn-parar-lote" class="btn btn-secundario" type="button">
-              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
-                   stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
-                <rect x="6" y="6" width="12" height="12" rx="1.5"/>
-              </svg>
-              <span>Parar de gravar</span>
-            </button>
-          </div>
-        </div>
-
-        <!-- Situacao do banco -->
-        <div class="card">
-          <div class="card-cabecalho">
-            <h3>Banco de dados</h3>
-            <button id="btn-testar-banco" class="btn btn-fantasma" type="button">
-              <span>Testar agora</span>
-            </button>
-          </div>
-          <div id="banco-status" class="llm-status">
-            <p class="card-texto">Consultando...</p>
-          </div>
-        </div>
-      </div>
-
-      <!-- Formulario de novo lote -->
-      <div id="card-novo-lote" class="card" hidden>
-        <div class="card-cabecalho">
-          <h3>Novo lote</h3>
-          <span class="card-nota">Campos com * sao obrigatorios</span>
-        </div>
-        <form id="form-novo-lote" class="form-lote" novalidate>
-          <div class="campo campo-largo">
-            <label for="lote-cliente">Cliente *</label>
-            <div class="linha-campo">
-              <select id="lote-cliente" class="entrada" required>
-                <option value="">Selecione o cliente</option>
-              </select>
-              <button id="btn-novo-cliente" class="btn btn-secundario" type="button">
-                <span>Novo cliente</span>
-              </button>
-            </div>
-          </div>
-          <div id="caixa-novo-cliente" class="caixa-novo-cliente campo-largo" hidden>
-            <div class="campo">
-              <label for="cliente-nome">Nome do cliente *</label>
-              <input id="cliente-nome" class="entrada" type="text" maxlength="120" autocomplete="off">
-            </div>
-            <div class="campo">
-              <label for="cliente-cnpj">CNPJ</label>
-              <input id="cliente-cnpj" class="entrada" type="text" maxlength="20" autocomplete="off"
-                     placeholder="opcional">
-            </div>
-            <div class="linha-botoes">
-              <button id="btn-salvar-cliente" class="btn btn-principal" type="button"><span>Cadastrar cliente</span></button>
-              <button id="btn-cancelar-cliente" class="btn btn-fantasma" type="button"><span>Cancelar</span></button>
-            </div>
-          </div>
-          <div class="campo">
-            <label for="lote-codigo">Codigo do lote *</label>
-            <input id="lote-codigo" class="entrada" type="text" maxlength="40" placeholder="ex.: L-2026-001"
-                   autocomplete="off" required>
-          </div>
-          <div class="campo">
-            <label for="lote-modelo">Modelo da peca *</label>
-            <input id="lote-modelo" class="entrada" type="text" maxlength="120"
-                   placeholder="ex.: Camiseta basica gola careca" required>
-          </div>
-          <div class="campo">
-            <label for="lote-tecido">Tecido</label>
-            <input id="lote-tecido" class="entrada" type="text" maxlength="60" placeholder="ex.: Algodao">
-          </div>
-          <div class="campo">
-            <label for="lote-quantidade">Quantidade de pecas *</label>
-            <input id="lote-quantidade" class="entrada" type="number" min="1" step="1" required>
-          </div>
-          <div class="campo">
-            <label for="lote-prazo">Prazo de entrega *</label>
-            <input id="lote-prazo" class="entrada" type="date" required>
-          </div>
-          <div class="campo">
-            <label for="lote-limite">Limite de defeito (%)</label>
-            <input id="lote-limite" class="entrada" type="number" min="0.1" max="99" step="0.1" value="5">
-            <p class="campo-ajuda">Acima disso o lote fica em alerta.</p>
-          </div>
-          <div class="campo campo-largo">
-            <label for="lote-obs">Observacoes</label>
-            <input id="lote-obs" class="entrada" type="text" maxlength="300" autocomplete="off">
-          </div>
-          <div class="linha-botoes campo-largo">
-            <button id="btn-salvar-lote" class="btn btn-principal" type="submit"><span>Cadastrar lote</span></button>
-            <button id="btn-cancelar-lote" class="btn btn-fantasma" type="button"><span>Cancelar</span></button>
-          </div>
-        </form>
-      </div>
-
-      <!-- Lista de lotes -->
-      <div id="grade-lotes" class="grade-lotes"></div>
-      <div id="lotes-vazio" class="bloco-vazio" hidden>
-        <p class="vazio-titulo">Nenhum lote cadastrado</p>
-        <p class="vazio-texto">Toque em <strong>Novo lote</strong> para cadastrar o primeiro.</p>
-      </div>
-
-      <!-- Detalhe do lote -->
-      <div id="card-detalhe-lote" class="card" hidden>
-        <div class="card-cabecalho">
-          <h3 id="detalhe-lote-titulo">Lote</h3>
-          <div class="linha-botoes linha-botoes-justa">
-            <button id="btn-detalhe-usar" class="btn btn-principal" type="button"><span>Usar este lote</span></button>
-            <button id="btn-detalhe-status" class="btn btn-secundario" type="button"><span>Concluir lote</span></button>
-            <button id="btn-detalhe-fechar" class="btn btn-fantasma" type="button"><span>Fechar</span></button>
-          </div>
-        </div>
-        <div class="grade-detalhe-lote">
-          <div>
-            <h4 class="bloco-titulo">Defeitos por tipo</h4>
-            <ul id="detalhe-defeitos" class="lista-top"></ul>
-          </div>
-          <div>
-            <h4 class="bloco-titulo">Ultimas pecas com defeito</h4>
-            <div id="detalhe-fotos" class="grade-historico grade-fotos-lote"></div>
-            <p id="detalhe-fotos-vazio" class="card-texto">Nenhuma foto de defeito neste lote ainda.</p>
-          </div>
-        </div>
-      </div>
+    <div id="grade-lotes" class="grade-lotes"></div>
+    <div id="lotes-vazio" class="bloco-vazio" hidden>
+      <p class="vazio-titulo">Nenhuma OP em aberto</p>
+      <p class="vazio-texto">Receba uma OP na <a href="/gestao#receber">Gestão</a> para inspecionar.</p>
     </div>
   </section>
 
@@ -654,6 +496,14 @@
             </div>
           </div>
         </details>
+      </div>
+
+      <div class="card">
+        <div class="card-cabecalho">
+          <h3>Banco de dados</h3>
+          <button id="btn-testar-banco" class="btn btn-fantasma" type="button"><span>Testar agora</span></button>
+        </div>
+        <div id="banco-status" class="llm-status"></div>
       </div>
 
       <div class="card">

@@ -562,11 +562,14 @@ def criar_app(cfg: Any = None) -> FastAPI:
         resumo = None
         if lote:
             resumo = {
-                "id": int(lote["id"]),
+                # id do lote no Supabase; None quando o banco não está configurado.
+                "id": int(lote["id"]) if lote.get("id") is not None else None,
+                "ordem_id": lote.get("ordem_id"),
                 "codigo": lote.get("codigo"),
                 "cliente": lote.get("cliente"),
                 "modelo_peca": lote.get("modelo_peca"),
                 "tecido": lote.get("tecido"),
+                "quantidade": lote.get("quantidade"),
             }
         app.state.estado.lote_ativo = resumo
         arquivo = _arquivo_lote_ativo()
@@ -587,28 +590,12 @@ def criar_app(cfg: Any = None) -> FastAPI:
         try:
             banco.status(forcar=True)
             lote = app.state.estado.lote_ativo
-            if lote and banco.disponivel:
+            if lote and lote.get("id") is not None and banco.disponivel:
                 atual = banco.obter_lote(int(lote["id"]))
                 if not atual or atual.get("status") == "concluido":
                     _definir_lote_ativo(None)
-                else:
-                    _definir_lote_ativo(atual)
         except Exception:
             pass  # sem internet: mantem o lote lembrado, o reenvio cuida depois
-
-    def _com_alerta(lote: dict | None) -> dict | None:
-        """Marca `alerta` quando a taxa de defeito passa do limite do lote."""
-        if not lote:
-            return lote
-        minimo = int(cfg_banco.get("min_pecas_alerta", 20))
-        inspecionadas = int(lote.get("inspecionadas") or 0)
-        taxa = float(lote.get("taxa_defeito") or 0)
-        limite = float(lote.get("limite_defeito") or 0.05)
-        lote["min_pecas_alerta"] = minimo
-        lote["alerta"] = inspecionadas >= minimo and taxa > limite
-        ativo = app.state.estado.lote_ativo
-        lote["ativo"] = bool(ativo and int(ativo["id"]) == int(lote["id"]))
-        return lote
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -649,9 +636,9 @@ def criar_app(cfg: Any = None) -> FastAPI:
                 app.state.banco = None
                 app.state.erros_import["db"] = f"{type(exc).__name__}: {exc}"
 
+        app.state.estado.lote_ativo = _ler_json(_arquivo_lote_ativo()) or None
         banco = app.state.banco
         if banco is not None and banco.configurado:
-            app.state.estado.lote_ativo = _ler_json(_arquivo_lote_ativo()) or None
             if Sincronizador is not None:
                 try:
                     sinc = Sincronizador(cfg, banco, cfg.app.pasta_capturas)
@@ -1154,127 +1141,55 @@ def criar_app(cfg: Any = None) -> FastAPI:
         resultado["lote_ativo"] = app.state.estado.lote_ativo
         return resultado
 
-    # ------------------------------------------------------ clientes e lotes
-    def _banco_pronto():
-        """(banco, None) se da para consultar; (None, resposta 503) se nao."""
+    # ------------------------------------------------------------ lote ativo
+    def _lote_no_banco(dados: dict) -> int | None:
+        """Garante o lote da OP no Supabase (pelo código) e devolve o id.
+
+        Sem banco configurado ou sem conexão devolve None: a inspeção continua
+        registrando o lote localmente, só não envia para o banco.
+        """
         banco = app.state.banco
         if banco is None or not banco.configurado:
-            motivo = (getattr(banco, "erro", None)
-                      or app.state.erros_import.get("db") or "banco nao configurado")
-            return None, JSONResponse(status_code=503,
-                                      content={"erro": f"Banco indisponivel: {motivo}"})
-        return banco, None
-
-    def _falha_banco(banco, exc: Exception) -> JSONResponse:
-        # Erro de validacao/regra (banco respondeu) = 400; sem conexao = 503.
-        codigo = 400 if (isinstance(exc, ErroBanco) and banco.disponivel) else 503
-        return JSONResponse(status_code=codigo, content={"erro": banco.mascarar(str(exc))})
-
-    @app.get("/api/clientes")
-    def listar_clientes():
-        banco, erro = _banco_pronto()
-        if erro:
-            return erro
+            return None
         try:
-            return {"clientes": banco.listar_clientes()}
-        except Exception as exc:
-            return _falha_banco(banco, exc)
+            codigo = str(dados["codigo"]).strip()
+            existente = next((l for l in banco.listar_lotes() if str(l.get("codigo")) == codigo), None)
+            if existente:
+                if existente.get("status") == "aberto":
+                    banco.atualizar_status_lote(int(existente["id"]), "em_inspecao")
+                return int(existente["id"])
+            nome = str(dados.get("cliente") or "Sem cliente").strip()
+            cliente = next((c for c in banco.listar_clientes() if str(c.get("nome")).casefold() == nome.casefold()), None)
+            if cliente is None:
+                cliente = banco.criar_cliente(nome)
+            novo = banco.criar_lote({
+                "cliente_id": cliente["id"], "codigo": codigo, "modelo_peca": dados.get("modelo_peca") or "-",
+                "tecido": dados.get("tecido"), "quantidade": dados.get("quantidade") or 1,
+                "prazo_entrega": dados.get("prazo_entrega"),
+            })
+            banco.atualizar_status_lote(int(novo["id"]), "em_inspecao")
+            return int(novo["id"])
+        except Exception:
+            return None
 
-    @app.post("/api/clientes")
-    def criar_cliente(corpo: dict = Body(default={})):
-        banco, erro = _banco_pronto()
-        if erro:
-            return erro
-        corpo = corpo or {}
-        try:
-            return {"cliente": banco.criar_cliente(str(corpo.get("nome") or ""),
-                                                   corpo.get("cnpj"))}
-        except Exception as exc:
-            return _falha_banco(banco, exc)
+    def ativar_lote(dados: dict | None) -> dict | None:
+        """Põe uma OP da Gestão em inspeção (None = parar de gravar em lote)."""
+        if not dados:
+            return _definir_lote_ativo(None)
+        return _definir_lote_ativo({**dados, "id": _lote_no_banco(dados)})
 
-    @app.get("/api/lotes")
-    def listar_lotes():
-        banco, erro = _banco_pronto()
-        if erro:
-            return erro
-        try:
-            lotes = [_com_alerta(l) for l in banco.listar_lotes()]
-        except Exception as exc:
-            return _falha_banco(banco, exc)
-        return {"lotes": lotes, "ativo": app.state.estado.lote_ativo}
-
-    @app.post("/api/lotes")
-    def criar_lote(corpo: dict = Body(default={})):
-        banco, erro = _banco_pronto()
-        if erro:
-            return erro
-        try:
-            novo = banco.criar_lote(corpo or {})
-            return {"lote": _com_alerta(banco.obter_lote(int(novo["id"])))}
-        except Exception as exc:
-            return _falha_banco(banco, exc)
+    app.state.ativar_lote = ativar_lote
 
     @app.get("/api/lotes/ativo")
     def ler_lote_ativo():
         return {"lote": app.state.estado.lote_ativo}
 
     @app.post("/api/lotes/ativo")
-    def escolher_lote_ativo(corpo: dict = Body(default={})):
-        """{"lote_id": 3} poe o lote em producao; {"lote_id": null} volta ao modo so local."""
-        corpo = corpo or {}
-        lote_id = corpo.get("lote_id")
-        if lote_id in (None, ""):
-            return {"lote": _definir_lote_ativo(None)}
-        banco, erro = _banco_pronto()
-        if erro:
-            return erro
-        try:
-            lote = banco.obter_lote(int(lote_id))
-            if lote is None:
-                return JSONResponse(status_code=404, content={"erro": "lote nao encontrado"})
-            if lote.get("status") == "concluido":
-                return JSONResponse(status_code=409, content={
-                    "erro": f"o lote {lote.get('codigo')} ja foi concluido; reabra antes de usar"})
-            if lote.get("status") == "aberto":
-                banco.atualizar_status_lote(int(lote_id), "em_inspecao")
-        except (TypeError, ValueError):
-            return JSONResponse(status_code=400, content={"erro": "lote_id deve ser um numero"})
-        except Exception as exc:
-            return _falha_banco(banco, exc)
-        return {"lote": _definir_lote_ativo(lote)}
-
-    @app.get("/api/lotes/{lote_id}")
-    def detalhe_lote(lote_id: int, limite: int = Query(30, ge=1, le=200)):
-        banco, erro = _banco_pronto()
-        if erro:
-            return erro
-        try:
-            lote = banco.obter_lote(lote_id)
-            if lote is None:
-                return JSONResponse(status_code=404, content={"erro": "lote nao encontrado"})
-            return {
-                "lote": _com_alerta(lote),
-                "defeitos": banco.defeitos_por_classe(lote_id),
-                "inspecoes": banco.ultimas_inspecoes(lote_id, limite),
-            }
-        except Exception as exc:
-            return _falha_banco(banco, exc)
-
-    @app.post("/api/lotes/{lote_id}/status")
-    def mudar_status_lote(lote_id: int, corpo: dict = Body(default={})):
-        banco, erro = _banco_pronto()
-        if erro:
-            return erro
-        status_novo = str((corpo or {}).get("status") or "").strip()
-        try:
-            if not banco.atualizar_status_lote(lote_id, status_novo):
-                return JSONResponse(status_code=404, content={"erro": "lote nao encontrado"})
-            ativo = app.state.estado.lote_ativo
-            if status_novo == "concluido" and ativo and int(ativo["id"]) == lote_id:
-                _definir_lote_ativo(None)  # lote fechado nao recebe mais pecas
-            return {"lote": _com_alerta(banco.obter_lote(lote_id))}
-        except Exception as exc:
-            return _falha_banco(banco, exc)
+    def parar_lote_ativo(corpo: dict = Body(default={})):
+        """Só para de gravar em lote; escolher a OP é feito pela Gestão."""
+        if (corpo or {}).get("lote_id") not in (None, ""):
+            return JSONResponse(status_code=400, content={"erro": "Escolha o lote pela lista de OPs."})
+        return {"lote": ativar_lote(None)}
 
     # ----------------------------------------------------------------- LLM
     @app.get("/api/llm/status")

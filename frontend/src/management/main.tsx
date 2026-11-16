@@ -1,37 +1,86 @@
-import React,{useEffect,useState} from 'react';
-import {createRoot} from 'react-dom/client';
-import {Activity,Boxes,Camera,ClipboardList,BrainCircuit,Users,Scale,History} from 'lucide-react';
-import {api,type State,type Order,type Analysis,type Recommendation,type ModelStatus} from './api';
+import React, { useEffect, useState } from 'react';
+import { createRoot } from 'react-dom/client';
+import { Camera, ClipboardList, LayoutDashboard, LogOut, PackageCheck, Users } from 'lucide-react';
+import { api, erroTexto, type State } from './api';
 import './style.css';
-import Receiving from './Receiving';
-import PlanningSummary from './PlanningSummary';
+import Painel from './Painel';
+import ReceberOP from './ReceberOP';
+import Producao from './Producao';
+import Equipe from './Equipe';
 
-const tabs=[['Resumo',Activity],['Lotes',Boxes],['Produção',ClipboardList],['Atrasos e capacidade',BrainCircuit],['Balanceamento',Scale],['Colaboradores',Users],['Recebimento',Boxes]] as const;
-const number=(n:number|null|undefined,digits=0)=>n==null?'Indisponível':n.toLocaleString('pt-BR',{maximumFractionDigits:digits});
-function Field({label,children}:{label:string;children:React.ReactNode}){return <label>{label}{children}</label>}
-function SelectOrder({state,value,onChange}:{state:State;value:string;onChange:(id:string)=>void}){return <Field label="Lote selecionado"><select value={value} onChange={e=>onChange(e.target.value)}>{state.orders.map(o=><option key={o.id} value={o.id}>{o.code} · {o.model}</option>)}</select></Field>}
-function OrderTable({orders,onSelect}:{orders:Order[];onSelect:(id:string)=>void}){return <div className="table-scroll"><table><thead><tr>{['Lote','Cliente / modelo','Peças finais','Progresso','Prazo','Status',''].map((x,i)=><th key={i}>{x}</th>)}</tr></thead><tbody>{orders.map(o=><tr key={o.id}><td>{o.code}</td><td>{o.client}<small>{o.model}</small></td><td>{number(o.produced)} / {number(o.quantity)}</td><td><progress max={o.quantity} value={o.produced} aria-label={`Progresso ${o.code}`}/><small>{number(100*o.produced/o.quantity,1)}%</small></td><td>{o.dueDate.split('-').reverse().join('/')}</td><td>{o.status}</td><td><button className="subtle" onClick={()=>onSelect(o.id)}>Planejar →</button></td></tr>)}</tbody></table>{!orders.length&&<p>Nenhum lote corresponde aos filtros.</p>}</div>}
-export function App(){
- const [state,setState]=useState<State|null>(null),[tab,setTab]=useState(location.hash==='#recebimento'?'Recebimento':location.hash==='#lotes'?'Lotes':'Resumo'),[selected,setSelected]=useState(''),[error,setError]=useState(''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false),[query,setQuery]=useState(''),[status,setStatus]=useState(''),[due,setDue]=useState(''),[analysis,setAnalysis]=useState<Analysis|null>(null),[model,setModel]=useState<ModelStatus|null>(null),[recs,setRecs]=useState<Recommendation|null>(null),[operation,setOperation]=useState('Revisão final'),[minutes,setMinutes]=useState(60),[period,setPeriod]=useState(''),[recordFilter,setRecordFilter]=useState(''),[dayFilter,setDayFilter]=useState('');
- async function refresh(){const fresh=await api<State>('/state');setState(fresh);setSelected(id=>id||fresh.orders[0]?.id||'');setPeriod(p=>p||fresh.referenceDate);setAnalysis(null);setRecs(null);}
- useEffect(()=>{void refresh().catch(e=>setError(String(e)));void api<ModelStatus>('/model').then(setModel).catch(e=>setError(String(e)))},[]);
- async function action(task:()=>Promise<unknown>,success='',reload=false){setBusy(true);setError('');setNotice('');try{await task();if(reload)await refresh();setNotice(success)}catch(e){setError(e instanceof Error?e.message:String(e))}finally{setBusy(false)}}
- const order=state?.orders.find(o=>o.id===selected);
- function choose(id:string){setSelected(id);setAnalysis(null);setRecs(null);}
- function openPlan(id:string){choose(id);setTab('Atrasos e capacidade')}
- if(!state)return <main className="loading"><h1>Ponto Certo · Gestão</h1><p role="status">{error||'Carregando a demonstração local…'}</p><button onClick={()=>void refresh().catch(e=>setError(String(e)))}>Tentar novamente</button><a href="/">Abrir inspeção e câmera</a></main>;
- const todayRecords=state.records.filter(r=>r.day===state.referenceDate&&r.operation==='Revisão final');
- const good=todayRecords.reduce((s,r)=>s+r.goodQuantity,0),rework=todayRecords.reduce((s,r)=>s+r.reworkQuantity,0);
- const filteredRecords=state.records.filter(r=>(!recordFilter||r.orderId===recordFilter)&&(!dayFilter||r.day===dayFilter));
- return <div className="workspace"><aside><div className="brand">Ponto Certo<span>GESTÃO DA PRODUÇÃO</span></div><a className="inspection" href="/"><Camera size={18}/> Inspeção, câmera e fotos ↗</a><nav>{tabs.map(([name,Icon])=><button className={tab===name?'active':''} key={name} onClick={()=>{setTab(name);setNotice('');setError('')}}><Icon size={18}/>{name==='Balanceamento'?'Distribuição de tarefas':name}</button>)}</nav><small>Extensão local de demonstração<br/>Os recursos de inspeção foram preservados.</small></aside><main><header><div><span className="eyebrow">DUAS MARIAS · SMART PRODUCTION</span><h1>{tab==='Balanceamento'?'Distribuição de tarefas':tab}</h1><p>Acompanhe o trabalho e planeje o próximo passo.</p></div><span className="badge">{state.storage==='supabase'?'BASE SUPABASE':'BASE LOCAL DE TESTES'}</span></header><div className="banner">{state.notice} Não use dados pessoais ou decisões operacionais reais.</div>{error&&<div className="error" role="alert">{error}</div>}{notice&&<div className="success" role="status">{notice}</div>}
- {tab==='Resumo'&&<><div className="stats">{[['Lotes ativos',state.orders.filter(o=>o.status!=='Concluído').length,'lotes fictícios'],['Produção boa hoje',good,'peças na revisão final'],['Retrabalho hoje',rework,'peças separadas da produção boa'],['Atingimento de capacidade',number(state.orders.reduce((s,o)=>s+o.recentRate,0)/(state.orders.reduce((s,o)=>s+o.capacityPerDay,0)||1)*100,1)+'%','ritmo informado ÷ capacidade planejada']].map(([title,value,caption])=><section className="card" key={title}><p>{title}</p><strong className="metric">{value}</strong><small>{caption}</small></section>)}</div><section className="card"><a href="/api/gestao/report.pdf" className="inspection" download>Exportar relatório de produção em PDF</a><h2>Lotes em acompanhamento</h2><p>Produção diária em {state.referenceDate.split('-').reverse().join('/')}; o acumulado dos lotes inclui saldo inicial fictício.</p><OrderTable orders={state.orders} onSelect={openPlan}/></section><section className="card"><h2>Como funciona a análise</h2><p>A CNN continua responsável pela inspeção de costura. A análise estima atraso e ritmo futuro em um experimento sintético. O planejamento compara também saldo, prazo e capacidade; a gestão decide o que fazer.</p><button onClick={()=>setTab('Atrasos e capacidade')}>Analisar um lote</button></section></>}
- {tab==='Lotes'&&<><section className="card"><h2>Buscar e acompanhar</h2><div className="fields"><Field label="Busca"><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Código, cliente ou modelo"/></Field><Field label="Status"><select value={status} onChange={e=>setStatus(e.target.value)}><option value="">Todos</option>{['Planejado','Em andamento','Concluído'].map(s=><option key={s}>{s}</option>)}</select></Field><Field label="Prazo até"><input type="date" value={due} onChange={e=>setDue(e.target.value)}/></Field></div><OrderTable orders={state.orders.filter(o=>`${o.code} ${o.client} ${o.model}`.toLowerCase().includes(query.toLowerCase())&&(!status||o.status===status)&&(!due||o.dueDate<=due))} onSelect={openPlan}/></section><section className="card"><h2>Novo lote fictício</h2><form onSubmit={e=>{e.preventDefault();const form=e.currentTarget;const f=new FormData(form);void action(async()=>{await api('/orders',{code:f.get('code'),client:f.get('client'),model:f.get('model'),quantity:Number(f.get('quantity')),dueDate:f.get('dueDate'),capacityPerDay:Number(f.get('capacity')),recentRate:Number(f.get('rate')),reworkRate:Number(f.get('rework'))/100});form.reset()},'Lote demonstrativo cadastrado.',true)}}><div className="fields">{[['code','Código'],['client','Cliente fictício'],['model','Modelo de peça']].map(([name,label])=><Field key={name} label={label}><input name={name} required maxLength={name==='code'?40:100} pattern=".*\S.*"/></Field>)}<Field label="Quantidade (peças)"><input type="number" name="quantity" min="1" max="1000000" step="1" required/></Field><Field label="Prazo"><input type="date" name="dueDate" min={state.referenceDate} required/></Field><Field label="Capacidade diária (peças/dia)"><input type="number" name="capacity" min="1" max="10000" required/></Field><Field label="Ritmo recente informado (boas/dia)"><input type="number" name="rate" min="0" max="11000" required/></Field><Field label="Retrabalho informado (%)"><input type="number" name="rework" min="0" max="30" step=".1" defaultValue="5" required/></Field></div><button disabled={busy}>Cadastrar lote demonstrativo</button></form></section></>}
- {tab==='Produção'&&<><section className="card"><h2>Novo apontamento</h2><p>Somente a operação Revisão final aumenta as peças concluídas. Gola, manga e demais etapas são registradas separadamente. O ritmo usado no planejamento é uma premissa informada, não é recalculado por apontamentos isolados.</p><form onSubmit={e=>{e.preventDefault();const f=new FormData(e.currentTarget);void action(()=>api('/records',{orderId:f.get('orderId'),employeeId:f.get('employeeId'),operation:f.get('operation'),goodQuantity:Number(f.get('good')),reworkQuantity:Number(f.get('rework')),day:f.get('day')}),'Apontamento salvo; indicadores e saldo atualizados.',true)}}><div className="fields"><Field label="Lote do apontamento"><select name="orderId" required>{state.orders.filter(o=>o.status!=='Concluído').map(o=><option key={o.id} value={o.id}>{o.code} · saldo {o.quantity-o.produced}</option>)}</select></Field><Field label="Colaboradora fictícia"><select name="employeeId">{state.employees.map(e=><option key={e.id} value={e.id}>{e.name}</option>)}</select></Field><Field label="Operação"><select name="operation" defaultValue="Revisão final">{state.operations.map(o=><option key={o}>{o}</option>)}</select></Field><Field label="Peças boas"><input name="good" type="number" min="0" max="1000000" step="1" required defaultValue="0"/></Field><Field label="Peças para retrabalho"><input name="rework" type="number" min="0" max="1000000" step="1" required defaultValue="0"/></Field><Field label="Data"><input name="day" type="date" max={state.referenceDate} defaultValue={state.referenceDate} required/></Field></div><button disabled={busy}>Registrar produção demo</button></form></section><section className="card"><h2>Histórico de produção</h2><div className="fields"><Field label="Filtrar lote"><select value={recordFilter} onChange={e=>setRecordFilter(e.target.value)}><option value="">Todos</option>{state.orders.map(o=><option key={o.id} value={o.id}>{o.code}</option>)}</select></Field><Field label="Filtrar data"><input type="date" value={dayFilter} onChange={e=>setDayFilter(e.target.value)}/></Field></div><div className="table-scroll"><table><thead><tr>{['Data','Lote','Colaboradora','Operação','Boas','Retrabalho'].map(x=><th key={x}>{x}</th>)}</tr></thead><tbody>{filteredRecords.map(r=><tr key={r.id}><td>{r.day}</td><td>{state.orders.find(o=>o.id===r.orderId)?.code}</td><td>{state.employees.find(e=>e.id===r.employeeId)?.name}</td><td>{r.operation}</td><td>{r.goodQuantity}</td><td>{r.reworkQuantity}</td></tr>)}</tbody></table></div>{!filteredRecords.length&&<p>Nenhum apontamento para estes filtros.</p>}</section></>}
- {tab==='Atrasos e capacidade'&&<><section className="card"><SelectOrder state={state} value={selected} onChange={choose}/>{order&&<><h2>{order.code} · {order.model}</h2><p>{number(order.produced)} / {number(order.quantity)} peças finais · {order.status}</p><progress value={order.produced} max={order.quantity} aria-label="Progresso do lote"/><button disabled={busy} onClick={()=>void action(async()=>setAnalysis(await api<Analysis>(`/orders/${selected}/analysis`)))}>Analisar atraso e produção</button></>}</section>{analysis&&<PlanningSummary analysis={analysis} order={order}/>}{order&&<section className="card"><h2>Replanejar com justificativa</h2><p>Altera somente o cenário demonstrativo e mantém registro do antes/depois.</p><form key={selected} onSubmit={e=>{e.preventDefault();const f=new FormData(e.currentTarget);void action(()=>api(`/orders/${selected}/plan`,{dueDate:f.get('due'),capacityPerDay:Number(f.get('capacity')),recentRate:Number(f.get('rate')),reworkRate:Number(f.get('rework'))/100,reason:f.get('reason')},'PATCH'),'Planejamento atualizado. Execute uma nova análise.',true)}}><div className="fields"><Field label="Prazo revisado"><input name="due" type="date" defaultValue={order.dueDate} required/></Field><Field label="Capacidade planejada (peças/dia)"><input name="capacity" type="number" min="1" max="10000" defaultValue={order.capacityPerDay} required/></Field><Field label="Ritmo recente informado (boas/dia)"><input name="rate" type="number" min="0" max="11000" defaultValue={order.recentRate} required/></Field><Field label="Retrabalho informado (%)"><input name="rework" type="number" min="0" max="30" step=".1" defaultValue={order.reworkRate*100} required/></Field></div><Field label="Motivo da decisão"><input name="reason" minLength={3} maxLength={300} required/></Field><button disabled={busy}>Salvar planejamento demo</button></form></section>}</>}
- {tab==='Balanceamento'&&<><section className="card"><h2>Distribuir trabalho disponível</h2><p>Use esta etapa quando precisar indicar quem fará uma operação de um lote. Ela reserva tempo, não produz peças nem aumenta a capacidade automaticamente. Se a equipe já tem tarefas definidas, você pode seguir direto para Produção.</p><p>Selecione lote, operação e data, consulte os candidatos e confirme a alocação com justificativa. A reserva desconta minutos nesse dia; não altera automaticamente o ritmo ou o prazo do lote. Não é avaliação individual para remuneração ou punição.</p><SelectOrder state={state} value={selected} onChange={choose}/><div className="fields"><Field label="Operação a distribuir"><select value={operation} onChange={e=>{setOperation(e.target.value);setRecs(null)}}>{state.operations.map(o=><option key={o}>{o}</option>)}</select></Field><Field label="Minutos necessários"><input type="number" min="1" max="480" step="1" value={minutes} onChange={e=>{setMinutes(Number(e.target.value));setRecs(null)}}/></Field><Field label="Período (data)"><input type="date" min={state.referenceDate} value={period} onChange={e=>{setPeriod(e.target.value);setRecs(null)}}/></Field></div><button disabled={busy||!order||order.status==='Concluído'||!period||!Number.isInteger(minutes)||minutes<1||minutes>480} onClick={()=>void action(async()=>setRecs(await api<Recommendation>(`/recommendations?operation=${encodeURIComponent(operation)}&period=${period}&minutes=${minutes}`)))}>Consultar recomendações</button></section>{recs&&<section className="card"><h2>Quem pode realizar esta tarefa</h2><p>Pesos: produtividade 35%, qualidade 30%, experiência 20%, disponibilidade 15%. Produtividade normalizada entre elegíveis da mesma operação; referências fictícias.</p>{!recs.eligible.length&&<p>Sem candidato elegível para este período.</p>}{recs.eligible.map(r=><article className="candidate" key={r.employeeId}><h3>{r.name} · {r.manualReview?'Revisão manual (sem histórico)':`score ${r.score}`}</h3><p>{r.availableMinutes} min disponíveis · componentes normalizados: {Object.entries(r.components).map(([k,v])=>`${k}: ${number(v,2)}`).join(' · ')}</p><form onSubmit={e=>{e.preventDefault();const f=new FormData(e.currentTarget);void action(async()=>{await api('/assignments',{orderId:selected,employeeId:r.employeeId,operation,minutes,period,decision:f.get('decision'),reason:f.get('reason')});await refresh();setRecs(await api<Recommendation>(`/recommendations?operation=${encodeURIComponent(operation)}&period=${period}&minutes=${minutes}`))},'Decisão registrada; disponibilidade recalculada.')}}><Field label={`Decisão para ${r.name}`}><select name="decision"><option value="accepted">Aceitar alocação</option><option value="rejected">Rejeitar sugestão</option></select></Field><Field label={`Justificativa para ${r.name}`}><input name="reason" required minLength={3} maxLength={300}/></Field><button disabled={busy}>Registrar decisão humana</button></form></article>)}<h3>Não elegíveis</h3>{recs.excluded.map(e=><p key={e.employeeId}>{e.name}: {e.reason}</p>)}</section>}<section className="card"><h2>Trabalho já distribuído</h2>{state.assignments.length?state.assignments.map(a=><article className="candidate" key={a.id}><p>{state.orders.find(o=>o.id===a.orderId)?.code} · {state.employees.find(e=>e.id===a.employeeId)?.name} · {a.operation} · {a.minutes} min · {a.period}</p><details><summary>Redistribuir esta alocação</summary><form onSubmit={e=>{e.preventDefault();const f=new FormData(e.currentTarget);void action(()=>api(`/assignments/${a.id}/reallocate`,{employeeId:f.get('employee'),minutes:Number(f.get('minutes')),period:f.get('period'),reason:f.get('reason')}),'Alocação redistribuída; reserva anterior liberada.',true)}}><Field label="Destino da redistribuição"><select name="employee" defaultValue={a.employeeId}>{state.employees.filter(e=>e.active&&e.skills[a.operation||'']).map(e=><option value={e.id} key={e.id}>{e.name}</option>)}</select></Field><Field label="Minutos da redistribuição"><input name="minutes" type="number" min={1} max={480} defaultValue={a.minutes} required/></Field><Field label="Data da redistribuição"><input name="period" type="date" min={state.referenceDate} defaultValue={a.period} required/></Field><Field label="Motivo da redistribuição"><input name="reason" minLength={3} maxLength={300} required/></Field><button disabled={busy}>Confirmar redistribuição</button></form></details></article>):<p>Nenhuma alocação confirmada.</p>}</section></>}
- {tab==='Recebimento'&&<Receiving state={state} refresh={refresh}/>}
- {tab==='Colaboradores'&&<><section className="card"><h2>Cadastrar colaborador</h2><p>Use um nome fictício nos testes. O cadastro não inventa indicadores de desempenho; a alocação inicial depende de revisão humana.</p><form onSubmit={e=>{e.preventDefault();const form=e.currentTarget;const f=new FormData(form);void action(async()=>{await api('/employees',{name:f.get('name'),availableMinutes:Number(f.get('availableMinutes')),operations:f.getAll('operations')});form.reset()},'Colaborador cadastrado localmente.',true)}}><Field label="Nome do colaborador"><input name="name" required minLength={2} maxLength={100}/></Field><Field label="Disponibilidade diária (minutos)"><input name="availableMinutes" type="number" min={1} max={480} defaultValue={240} required/></Field><Field label="Operações habilitadas (selecione uma ou mais)"><select name="operations" multiple required defaultValue={['Revisão final']}>{state.operations.map(op=><option key={op}>{op}</option>)}</select></Field><button disabled={busy}>Cadastrar colaborador</button></form></section><div className="grid-two">{state.employees.map(e=><section className="card" key={e.id}><h2>{e.name}</h2><p>Disponibilidade nominal: {e.availableMinutes} min/dia; reservas são descontadas por data.</p>{Object.entries(e.skills).map(([op,s])=><p key={op}>{op}: {s.rate==null?'Sem histórico; alocação manual':`${s.rate} peças/h · qualidade demo ${number(s.quality==null?null:s.quality*100,1)}% · experiência ${s.experience}/5`}</p>)}<small>Somente dados fictícios de referência; sem avaliação real.</small></section>)}</div></>}
- <button className="subtle" onClick={()=>void fetch('/api/auth/logout',{method:'POST'}).then(()=>location.assign('/login'))}>Sair da conta</button><footer>Gestão adicional · dados fictícios persistidos localmente · ML sintético experimental · decisão humana</footer></main></div>
+const ABAS = [
+  { id: 'painel', nome: 'Painel', Icone: LayoutDashboard },
+  { id: 'receber', nome: 'Receber OP', Icone: PackageCheck },
+  { id: 'producao', nome: 'Produção', Icone: ClipboardList },
+  { id: 'equipe', nome: 'Equipe', Icone: Users },
+] as const;
+type Aba = typeof ABAS[number]['id'];
+// Endereços antigos continuam funcionando.
+const APELIDOS: Record<string, Aba> = { recebimento: 'receber', lotes: 'painel', colaboradores: 'equipe' };
+
+function abaDoEndereco(): Aba {
+  const h = location.hash.replace('#', '');
+  return (ABAS.find(a => a.id === h)?.id) || APELIDOS[h] || 'painel';
 }
-const root=document.getElementById('root');
-if(root)createRoot(root).render(<React.StrictMode><App/></React.StrictMode>);
+
+export function App() {
+  const [state, setState] = useState<State | null>(null);
+  const [aba, setAba] = useState<Aba>(abaDoEndereco);
+  const [erro, setErro] = useState('');
+  const [aviso, setAviso] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  async function refresh() { setState(await api<State>('/state')); }
+  useEffect(() => { void refresh().catch(e => setErro(erroTexto(e))); }, []);
+  useEffect(() => {
+    const aoMudar = () => { setAba(abaDoEndereco()); setErro(''); setAviso(''); };
+    window.addEventListener('hashchange', aoMudar);
+    return () => window.removeEventListener('hashchange', aoMudar);
+  }, []);
+
+  async function agir(task: () => Promise<unknown>, sucesso = '', recarregar = false) {
+    setBusy(true); setErro(''); setAviso('');
+    try { await task(); if (recarregar) await refresh(); setAviso(sucesso); }
+    catch (e) { setErro(erroTexto(e)); }
+    finally { setBusy(false); }
+  }
+
+  const titulo = ABAS.find(a => a.id === aba)!.nome;
+  return (
+    <div className="workspace">
+      <aside>
+        <a className="brand" href="/">Duas<span>Marias</span></a>
+        <nav aria-label="Gestão">
+          <a className="nav-link" href="/"><Camera size={18} /> Inspeção</a>
+          {ABAS.map(({ id, nome, Icone }) => (
+            <a key={id} href={`#${id}`} className={`nav-link ${aba === id ? 'active' : ''}`} aria-current={aba === id ? 'page' : undefined}>
+              <Icone size={18} /> {nome}
+            </a>
+          ))}
+        </nav>
+        <button className="sair" onClick={() => void fetch('/api/auth/logout', { method: 'POST' }).finally(() => location.assign('/login'))}>
+          <LogOut size={16} /> Sair da conta
+        </button>
+      </aside>
+      <main>
+        <header>
+          <h1>{titulo}</h1>
+          {state && state.storage !== 'supabase' && <span className="badge" title="Os dados ficam guardados neste computador.">Neste computador</span>}
+        </header>
+        {erro && <div className="error" role="alert">{erro}</div>}
+        {aviso && <div className="success" role="status">{aviso}</div>}
+        {!state
+          ? <section className="card"><p role="status">{erro ? 'Não foi possível carregar.' : 'Carregando…'}</p>{erro && <button onClick={() => void refresh().catch(e => setErro(erroTexto(e)))}>Tentar novamente</button>}</section>
+          : <>
+              {aba === 'painel' && <Painel state={state} agir={agir} busy={busy} />}
+              {aba === 'receber' && <ReceberOP state={state} refresh={refresh} />}
+              {aba === 'producao' && <Producao state={state} agir={agir} busy={busy} />}
+              {aba === 'equipe' && <Equipe state={state} agir={agir} busy={busy} />}
+            </>}
+      </main>
+    </div>
+  );
+}
+
+const root = document.getElementById('root');
+if (root) createRoot(root).render(<React.StrictMode><App /></React.StrictMode>);

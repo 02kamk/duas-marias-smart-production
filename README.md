@@ -40,6 +40,13 @@ O navegador abre em **http://127.0.0.1:8000/login**. No primeiro acesso, crie a 
 
 Sem o atalho: `python scripts\rodar.py` (aceita `--rede`, `--porta 8080` e `--abrir`).
 
+### No dia a dia
+
+1. **Gestão › Receber OP**: cadastre a OP e confira a grade numa tela só. A quantidade do lote é a soma da grade.
+2. **Inspeção › Lotes**: toque em *Inspecionar este lote*. Cada peça inspecionada fica registrada nele, com ou sem banco configurado.
+3. **Inspeção**: *Fotografar* ou *Enviar foto*. Peças aprovadas com segurança passam sozinhas; defeitos e leituras incertas pedem conferência (o número aparece no menu *Histórico*).
+4. **Gestão › Painel**: toque num lote para ver a entrega prevista e o que fazer. Produção e distribuição de tarefas ficam em *Produção*; colaboradoras em *Equipe*.
+
 ### Configuração opcional (`.env`)
 
 Copie `.env.example` para `.env`. Sem ele tudo funciona e fica guardado neste computador:

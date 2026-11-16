@@ -24,6 +24,32 @@ def extend(app: FastAPI, root=ROOT):
     from .documents import router as documents_router
     app.include_router(documents_router(store))
     app.include_router(create_router(store,model))
+    @app.get('/api/gestao/inspecao')
+    def lotes_para_inspecao(request: Request):
+        """OPs em aberto com os números da inspeção, para escolher o lote em produção."""
+        estado=getattr(request.app.state,'estado',None)
+        resumo=estado.resumo_por_lote() if estado is not None else {}
+        ativo=estado.lote_ativo if estado is not None else None
+        lotes=[{**{k:o.get(k) for k in ('id','code','client','model','fabric','quantity','produced','dueDate','status')},
+                'inspecao':resumo.get(o['code'],{'inspecionadas':0,'defeitos':0,'pendentes':0})}
+               for o in store.read()['orders'] if o.get('status')!='Concluído']
+        return {'lotes':lotes,'ativo':ativo}
+
+    @app.post('/api/gestao/orders/{order_id}/inspecionar')
+    def inspecionar_lote(order_id: str, request: Request):
+        order=next((o for o in store.read()['orders'] if o['id']==order_id),None)
+        if order is None:
+            return JSONResponse({'detail':'Lote não encontrado.'},status_code=404)
+        if order.get('status')=='Concluído':
+            return JSONResponse({'detail':'Lote concluído não recebe novas inspeções.'},status_code=409)
+        ativar=getattr(request.app.state,'ativar_lote',None)
+        if ativar is None:
+            return JSONResponse({'detail':'Inspeção indisponível neste servidor.'},status_code=503)
+        lote=ativar({'ordem_id':order['id'],'codigo':order['code'],'cliente':order['client'],
+                     'modelo_peca':order['model'],'tecido':order.get('fabric') or None,
+                     'quantidade':order['quantity'],'prazo_entrega':order['dueDate']})
+        return {'lote':lote}
+
     app.mount('/gestao-assets',StaticFiles(directory=str(STATIC),check_dir=False),name='gestao-assets')
 
     @app.get('/gestao',include_in_schema=False)

@@ -2275,3 +2275,10 @@ a.nav-item { text-decoration: none; color: inherit; }
 .grade-historico .celula { aspect-ratio: auto; }
 .llm-status:empty { display: none; }
 @media (min-width: 1101px) { .conta-acoes { display: none; } }
+.grade-lotes { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--e4); margin-top: var(--e4); }
+.lote-card { display: grid; gap: var(--e1); padding: var(--e4); background: var(--branco); border: 1px solid var(--linha); border-radius: 14px; }
+.lote-card.ativo, .card-lote-ativo.com-lote { border-color: var(--terracota); box-shadow: inset 4px 0 0 var(--terracota); }
+.lote-card-topo { display: flex; justify-content: space-between; align-items: center; gap: var(--e2); font-size: var(--t-lg); }
+.lote-card-sub, .lote-card-numeros { margin: 0; color: var(--grafite); font-size: var(--t-md); }
+.lote-card-numeros { color: var(--tinta); font-weight: 500; }
+.lote-card .btn { margin-top: var(--e2); justify-content: center; }
