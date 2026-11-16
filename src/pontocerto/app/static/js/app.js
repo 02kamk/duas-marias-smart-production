@@ -33,7 +33,7 @@
    * 00. CONSTANTES E ESTADO INTERNO
    * ===================================================================== */
 
-  var PAGINAS = ["ao-vivo", "historico", "lotes", "relatorios", "ajustes"];
+  var PAGINAS = ["ao-vivo", "conferir", "historico", "relatorios", "ajustes"];
 
   // Situacao do banco (chip da barra superior): consulta lenta, o servidor ja
   // guarda o teste de conexao em cache.
@@ -164,7 +164,13 @@
     var d = new Date(n);
     if (isNaN(d.getTime())) return "--:--";
     function dois(x) { return x < 10 ? "0" + x : String(x); }
-    return dois(d.getHours()) + ":" + dois(d.getMinutes()) + ":" + dois(d.getSeconds());
+    return dois(d.getHours()) + ":" + dois(d.getMinutes());
+  }
+
+  /** "14:22:03" -> "14:22". Segundos não ajudam ninguém na bancada. */
+  function horaCurta(ev) {
+    var h = (ev && ev.hora) || formatarHora(ev && ev.timestamp);
+    return /^\d{2}:\d{2}/.test(h) ? h.slice(0, 5) : h;
   }
 
   /**
@@ -356,10 +362,13 @@
 
   function paginaDoHash() {
     var bruto = (location.hash || "").replace(/^#\/?/, "").trim();
+    if (bruto === "lotes") return "lotes";
     return PAGINAS.indexOf(bruto) >= 0 ? bruto : PAGINA_PADRAO;
   }
 
   function irPara(pagina, atualizarHash) {
+    // Os lotes agora ficam numa tela só, na Gestão.
+    if (pagina === "lotes") { location.assign("/gestao#lotes"); return; }
     // Endereços antigos (#testar, #treinamento) caem na inspeção.
     if (pagina === "testar" || pagina === "treinamento") pagina = "ao-vivo";
     if (PAGINAS.indexOf(pagina) < 0) pagina = PAGINA_PADRAO;
@@ -399,11 +408,11 @@
   function aoEntrarNaPagina(pagina) {
     if (pagina === "ao-vivo") {
       iniciarPolling();
+      carregarLotes();
+    } else if (pagina === "conferir") {
+      carregarFila();
     } else if (pagina === "historico") {
       carregarHistorico();
-    } else if (pagina === "lotes") {
-      carregarLotes();
-      atualizarBanco(false);
     } else if (pagina === "ajustes") {
       carregarAjustes();
       atualizarBanco(false);
@@ -456,6 +465,7 @@
       .then(function (d) {
         var lista = (d && d.dispositivos) || [];
         sel.innerHTML = "";
+        mostrar($("bloco-camera"), lista.length > 0);
         if (!lista.length) {
           var vazia = criar("option", null, "Nenhuma câmera encontrada");
           vazia.value = "";
@@ -498,8 +508,9 @@
         if (info.fps_real) texto += " - " + Number(info.fps_real).toFixed(0) + " fps";
       } else texto = "Câmera desligada";
       setTexto(chip, texto);
-      chip.classList.toggle("chip-ligada", ativa && !info.erro);
-      chip.classList.toggle("chip-desligada", !ativa || !!info.erro);
+      chip.classList.toggle("estado-ok", ativa && !info.erro);
+      chip.classList.toggle("estado-defeito", !!info.erro);
+      chip.classList.toggle("estado-neutro", !ativa && !info.erro);
       chip.setAttribute("data-estado", info.erro ? "erro" : (ativa ? "ligada" : "desligada"));
     }
 
@@ -900,37 +911,31 @@
    * 08. PAINEL DE IA (DIAGNOSTICO E SEGUNDA OPINIAO)
    * ===================================================================== */
 
-  function seloFonte(fonte, modelo) {
-    var eLlm = fonte === "llm";
-    return '<span class="selo-fonte ' + (eLlm ? "selo-llm" : "selo-local") + '">' +
-      '<span class="selo-icone" aria-hidden="true">' + (eLlm ? ICONES.ia : ICONES.livro) + "</span>" +
-      esc(eLlm ? "IA generativa" : "base técnica local") +
-      (eLlm && modelo ? ' <span class="selo-modelo">' + esc(modelo) + "</span>" : "") +
-      "</span>";
+  function seloFonte(fonte) {
+    return '<p class="explicacao-fonte">Fonte: ' + esc(fonte === "llm" ? "IA generativa" : "base técnica do sistema") + "</p>";
   }
 
-  function listaHTML(titulo, itens, classe) {
+  function listaHTML(titulo, itens) {
     if (!Array.isArray(itens) || !itens.length) return "";
     var li = itens.map(function (x) { return "<li>" + esc(x) + "</li>"; }).join("");
-    return '<div class="ia-bloco ' + (classe || "") + '">' +
-      '<h4 class="ia-subtitulo">' + esc(titulo) + "</h4>" +
-      '<ul class="ia-lista">' + li + "</ul></div>";
+    return "<h4>" + esc(titulo) + '</h4><ul class="explicacao-lista">' + li + "</ul>";
   }
 
+  /**
+   * Explicação em uma frase (a primeira ação), com causas e prevenção recolhidas.
+   * Quem está na bancada precisa saber o que fazer agora; o resto é consulta.
+   */
   function htmlDiagnostico(diag) {
     if (!diag) return "";
-    var html = '<article class="ia-card ia-diagnostico">' +
-      '<header class="ia-cabecalho">' +
-      '<h3 class="ia-titulo">' + esc(diag.nome || nomeDaClasse(diag.classe_key)) + "</h3>" +
-      seloFonte(diag.fonte, diag.modelo) +
-      "</header>";
-    if (diag.resumo) html += '<p class="ia-resumo">' + esc(diag.resumo) + "</p>";
-    html += listaHTML("Causas prováveis", diag.causas, "ia-causas");
-    html += listaHTML("O que fazer agora", diag.acoes, "ia-acoes");
-    html += listaHTML("Como prevenir", diag.prevencao, "ia-prevencao");
-    if (diag.ms) html += '<p class="ia-rodape">Resposta em ' + esc(Math.round(diag.ms)) + " ms</p>";
-    html += "</article>";
-    return html;
+    var acoes = Array.isArray(diag.acoes) ? diag.acoes : [];
+    var frase = acoes[0] || diag.resumo || "";
+    var resto = (diag.resumo && acoes[0] ? '<p>' + esc(diag.resumo) + "</p>" : "") +
+      listaHTML("O que fazer agora", acoes) +
+      listaHTML("Causas prováveis", diag.causas) +
+      listaHTML("Como prevenir", diag.prevencao) +
+      seloFonte(diag.fonte);
+    return (frase ? '<p class="explicacao-frase">' + esc(frase) + "</p>" : "") +
+      "<details><summary>Ver causas e prevenção</summary>" + resto + "</details>";
   }
 
   function htmlRevisao(rev) {
@@ -941,11 +946,8 @@
     else if (concorda === false) { rotulo = "A segunda opinião discordou"; classeSelo = "selo-nao"; }
     else { rotulo = "Sem resposta da segunda opinião"; classeSelo = "selo-neutro"; }
 
-    var html = '<article class="ia-card ia-revisao">' +
-      '<header class="ia-cabecalho">' +
-      '<h3 class="ia-titulo">Segunda opinião</h3>' +
-      '<span class="selo-fonte ' + classeSelo + '">' + esc(rotulo) + "</span>" +
-      "</header>";
+    var html = '<div class="explicacao ia-revisao"><h4>Segunda opinião</h4>' +
+      '<span class="selo-fonte ' + classeSelo + '">' + esc(rotulo) + "</span>";
 
     if (rev.erro) {
       html += '<p class="ia-erro">' + esc(rev.erro) + "</p>";
@@ -958,9 +960,7 @@
       if (rev.justificativa) html += '<p class="ia-resumo">' + esc(rev.justificativa) + "</p>";
       html += listaHTML("Sinais observados", rev.sinais, "ia-sinais");
     }
-    if (rev.modelo) html += '<p class="ia-rodape">' + esc(rev.modelo) +
-      (rev.ms ? " - " + esc(Math.round(rev.ms)) + " ms" : "") + "</p>";
-    html += "</article>";
+    html += "</div>";
     return html;
   }
 
@@ -1033,11 +1033,16 @@
   function enviarParaAnalise(arquivo, origem) {
     var resultado = $("resultado-teste");
     mostrar(resultado, true);
+    // "Próxima peça" repete o caminho que a pessoa acabou de usar.
+    var proxima = $("btn-proxima");
+    if (proxima) proxima.setAttribute("for", origem === "camera_aparelho" ? "foto-camera" : "input-arquivo");
     setHTML($("teste-ia"), "", "teste-ia");
     setHTML($("conferencia-upload"), "", "conferencia-upload");
     setTexto($("teste-classe"), "Analisando a costura...");
     setTexto($("teste-confianca"), "");
-    if (resultado) resultado.classList.remove("resultado-ok", "resultado-falha");
+    if (resultado) resultado.classList.remove("resultado-ok", "resultado-falha", "resultado-incerto");
+    var fotoAnterior = $("peca-analisada");
+    if (fotoAnterior) fotoAnterior.src = PIXEL_VAZIO;
 
     var fd = new FormData();
     fd.append("arquivo", arquivo, arquivo.name || "imagem.jpg");
@@ -1083,12 +1088,14 @@
     if (p.e_falha == null) p.e_falha = ev.e_falha != null ? !!ev.e_falha : p.classe_key !== "normal";
     mostrar($("resultado-teste"), true);
     mostrarMidiaResultado(false);
+    setTexto($("resultado-lote"), ev.lote_codigo ? "Lote " + ev.lote_codigo : "Sem lote");
+    setTexto($("resultado-ordem"), (NOMES_ORIGEM[ev.origem] || "Foto enviada") + (ev.hora ? " · " + horaCurta(ev) : ""));
     habilitar($("ver-mapa"), !!d.heatmap);
 
     var incerta = !p.e_falha && !!ev.precisa_revisao;
     setTexto($("teste-classe"), p.e_falha ? (p.nome || nomeDaClasse(p.classe_key))
       : (incerta ? "Leitura incerta: parece normal" : "Costura aprovada"));
-    setTexto($("teste-confianca"), formatarPercentual(p.confianca, 0) + " de certeza" + (incerta ? ". Confira a peça abaixo." : ""));
+    setTexto($("teste-confianca"), "A IA tem " + formatarPercentual(p.confianca, 0) + " de certeza" + (incerta ? ". Confira a peça." : ""));
 
     var caixa = $("resultado-teste");
     if (caixa) {
@@ -1139,32 +1146,38 @@
     if (!host || !ev || !ev.id) { setHTML(host, "", host && host.id); return; }
     var escolhida = ev.classe_final || ev.classe_key;
     var feita = !!ev.revisao_humana;
-    var titulo = feita ? "Conferida" : (ev.precisa_revisao ? "Confira o resultado" : "Aprovada automaticamente");
-    var dica = feita
-      ? "Você pode trocar a classe se precisar."
-      : (ev.precisa_revisao
-        ? "Toque na classe certa e salve. A sugestão da IA já vem marcada."
-        : "A IA teve certeza. Só mexa se a classe estiver errada.");
+    var pendente = !feita && !!ev.precisa_revisao;
 
-    var botoes = App.classes.map(function (c) {
+    var opcoes = App.classes.map(function (c) {
       var ativo = c.key === escolhida;
-      return '<button type="button" class="chip chip-botao classe-opcao' + (ativo ? " ativo" : "") +
-        (c.key === ev.classe_key ? " sugerida" : "") + '" data-classe="' + esc(c.key) +
-        '" aria-pressed="' + (ativo ? "true" : "false") + '">' + esc(c.nome) +
-        (c.key === ev.classe_key ? ' <small>(IA)</small>' : "") + "</button>";
+      return '<button type="button" class="classe-opcao' + (ativo ? " ativo" : "") +
+        '" data-classe="' + esc(c.key) + '" aria-pressed="' + (ativo ? "true" : "false") + '">' + esc(c.nome) +
+        (c.key === ev.classe_key ? " <small>(sugestão da IA)</small>" : "") + "</button>";
     }).join("");
 
-    var aberta = !feita && ev.precisa_revisao;
-    host.innerHTML =
-      '<details class="conferencia-caixa' + (feita ? " feita" : "") + (ev.precisa_revisao && !feita ? " pendente" : "") + '"' + (aberta ? " open" : "") + ">" +
-      '<summary><strong>' + esc(titulo) + "</strong></summary>" +
-      '<p class="card-texto">' + esc(dica) + "</p>" +
-      '<div class="classe-opcoes" role="group" aria-label="Classe correta">' + botoes + "</div>" +
+    var topo = pendente
+      ? '<div class="conferencia-acoes">' +
+        '<button type="button" class="btn btn-principal conferencia-certo">Está certo</button>' +
+        '<button type="button" class="btn btn-secundario conferencia-corrigir">Corrigir</button></div>'
+      : '<div class="conferencia-situacao"><span class="estado ' + (feita ? "estado-ok" : "estado-neutro") + '">' +
+        esc(feita ? "Conferida" : "Aprovada automaticamente") + "</span>" +
+        '<button type="button" class="btn btn-quieto conferencia-corrigir">' + (feita ? "Alterar" : "Corrigir") + "</button></div>";
+
+    host.innerHTML = topo +
+      '<div class="conferencia-corrigir-caixa" hidden>' +
+      '<p class="campo-rotulo">Qual é o resultado certo?</p>' +
+      '<div class="classe-opcoes" role="group" aria-label="Resultado certo">' + opcoes + "</div>" +
       '<label class="campo"><span class="campo-rotulo">Observação (opcional)</span>' +
       '<input class="entrada conferencia-obs" maxlength="1000" value="' + esc((ev.revisao_humana && ev.revisao_humana.observacao) || "") + '"></label>' +
-      '<button type="button" class="btn btn-principal conferencia-salvar">Salvar conferência</button>' +
-      "</details>";
+      '<div class="linha-botoes"><button type="button" class="btn btn-principal conferencia-salvar">Salvar correção</button>' +
+      '<button type="button" class="btn btn-quieto conferencia-cancelar">Cancelar</button></div>' +
+      "</div>";
     if (host.id) App.cache[host.id] = null;
+
+    var caixa = host.querySelector(".conferencia-corrigir-caixa");
+    function abrir(sim) { caixa.hidden = !sim; }
+    host.querySelector(".conferencia-corrigir").addEventListener("click", function () { abrir(caixa.hidden); });
+    host.querySelector(".conferencia-cancelar").addEventListener("click", function () { abrir(false); });
 
     host.querySelectorAll(".classe-opcao").forEach(function (b) {
       b.addEventListener("click", function () {
@@ -1176,13 +1189,13 @@
         });
       });
     });
-    var salvar = host.querySelector(".conferencia-salvar");
-    salvar.addEventListener("click", function () {
-      botaoCarregando(salvar, true, "Salvando...");
+
+    function enviar(botao, classe) {
+      botaoCarregando(botao, true, "Salvando...");
       postJSON("/api/eventos/" + encodeURIComponent(ev.id) + "/conferencia",
-        { classe: escolhida, observacao: host.querySelector(".conferencia-obs").value })
+        { classe: classe, observacao: host.querySelector(".conferencia-obs").value })
         .then(function (d) {
-          botaoCarregando(salvar, false);
+          botaoCarregando(botao, false);
           if (d && d.erro) { toast(d.erro, "erro"); return; }
           Object.assign(ev, d.evento || {});
           toast(ev.revisao_humana && ev.revisao_humana.decisao === "corrigida"
@@ -1192,10 +1205,15 @@
           if (aoSalvar) aoSalvar(ev);
         })
         .catch(function (e) {
-          botaoCarregando(salvar, false);
+          botaoCarregando(botao, false);
           toast("Não consegui salvar: " + e.message, "erro");
         });
-    });
+    }
+    var certo = host.querySelector(".conferencia-certo");
+    // "Está certo" confirma a sugestão da IA com um toque.
+    if (certo) certo.addEventListener("click", function () { enviar(certo, ev.classe_key); });
+    var salvar = host.querySelector(".conferencia-salvar");
+    salvar.addEventListener("click", function () { enviar(salvar, escolhida); });
   }
 
   function diagnosticoDoTeste() {
@@ -1204,8 +1222,7 @@
     var eventoId = d && (d.evento_id || (d.evento && d.evento.id));
     if (!eventoId) { toast("Analise uma foto primeiro.", "aviso"); return; }
 
-    botaoCarregando(btn, true, "Buscando explicação...");
-    setHTML($("teste-ia"), '<p class="ia-carregando">Buscando causas e soluções...</p>', "teste-ia");
+    setHTML($("teste-ia"), '<p class="ia-carregando">Buscando o que fazer...</p>', "teste-ia");
     postJSON("/api/eventos/" + encodeURIComponent(eventoId) + "/diagnostico", {}, { timeout: 60000 })
       .then(function (r) {
         botaoCarregando(btn, false);
@@ -1245,7 +1262,7 @@
         historico.eventos = (d && d.eventos) || [];
         historico.porId = {};
         historico.eventos.forEach(function (ev) { if (ev && ev.id) historico.porId[ev.id] = ev; });
-        renderStories(historico.eventos);
+        renderTipos(historico.eventos);
         renderGrade(historico.eventos);
       })
       .catch(function (e) {
@@ -1266,36 +1283,32 @@
       .catch(function () {});
   }
 
-  function renderStories(eventos) {
-    var caixa = $("stories");
-    if (!caixa) return;
+  /** Menu "Tipo": só os tipos que apareceram no dia, com a contagem. */
+  function renderTipos(eventos) {
+    var sel = $("historico-tipo");
+    if (!sel) return;
     var contagem = {};
-    var capa = {};
     eventos.forEach(function (ev) {
       if (!ev || !ev.classe_key) return;
       var key = ev.classe_final || ev.classe_key;
       contagem[key] = (contagem[key] || 0) + 1;
-      if (!capa[key] && ev.imagem) capa[key] = ev.imagem;
     });
-    var partes = [storyHTML("tudo", "Todos os tipos", eventos.length, eventos.length ? eventos[0].imagem : null, historico.filtro === null)];
+    var html = '<option value="">Todos os tipos</option>';
     App.classes.forEach(function (c) {
       var n = numero(contagem[c.key], 0);
-      if (!n && historico.filtro !== c.key) return; // só mostra tipos que apareceram
-      partes.push(storyHTML(c.key, c.nome, n, capa[c.key], historico.filtro === c.key));
+      if (!n && historico.filtro !== c.key) return;
+      html += '<option value="' + esc(c.key) + '"' + (historico.filtro === c.key ? " selected" : "") + ">" +
+        esc(c.nome) + " (" + n + ")</option>";
     });
-    setHTML(caixa, partes.join(""), "stories");
+    setHTML(sel, html, "historico-tipo");
+    sel.value = historico.filtro || "";
   }
 
-  function storyHTML(chave, nome, contagem, imagem, ativo) {
-    return '<button type="button" class="story' + (ativo ? " ativo" : "") +
-      '" data-classe="' + esc(chave) + '" aria-pressed="' + (ativo ? "true" : "false") +
-      '" aria-label="' + esc("Filtrar por " + nome + " (" + contagem + ")") + '">' +
-      '<span class="story-anel"><img class="story-img" src="' + esc(imagem || PIXEL_VAZIO) +
-      '" alt="" loading="lazy"></span>' +
-      '<span class="story-nome">' + esc(nome) + "</span>" +
-      '<span class="story-contagem">' + esc(contagem) + "</span>" +
-      "</button>";
+  function classeDoEstado(ev) {
+    if (ev.revisao_humana) return "estado-ok";
+    return ev.precisa_revisao ? "estado-atencao" : "estado-neutro";
   }
+
 
   function situacaoConferencia(ev) {
     if (ev.revisao_humana) return "Conferida";
@@ -1314,15 +1327,15 @@
 
     var html = eventos.map(function (ev) {
       var nome = ev.nome_final || ev.nome || nomeDaClasse(ev.classe_key);
-      var pendente = ev.precisa_revisao ? " pendente" : "";
       var semFoto = ev.imagem ? "" : " sem-foto";
-      return '<button type="button" class="celula' + pendente + semFoto + '" data-id="' + esc(ev.id) +
-        '" data-gravidade="' + esc(ev.gravidade || "") + '" aria-label="' +
-        esc(nome + " às " + (ev.hora || formatarHora(ev.timestamp))) + '">' +
-        '<img src="' + esc(ev.imagem || PIXEL_VAZIO) + '" alt="" loading="lazy">' +
-        '<span class="selo">' + esc(nome) + "</span>" +
-        '<span class="historico-meta">' + esc((ev.hora || "") + " · " + (NOMES_ORIGEM[ev.origem] || "Câmera ao vivo")) + "</span>" +
-        '<span class="historico-revisao">' + esc(situacaoConferencia(ev)) + "</span>" +
+      return '<button type="button" class="celula linha linha-clicavel' + semFoto + '" data-id="' + esc(ev.id) +
+        '" aria-label="' + esc(nome + " às " + horaCurta(ev)) + '">' +
+        '<span class="h-foto"><img class="miniatura" src="' + esc(ev.imagem || PIXEL_VAZIO) + '" alt="" loading="lazy"></span>' +
+        '<span class="h-nome"><strong>' + esc(nome) + "</strong></span>" +
+        '<span class="h-lote">' + esc(ev.lote_codigo || "Sem lote") + "</span>" +
+        '<span class="h-hora num">' + esc(horaCurta(ev)) + "</span>" +
+        '<span class="h-origem">' + esc(NOMES_ORIGEM[ev.origem] || "Câmera ao vivo") + "</span>" +
+        '<span class="h-situacao"><span class="estado ' + classeDoEstado(ev) + '">' + esc(situacaoConferencia(ev)) + "</span></span>" +
         "</button>";
     }).join("");
     setHTML(grade, html, "grade-historico");
@@ -1335,12 +1348,47 @@
 
   function mudarModoHistorico(modo) {
     historico.modo = modo;
-    document.querySelectorAll("[data-filtro-historico]").forEach(function (b) {
-      var on = b.getAttribute("data-filtro-historico") === modo;
-      b.classList.toggle("ativo", on);
-      b.setAttribute("aria-pressed", on ? "true" : "false");
-    });
     carregarHistorico();
+  }
+
+  /* --- Conferir: fila das peças que pedem conferência -------------------- */
+
+  var fila = { eventos: [], puladas: {} };
+
+  function carregarFila() {
+    return fetchJSON("/api/eventos?limite=500&pendentes=true")
+      .then(function (d) {
+        fila.eventos = ((d && d.eventos) || []).filter(function (ev) { return ev && ev.id; });
+        mostrarProximaDaFila();
+      })
+      .catch(function (e) { toast("Não consegui carregar a fila: " + e.message, "erro"); });
+  }
+
+  function mostrarProximaDaFila() {
+    var restantes = fila.eventos.filter(function (ev) { return ev.precisa_revisao && !ev.revisao_humana; });
+    // As puladas voltam para o fim: só some da fila o que foi conferido.
+    var ev = restantes.filter(function (x) { return !fila.puladas[x.id]; })[0] || restantes[0];
+    if (ev && fila.puladas[ev.id]) fila.puladas = {};
+    var n = restantes.length;
+    setTexto($("fila-contagem"), n ? (n === 1 ? "1 peça aguardando" : n + " peças aguardando") : "");
+    mostrar($("fila-peca"), !!ev);
+    mostrar($("fila-vazia"), !ev);
+    mostrar($("fila-pular"), n > 1);
+    if (!ev) return;
+
+    var img = $("fila-img");
+    if (img) img.src = ev.imagem || PIXEL_VAZIO;
+    var falha = ev.e_falha != null ? !!ev.e_falha : ev.classe_key !== "normal";
+    var caixa = $("fila-peca");
+    caixa.classList.toggle("resultado-falha", falha);
+    caixa.classList.toggle("resultado-incerto", !falha);
+    setTexto($("fila-classe"), falha ? (ev.nome || nomeDaClasse(ev.classe_key)) : "Leitura incerta: parece normal");
+    setTexto($("fila-confianca"), "A IA tem " + formatarPercentual(ev.confianca, 0) + " de certeza");
+    setTexto($("fila-lote"), ev.lote_codigo ? "Lote " + ev.lote_codigo : "Sem lote");
+    setTexto($("fila-hora"), (ev.data ? ev.data.split("-").reverse().slice(0, 2).join("/") + " " : "") + horaCurta(ev));
+    $("fila-pular").onclick = function () { fila.puladas[ev.id] = true; mostrarProximaDaFila(); };
+    // Depois de conferir, passa sozinha para a próxima.
+    montarConferencia($("fila-conferencia"), ev, function () { mostrarProximaDaFila(); });
   }
 
   function abrirModal(id) {
@@ -1357,8 +1405,8 @@
     atualizarFotoDoModal(ev);
 
     setTexto($("modal-classe"), ev.nome_final || ev.nome || nomeDaClasse(ev.classe_key));
-    setTexto($("modal-confianca"), formatarPercentual(ev.confianca, 0) + " de certeza");
-    setTexto($("modal-hora"), (ev.data ? ev.data.split("-").reverse().join("/") + " " : "") + (ev.hora || formatarHora(ev.timestamp)));
+    setTexto($("modal-confianca"), "IA: " + formatarPercentual(ev.confianca, 0) + " de certeza");
+    setTexto($("modal-hora"), (ev.data ? ev.data.split("-").reverse().join("/") + " " : "") + horaCurta(ev));
     setTexto($("modal-lote"), ev.lote_codigo ? "Lote " + ev.lote_codigo : "Sem lote");
 
     montarConferencia($("modal-conferencia"), ev, function (salvo) {
@@ -1400,14 +1448,14 @@
       btn.hidden = !temFoto;
     }
     setTexto($("modal-foto-texto"), temFoto
-      ? "A peça continua no histórico; só a imagem é apagada deste computador e do banco."
+      ? "A peça continua no histórico; só a imagem é apagada."
       : "A foto desta peça foi apagada. A inspeção continua contando nos números.");
   }
 
   function desarmarApagarFoto(btn) {
     if (!btn) return;
-    clearTimeout(btn._tempoConfirmar);
     btn.classList.remove("confirmando");
+    mostrar($("btn-modal-cancelar-apagar"), false);
     if (btn.dataset.rotuloOriginal != null && !btn.disabled) {
       btn.innerHTML = btn.dataset.rotuloOriginal;
       delete btn.dataset.rotuloOriginal;
@@ -1415,8 +1463,8 @@
   }
 
   /**
-   * Apagar a foto de um evento. Primeiro clique arma ("Toque de novo para
-   * apagar"), segundo clique em até 4 s apaga de vez: não há como desfazer.
+   * Apagar a foto de um evento. O primeiro clique pede confirmação ("Apagar de
+   * vez" ou "Cancelar"); não há como desfazer.
    */
   function apagarFotoDoModal() {
     var ev = App.eventoAberto;
@@ -1426,13 +1474,13 @@
     if (!btn.classList.contains("confirmando")) {
       btn.dataset.rotuloOriginal = btn.innerHTML;
       btn.classList.add("confirmando");
-      btn.innerHTML = "<span>Toque de novo para apagar</span>";
-      btn._tempoConfirmar = setTimeout(function () { desarmarApagarFoto(btn); }, 4000);
+      btn.innerHTML = "<span>Apagar de vez</span>";
+      mostrar($("btn-modal-cancelar-apagar"), true);
       return;
     }
 
-    clearTimeout(btn._tempoConfirmar);
     btn.classList.remove("confirmando");
+    mostrar($("btn-modal-cancelar-apagar"), false);
     var original = btn.dataset.rotuloOriginal;
     delete btn.dataset.rotuloOriginal;
     btn.innerHTML = original;
@@ -1636,24 +1684,24 @@
   function renderBanco(d) {
     var chip = $("chip-banco");
     var pend = numero(d.pendentes, 0);
-    var classe = "chip-neutro";
-    var texto = "Neste computador";
+    var classe = "";
+    var texto = "Dados neste computador";
     var titulo = "Banco não configurado: as inspeções ficam guardadas neste computador.";
     if (d.configurado) {
       if (d.conectado && pend === 0) {
-        classe = "chip-ok"; texto = "Banco conectado";
+        classe = "estado-ok"; texto = "Banco conectado";
         titulo = "Inspeções sendo enviadas ao banco.";
       } else if (d.conectado) {
-        classe = "chip-ambar"; texto = "Enviando " + pend;
+        classe = "estado-atencao"; texto = "Enviando " + pend;
         titulo = pend + " inspeções aguardando envio.";
       } else {
-        classe = "chip-ambar";
-        texto = "Sem conexão" + (pend ? " (" + pend + ")" : "");
+        classe = "estado-atencao";
+        texto = "Banco sem conexão" + (pend ? " (" + pend + ")" : "");
         titulo = "Sem conexão com o banco. As inspeções ficam guardadas e sobem quando a conexão voltar.";
       }
     }
     if (chip) {
-      chip.className = "chip chip-botao " + classe;
+      chip.className = "menu-estado " + classe;
       chip.title = titulo;
       setTexto(chip.querySelector(".chip-texto"), texto);
     }
@@ -1661,8 +1709,8 @@
     var caixa = $("banco-status");
     if (!caixa) return;
     if (!d.configurado) {
-      setHTML(caixa, '<p class="card-texto">Não configurado: as inspeções ficam guardadas neste computador. ' +
-        "Para enviar ao banco, siga o guia de configuração do README.</p>", "banco-status");
+      setHTML(caixa, "<p>As inspeções ficam guardadas neste computador. Para guardar também na nuvem, " +
+        "peça a quem instalou o sistema para configurar o banco.</p>", "banco-status");
       return;
     }
     var st = d.storage || {};
@@ -1677,72 +1725,54 @@
 
   /* --- Lote em produção ------------------------------------------------- */
 
+  /** Lote em inspeção: o seletor no topo da tela Inspecionar. */
   function renderChipLote(lote) {
     App.lotes.ativo = lote || null;
-    var chip = $("chip-lote");
-    if (chip) {
-      chip.className = "chip chip-botao " + (lote ? "chip-terracota" : "chip-neutro");
-      setTexto(chip.querySelector(".chip-texto"), lote ? "Lote " + lote.codigo : "Sem lote");
-      chip.title = lote
-        ? "Inspeções indo para o lote " + lote.codigo + ". Toque para trocar."
-        : "Nenhum lote em produção. Toque para escolher.";
+    var sel = $("sel-lote");
+    if (sel) {
+      var id = lote ? String(lote.ordem_id || "") : "";
+      // O lote ativo pode não estar na lista ainda (ou ter sido concluído).
+      if (id && !sel.querySelector('option[value="' + id.replace(/"/g, "") + '"]')) {
+        var opt = criar("option", null, lote.codigo + (lote.modelo_peca ? " · " + lote.modelo_peca : ""));
+        opt.value = id;
+        sel.appendChild(opt);
+      }
+      if (document.activeElement !== sel) sel.value = id;
     }
-    setTexto($("lote-ativo-texto"), lote
-      ? lote.codigo + (lote.modelo_peca ? " · " + lote.modelo_peca : "") + (lote.cliente ? " · " + lote.cliente : "")
-      : "Nenhum lote escolhido. As peças ficam no histórico sem lote.");
-    mostrar($("btn-parar-lote"), !!lote);
-    var card = $("card-lote-ativo");
-    if (card) card.classList.toggle("com-lote", !!lote);
+    mostrar($("aviso-sem-lote"), !lote && App.lotes.lista.length > 0);
   }
 
   function carregarLotes() {
     return fetchJSON("/api/gestao/inspecao")
       .then(function (d) {
         App.lotes.lista = (d && d.lotes) || [];
-        renderChipLote(d && d.ativo);
+        App.lotes.ativo = (d && d.ativo) || null;
         renderLotes();
       })
       .catch(function (e) {
         App.lotes.lista = [];
         renderLotes();
-        toast("Não consegui carregar os lotes: " + e.message, "erro");
       });
   }
 
   function renderLotes() {
-    var grade = $("grade-lotes");
-    if (!grade) return;
-    var lista = App.lotes.lista;
-    var ativo = App.lotes.ativo;
-    mostrar($("lotes-vazio"), !lista.length);
-    setHTML(grade, lista.map(function (l) {
-      var insp = l.inspecao || {};
-      var taxa = insp.inspecionadas ? Math.round(100 * insp.defeitos / insp.inspecionadas) : 0;
-      var eAtivo = !!(ativo && ativo.ordem_id === l.id);
-      return '<article class="lote-card' + (eAtivo ? " ativo" : "") + '">' +
-        '<div class="lote-card-topo"><strong>' + esc(l.code) + "</strong>" +
-        (eAtivo ? '<span class="chip chip-terracota">Em inspeção</span>' : "") + "</div>" +
-        '<p class="lote-card-sub">' + esc(l.model) + " · " + esc(l.client) + "</p>" +
-        '<p class="lote-card-numeros">' + esc(insp.inspecionadas || 0) + " inspecionadas · " +
-        esc(insp.defeitos || 0) + " com defeito" + (insp.inspecionadas ? " (" + taxa + "%)" : "") +
-        (insp.pendentes ? " · " + esc(insp.pendentes) + " para conferir" : "") + "</p>" +
-        '<p class="lote-card-sub">Prazo ' + esc(formatarData(l.dueDate)) + " · " + esc(l.quantity) + " peças</p>" +
-        (eAtivo ? "" : '<button type="button" class="btn btn-principal" data-inspecionar="' + esc(l.id) + '">Inspecionar este lote</button>') +
-        "</article>";
-    }).join(""), "grade-lotes");
+    var sel = $("sel-lote");
+    if (!sel) return;
+    var html = '<option value="">Sem lote</option>' + App.lotes.lista.map(function (l) {
+      return '<option value="' + esc(l.id) + '">' + esc(l.code) + " · " + esc(l.model) + "</option>";
+    }).join("");
+    setHTML(sel, html, "sel-lote");
+    renderChipLote(App.lotes.ativo);
   }
 
-  function usarLote(id, btn) {
-    botaoCarregando(btn, true, "Ativando...");
+  function usarLote(id) {
     postJSON("/api/gestao/orders/" + encodeURIComponent(id) + "/inspecionar", {})
       .then(function (d) {
-        botaoCarregando(btn, false);
         renderChipLote(d.lote);
-        renderLotes();
-        toast("Lote " + d.lote.codigo + " em inspeção. As próximas peças vão para ele.", "ok");
+        toast("As próximas peças vão para o lote " + d.lote.codigo + ".", "ok");
       })
       .catch(function (e) {
-        botaoCarregando(btn, false);
+        renderChipLote(App.lotes.ativo);
         toast("Não consegui escolher o lote: " + e.message, "erro");
       });
   }
@@ -1751,7 +1781,6 @@
     postJSON("/api/lotes/ativo", { lote_id: null })
       .then(function () {
         renderChipLote(null);
-        renderLotes();
         toast("Nenhum lote em inspeção.", "info");
       })
       .catch(function (e) { toast("Não consegui parar: " + e.message, "erro"); });
@@ -1772,24 +1801,6 @@
       if (item) {
         ev.preventDefault();
         irPara(item.getAttribute("data-pagina"));
-        return;
-      }
-      // Stories do historico
-      var story = ev.target.closest ? ev.target.closest(".story[data-classe]") : null;
-      if (story) {
-        filtrarHistorico(story.getAttribute("data-classe"));
-        return;
-      }
-      // Chips que levam para outra pagina (banco, lote)
-      var atalho = ev.target.closest ? ev.target.closest("[data-pagina-destino]") : null;
-      if (atalho) {
-        irPara(atalho.getAttribute("data-pagina-destino"));
-        return;
-      }
-      // Escolher a OP que está sendo inspecionada
-      var inspecionar = ev.target.closest ? ev.target.closest("[data-inspecionar]") : null;
-      if (inspecionar) {
-        usarLote(inspecionar.getAttribute("data-inspecionar"), inspecionar);
         return;
       }
       // Miniaturas do historico
@@ -1816,12 +1827,12 @@
     ligar($("btn-capturar"), "click", capturarQuadro);
     ligar($("btn-diagnostico"), "click", pedirDiagnostico);
     ligar($("btn-conferir-ultimo"), "click", function () { abrirModalEvento(App.ultimoEvento); });
-    // A câmera ao vivo começa aberta no computador e recolhida no celular.
+    // A câmera ao vivo começa recolhida; abre de novo se a pessoa deixou aberta.
     var blocoCamera = $("bloco-camera");
     if (blocoCamera) {
       var salvo = null;
       try { salvo = localStorage.getItem("blocoCameraAberto"); } catch (e) {}
-      blocoCamera.open = salvo != null ? salvo === "1" : window.matchMedia("(min-width: 900px)").matches;
+      blocoCamera.open = salvo === "1";
       blocoCamera.addEventListener("toggle", function () {
         try { localStorage.setItem("blocoCameraAberto", blocoCamera.open ? "1" : "0"); } catch (e) {}
       });
@@ -1859,17 +1870,19 @@
     }
     ligar($("ver-foto"), "click", function () { mostrarMidiaResultado(false); });
     ligar($("ver-mapa"), "click", function () { mostrarMidiaResultado(true); });
-    ligar($("btn-teste-diagnostico"), "click", diagnosticoDoTeste);
     ligar($("historico-dia"), "change", carregarHistorico);
-    document.addEventListener("click", function (ev) {
-      var b = ev.target.closest ? ev.target.closest("[data-filtro-historico]") : null;
-      if (b) mudarModoHistorico(b.getAttribute("data-filtro-historico"));
+    ligar($("historico-modo"), "change", function (e) { mudarModoHistorico(e.target.value); });
+    ligar($("historico-tipo"), "change", function (e) { filtrarHistorico(e.target.value); });
+    ligar($("sel-lote"), "change", function (e) {
+      if (e.target.value) usarLote(e.target.value);
+      else pararLote();
     });
 
     /* --- Historico e modal ---------------------------------------------- */
     ligar($("btn-modal-fechar"), "click", fecharModal);
     ligar($("btn-modal-diagnostico"), "click", diagnosticoDoModal);
     ligar($("btn-modal-apagar-foto"), "click", apagarFotoDoModal);
+    ligar($("btn-modal-cancelar-apagar"), "click", function () { desarmarApagarFoto($("btn-modal-apagar-foto")); });
 
     var modal = $("modal-evento");
     if (modal) {
@@ -1895,7 +1908,6 @@
     ligar($("btn-testar-llm"), "click", testarLLM);
 
     /* --- Lotes e banco --------------------------------------------------- */
-    ligar($("btn-parar-lote"), "click", pararLote);
     ligar($("btn-testar-banco"), "click", function () {
       var btn = $("btn-testar-banco");
       botaoCarregando(btn, true, "Testando...");
@@ -1942,6 +1954,7 @@
       .then(function () {
         // Conferência e filtros dependem dos tipos de defeito.
         if (App.pagina === "historico") carregarHistorico();
+        if (App.pagina === "conferir") carregarFila();
         return carregarSaude();
       })
       .then(function () { return carregarDispositivos(); });

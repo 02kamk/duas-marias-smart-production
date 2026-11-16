@@ -43,6 +43,16 @@ class RecordInput(Input):
     day: date
 
 
+class RecordEdit(Input):
+    goodQuantity: int = Field(strict=True,ge=0,le=1000000)
+    reworkQuantity: int = Field(strict=True,ge=0,le=1000000)
+    reason: str = Field(min_length=3,max_length=300)
+
+
+class RecordRemoval(Input):
+    reason: str = Field(min_length=3,max_length=300)
+
+
 class AssignmentInput(Input):
     orderId: str
     employeeId: str
@@ -90,7 +100,15 @@ def create_router(store: Store, model: DelayModel):
 
     @router.get('/state')
     def state():
-        return {**store.read(), 'operations': OPERATIONS, 'referenceDate': date.today().isoformat(),
+        data=store.read()
+        today=date.today()
+        # Previsão simples por lote, para a lista mostrar o risco sem abrir o detalhe.
+        for order in data['orders']:
+            snap=snapshot(order,today)
+            dias=snap['estimatedDaysAtRecentRate']
+            order['forecast']={'late':snap['baselineLate'],'remaining':snap['remaining'],
+                               'estimatedDeliveryDate':(today+timedelta(days=dias)).isoformat() if dias is not None and snap['remaining'] else None}
+        return {**data, 'operations': OPERATIONS, 'referenceDate': today.isoformat(),
                 'notice': 'Ambiente de testes. Confira a origem dos dados antes de tomar decisões operacionais.',
                 'storage':getattr(store,'backend','local')}
 
@@ -156,6 +174,57 @@ def create_router(store: Store, model: DelayModel):
             apply_record(state,item)
             return item
         return mutate('record_production','Apontamento de produção',change)
+
+    def situacao_do_lote(state,order):
+        if order['produced']==order['quantity']:
+            return 'Concluído'
+        tem_registro=any(r['orderId']==order['id'] for r in state['records'])
+        return 'Em andamento' if order['produced'] or tem_registro else 'Planejado'
+
+    def achar_registro(state,record_id):
+        item=next((r for r in state['records'] if r['id']==record_id),None)
+        if item is None:
+            raise ValueError('Apontamento não encontrado.')
+        order=next((o for o in state['orders'] if o['id']==item['orderId']),None)
+        if order is None:
+            raise ValueError('Lote não encontrado.')
+        return item,order
+
+    @router.patch('/records/{record_id}')
+    def edit_record(record_id: str, body: RecordEdit):
+        """Corrige as quantidades de um apontamento, com motivo na trilha de auditoria."""
+        def change(state):
+            item,order=achar_registro(state,record_id)
+            if not body.goodQuantity+body.reworkQuantity:
+                raise ValueError('Informe ao menos uma peça. Para remover o apontamento, use Excluir.')
+            if body.goodQuantity+body.reworkQuantity>order['quantity']:
+                raise ValueError('Quantidade do apontamento excede o lote.')
+            if item['operation']=='Revisão final':
+                produced=order['produced']-item['goodQuantity']+body.goodQuantity
+                if produced>order['quantity']:
+                    raise ValueError('Produção boa excede o saldo do lote.')
+                order['produced']=max(0,produced)
+            antes={'goodQuantity':item['goodQuantity'],'reworkQuantity':item['reworkQuantity']}
+            item.update(goodQuantity=body.goodQuantity,reworkQuantity=body.reworkQuantity,editedAt=now())
+            order['status']=situacao_do_lote(state,order)
+            state['decisions'].append({'id':str(uuid4()),'type':'record_edit','recordId':record_id,'before':antes,
+                                       'after':{'goodQuantity':body.goodQuantity,'reworkQuantity':body.reworkQuantity},
+                                       'at':now(),'reason':body.reason})
+            return item
+        return mutate('record_edit',body.reason,change)
+
+    @router.delete('/records/{record_id}')
+    def remove_record(record_id: str, body: RecordRemoval):
+        """Exclui um apontamento lançado por engano e devolve as peças ao saldo do lote."""
+        def change(state):
+            item,order=achar_registro(state,record_id)
+            if item['operation']=='Revisão final':
+                order['produced']=max(0,order['produced']-item['goodQuantity'])
+            state['records'].remove(item)
+            order['status']=situacao_do_lote(state,order)
+            state['decisions'].append({'id':str(uuid4()),'type':'record_removal','before':item,'at':now(),'reason':body.reason})
+            return {'removed':record_id}
+        return mutate('record_removal',body.reason,change)
 
     @router.get('/orders/{order_id}/analysis')
     def analysis(order_id: str):

@@ -130,7 +130,7 @@ class Acceptance(unittest.TestCase):
             self.assertNotIn('data-pagina="treinamento"',html)
             self.assertNotIn('data-pagina="testar"',html)
             self.assertIn('historico-dia',html)
-            self.assertIn('href="/gestao"',html)
+            self.assertIn('href="/gestao#lotes"',html)
             self.assertIn('id="foto-camera"',html)
             self.assertEqual(c.get('/manifest.webmanifest').status_code,200)
             image=io.BytesIO();Image.new('RGB',(224,224),'gray').save(image,format='PNG')

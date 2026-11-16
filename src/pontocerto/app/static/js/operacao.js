@@ -9,7 +9,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const r = await fetch(path, body === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     if (r.status === 401) { location.assign('/login'); throw Error('Sessão encerrada'); }
     const d = await r.json();
-    if (!r.ok || d.erro) throw Error(d.erro || d.detail || 'Operação recusada.');
+    if (!r.ok || d.erro) throw Error(d.erro || (typeof d.detail === 'string' ? d.detail : (Array.isArray(d.detail) && d.detail[0] && d.detail[0].msg) || 'Operação recusada.'));
     return d;
   }
 
@@ -45,13 +45,70 @@ document.addEventListener('DOMContentLoaded', () => {
     menu.addEventListener('click', e => { if (e.target.closest('[data-pagina]')) fecharMenu(); });
   }
 
-  // Contas: lista quem tem acesso e cria o acesso de outra pessoa.
+  // Contas: quem tem acesso, com redefinir senha e remover na própria tela.
+  const avisar = (texto, tipo) => { if (window.PontoCerto) window.PontoCerto.toast(texto, tipo); };
+  const REGRA_SENHA = 'A senha precisa de 8 caracteres ou mais, com maiúscula, minúscula, número e símbolo.';
+
+  function linhaConta(email, atual) {
+    const linha = document.createElement('div'); linha.className = 'conta-linha';
+    const nome = document.createElement('span');
+    nome.textContent = email + (email === atual ? ' (você)' : '');
+    const acoes = document.createElement('span'); acoes.className = 'linha-botoes';
+    const area = document.createElement('div'); area.className = 'conta-form'; area.hidden = true;
+
+    const redefinir = document.createElement('button');
+    redefinir.type = 'button'; redefinir.className = 'btn btn-quieto'; redefinir.textContent = 'Redefinir senha';
+    redefinir.onclick = () => {
+      area.replaceChildren();
+      const campo = document.createElement('label'); campo.className = 'campo';
+      const rotulo = document.createElement('span'); rotulo.className = 'campo-rotulo'; rotulo.textContent = 'Nova senha de ' + email;
+      const senha = document.createElement('input'); senha.type = 'password'; senha.className = 'entrada'; senha.autocomplete = 'new-password'; senha.maxLength = 128;
+      const ajuda = document.createElement('span'); ajuda.className = 'campo-ajuda'; ajuda.textContent = REGRA_SENHA;
+      campo.append(rotulo, senha, ajuda);
+      const salvar = document.createElement('button'); salvar.type = 'button'; salvar.className = 'btn btn-secundario'; salvar.textContent = 'Salvar senha';
+      salvar.onclick = async () => {
+        salvar.disabled = true;
+        try {
+          await api('/api/auth/password', { email, password: senha.value });
+          area.hidden = true;
+          avisar(email === atual ? 'Senha trocada. Entre de novo com a senha nova.' : 'Senha trocada. Passe a senha nova para a pessoa.', 'ok');
+          if (email === atual) setTimeout(() => location.assign('/login'), 1500);
+        } catch (err) { avisar(err.message, 'erro'); } finally { salvar.disabled = false; }
+      };
+      const cancelar = document.createElement('button'); cancelar.type = 'button'; cancelar.className = 'btn btn-quieto'; cancelar.textContent = 'Cancelar';
+      cancelar.onclick = () => { area.hidden = true; };
+      area.append(campo, salvar, cancelar); area.hidden = false; senha.focus();
+    };
+    acoes.append(redefinir);
+
+    if (email !== atual) {
+      const remover = document.createElement('button');
+      remover.type = 'button'; remover.className = 'btn btn-quieto'; remover.textContent = 'Remover';
+      remover.onclick = () => {
+        area.replaceChildren();
+        const texto = document.createElement('span'); texto.textContent = 'Remover o acesso de ' + email + '?';
+        const sim = document.createElement('button'); sim.type = 'button'; sim.className = 'btn btn-perigo btn-pequeno'; sim.textContent = 'Remover acesso';
+        sim.onclick = async () => {
+          sim.disabled = true;
+          try { await api('/api/auth/remove', { email }); avisar('Acesso removido.', 'ok'); listarContas(); }
+          catch (err) { avisar(err.message, 'erro'); sim.disabled = false; }
+        };
+        const nao = document.createElement('button'); nao.type = 'button'; nao.className = 'btn btn-quieto'; nao.textContent = 'Cancelar';
+        nao.onclick = () => { area.hidden = true; };
+        area.append(texto, sim, nao); area.hidden = false;
+      };
+      acoes.append(remover);
+    }
+    linha.append(nome, acoes, area);
+    return linha;
+  }
+
   async function listarContas() {
     const host = $('contas-lista');
     if (!host) return;
     try {
       const d = await api('/api/auth/users');
-      host.textContent = 'Com acesso: ' + d.users.join(', ') + '.';
+      host.replaceChildren(...d.users.map(email => linhaConta(email, d.atual)));
     } catch (e) { host.textContent = e.message; }
   }
   if ($('form-conta')) $('form-conta').addEventListener('submit', async e => {
@@ -61,11 +118,10 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       await api('/api/auth/register', { email: $('conta-email').value, password: $('conta-senha').value });
       e.target.reset();
+      if ($('nova-conta')) $('nova-conta').open = false;
       listarContas();
-      if (window.PontoCerto) window.PontoCerto.toast('Conta criada. Passe o e-mail e a senha inicial para a pessoa.', 'ok');
-    } catch (err) {
-      if (window.PontoCerto) window.PontoCerto.toast(err.message, 'erro');
-    } finally { botao.disabled = false; }
+      avisar('Conta criada. Passe o e-mail e a senha inicial para a pessoa.', 'ok');
+    } catch (err) { avisar(err.message, 'erro'); } finally { botao.disabled = false; }
   });
   window.addEventListener('hashchange', () => { if (location.hash === '#ajustes') listarContas(); });
   if (location.hash === '#ajustes') listarContas();
@@ -93,7 +149,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const classes = $('relatorio-classes');
       classes.replaceChildren();
       if (!data.total) {
-        const p = document.createElement('p'); p.className = 'card-texto'; p.textContent = 'Nenhuma inspeção neste dia.';
+        const p = document.createElement('p'); p.className = 'texto-apoio'; p.textContent = 'Nenhuma inspeção neste dia.';
         classes.append(p);
       }
       for (const [label, count] of Object.entries(data.classes)) {

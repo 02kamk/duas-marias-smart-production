@@ -2,6 +2,8 @@ export interface Order {
   id: string; code: string; client: string; model: string; fabric?: string;
   quantity: number; produced: number; dueDate: string;
   capacityPerDay: number; recentRate: number; reworkRate: number; status: string;
+  // Calculado pelo servidor em /state: risco de atraso sem precisar abrir o lote.
+  forecast?: { late: boolean; remaining: number; estimatedDeliveryDate: string | null };
 }
 export interface Skill { rate: number | null; quality: number | null; experience: number | null }
 export interface Employee { id: string; name: string; active: boolean; availableMinutes: number; skills: Record<string, Skill> }
@@ -43,4 +45,13 @@ export async function api<T>(path: string, body?: unknown, method = 'POST'): Pro
 export const dataBR = (iso?: string | null) => (iso ? iso.slice(0, 10).split('-').reverse().join('/') : '—');
 export const num = (n: number | null | undefined, digits = 0) =>
   n == null ? '—' : n.toLocaleString('pt-BR', { maximumFractionDigits: digits });
+/** Minutos em linguagem de fábrica: 420 -> "7 h", 90 -> "1 h 30", 45 -> "45 min". */
+export const horas = (min: number) => {
+  const h = Math.floor(min / 60), m = Math.round(min % 60);
+  return h ? (m ? `${h} h ${String(m).padStart(2, '0')}` : `${h} h`) : `${m} min`;
+};
+export const diaMes = (iso?: string | null) => (iso ? iso.slice(5, 10).split('-').reverse().join('/') : '—');
+export type Agir = (task: () => Promise<unknown>, sucesso?: string, recarregar?: boolean) => Promise<void>;
+export type Avisar = (tipo: 'ok' | 'erro', texto: string) => void;
+export interface InspecaoLote { inspecionadas: number; defeitos: number; pendentes: number }
 export const erroTexto = (e: unknown) => (e instanceof Error ? e.message : String(e));

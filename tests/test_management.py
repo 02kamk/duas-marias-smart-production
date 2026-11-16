@@ -56,6 +56,48 @@ class ManagementTest(unittest.TestCase):
         self.assertEqual(self.store.read()['orders'][0]['status'],'Concluído')
         self.assertEqual(self.client.post('/api/gestao/records',json=self.record()).status_code,422)
 
+    def test_edit_and_remove_record_keep_balance_and_require_reason(self):
+        created=self.client.post('/api/gestao/records',json=self.record()).json()
+        url=f'/api/gestao/records/{created["id"]}'
+        self.assertEqual(self.store.read()['orders'][0]['produced'],1960)
+        # Sem motivo, com zero peças ou acima do saldo: nada muda.
+        before=self.store.read()
+        for body in [{'goodQuantity':5,'reworkQuantity':0},{'goodQuantity':5,'reworkQuantity':0,'reason':'x'},
+                     {'goodQuantity':0,'reworkQuantity':0,'reason':'Zerado por engano'},
+                     {'goodQuantity':1061,'reworkQuantity':0,'reason':'Acima do saldo'}]:
+            self.assertEqual(self.client.patch(url,json=body).status_code,422,body)
+        self.assertEqual(before,self.store.read())
+        edited=self.client.patch(url,json={'goodQuantity':25,'reworkQuantity':1,'reason':'Contagem conferida'})
+        self.assertEqual(edited.status_code,200)
+        state=self.store.read()
+        self.assertEqual(state['orders'][0]['produced'],1975)
+        self.assertEqual(state['records'][0]['reworkQuantity'],1)
+        self.assertEqual(state['audit'][-1]['reason'],'Contagem conferida')
+        self.assertEqual(self.client.request('DELETE',url,json={}).status_code,422)
+        removed=self.client.request('DELETE',url,json={'reason':'Lançado no lote errado'})
+        self.assertEqual(removed.status_code,200)
+        state=self.store.read()
+        self.assertEqual(state['orders'][0]['produced'],1950)
+        self.assertEqual(state['records'],[])
+        self.assertEqual(state['orders'][0]['status'],'Em andamento')
+        self.assertEqual(self.client.patch(url,json={'goodQuantity':1,'reworkQuantity':0,'reason':'Já removido'}).status_code,422)
+
+    def test_editing_reopens_a_completed_order(self):
+        created=self.client.post('/api/gestao/records',json=self.record(goodQuantity=1050)).json()
+        self.assertEqual(self.store.read()['orders'][0]['status'],'Concluído')
+        self.client.patch(f'/api/gestao/records/{created["id"]}',json={'goodQuantity':1000,'reworkQuantity':0,'reason':'Faltaram 50'})
+        order=self.store.read()['orders'][0]
+        self.assertEqual((order['produced'],order['status']),(2950,'Em andamento'))
+
+    def test_state_carries_delay_forecast_for_the_list(self):
+        orders={o['code']:o for o in self.client.get('/api/gestao/state').json()['orders']}
+        # OP-001 da demonstração: faltam 1050 em 3 dias a 220/dia -> não fecha no prazo.
+        self.assertTrue(orders['OP-001']['forecast']['late'])
+        self.assertEqual(orders['OP-001']['forecast']['estimatedDeliveryDate'],(date.today()+timedelta(days=5)).isoformat())
+        self.assertFalse(orders['OP-003']['forecast']['late'])
+        # A previsão é calculada na resposta; não é gravada no estado.
+        self.assertNotIn('forecast',self.store.read()['orders'][0])
+
     def test_duplicate_code_and_plan_audit(self):
         order=self.store.read()['orders'][0]
         body={k:order[k] for k in ['code','client','model','quantity','dueDate','capacityPerDay','recentRate','reworkRate']}

@@ -84,3 +84,20 @@ class AccountsTest(unittest.TestCase):
             with self.assertRaises(HTTPException):
                 contas.redefinir(Credentials(email='ninguem@example.com', password='Nova@4567'))
             self.assertEqual(contas.emails(), ['ana@example.com'])
+
+    def test_remove_account_keeps_own_access_and_ends_sessions(self):
+        from fastapi import HTTPException
+        from pontocerto.app.auth import Accounts, Credentials
+        with tempfile.TemporaryDirectory() as tmp:
+            contas = Accounts(Path(tmp) / 'a.sqlite3')
+            contas.register(Credentials(email='ana@example.com', password='Senha@123'))
+            contas.register(Credentials(email='bia@example.com', password='Senha@123'), allowed=True)
+            token = contas.login(Credentials(email='bia@example.com', password='Senha@123'), '1.1.1.1')
+            # Ninguém remove a própria conta, então sempre sobra alguém com acesso.
+            with self.assertRaises(HTTPException):
+                contas.remover('Ana@Example.com', 'ana@example.com')
+            with self.assertRaises(HTTPException):
+                contas.remover('ninguem@example.com', 'ana@example.com')
+            self.assertEqual(contas.remover('bia@example.com', 'ana@example.com'), 'bia@example.com')
+            self.assertIsNone(contas.user(token))
+            self.assertEqual(contas.emails(), ['ana@example.com'])

@@ -21,6 +21,10 @@ class Credentials(BaseModel):
     password: str = Field(min_length=1, max_length=128)
 
 
+class EmailOnly(BaseModel):
+    email: str = Field(min_length=5, max_length=254)
+
+
 class Accounts:
     def __init__(self, path):
         self.path = Path(path)
@@ -69,6 +73,17 @@ class Accounts:
         derived = self.derive(password, salt)
         with self.lock, self.db() as db:
             if not db.execute('UPDATE users SET salt=?, hash=? WHERE email=?', (salt, derived, email)).rowcount:
+                raise HTTPException(404, 'Conta não encontrada.')
+            db.execute('DELETE FROM sessions WHERE email=?', (email,))
+        return email
+
+    def remover(self, email, atual):
+        """Remove o acesso de outra pessoa. Ninguém remove a própria conta por aqui."""
+        email = email.strip().casefold()
+        if email == (atual or '').casefold():
+            raise HTTPException(409, 'Você não pode remover a própria conta.')
+        with self.lock, self.db() as db:
+            if not db.execute('DELETE FROM users WHERE email=?', (email,)).rowcount:
                 raise HTTPException(404, 'Conta não encontrada.')
             db.execute('DELETE FROM sessions WHERE email=?', (email,))
         return email
@@ -160,6 +175,15 @@ def secure(app, root):
     def register(body: Credentials,request: Request):
         email = accounts.register(body,allowed=bool(request.state.user))
         return {'email':email}
+
+    @app.post('/api/auth/password')
+    def trocar_senha(body: Credentials):
+        """Quem já entrou redefine a senha de qualquer conta (substitui o script de terminal)."""
+        return {'email': accounts.redefinir(body)}
+
+    @app.post('/api/auth/remove')
+    def remover_conta(body: EmailOnly, request: Request):
+        return {'email': accounts.remover(body.email, request.state.user)}
 
     @app.post('/api/auth/login')
     def login(body: Credentials,request: Request):

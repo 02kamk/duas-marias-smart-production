@@ -1,84 +1,84 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Camera, ClipboardList, LayoutDashboard, LogOut, PackageCheck, Users } from 'lucide-react';
-import { api, erroTexto, type State } from './api';
+import { api, erroTexto, type Agir, type Avisar, type State } from './api';
 import './style.css';
-import Painel from './Painel';
+import Casca from './Casca';
+import Lotes from './Lotes';
 import ReceberOP from './ReceberOP';
 import Producao from './Producao';
 import Equipe from './Equipe';
 
-const ABAS = [
-  { id: 'painel', nome: 'Painel', Icone: LayoutDashboard },
-  { id: 'receber', nome: 'Receber OP', Icone: PackageCheck },
-  { id: 'producao', nome: 'Produção', Icone: ClipboardList },
-  { id: 'equipe', nome: 'Equipe', Icone: Users },
-] as const;
-type Aba = typeof ABAS[number]['id'];
+const ABAS = ['lotes', 'receber', 'producao', 'distribuir', 'equipe'] as const;
+type Aba = typeof ABAS[number];
+const TITULOS: Record<Aba, string> = { lotes: 'Lotes', receber: 'Receber OP', producao: 'Produção', distribuir: 'Produção', equipe: 'Equipe' };
 // Endereços antigos continuam funcionando.
-const APELIDOS: Record<string, Aba> = { recebimento: 'receber', lotes: 'painel', colaboradores: 'equipe' };
+const APELIDOS: Record<string, Aba> = { painel: 'lotes', recebimento: 'receber', colaboradores: 'equipe' };
 
 function abaDoEndereco(): Aba {
   const h = location.hash.replace('#', '');
-  return (ABAS.find(a => a.id === h)?.id) || APELIDOS[h] || 'painel';
+  return (ABAS as readonly string[]).includes(h) ? h as Aba : APELIDOS[h] || 'lotes';
 }
+
+type Toast = { id: number; tipo: 'ok' | 'erro'; texto: string };
 
 export function App() {
   const [state, setState] = useState<State | null>(null);
   const [aba, setAba] = useState<Aba>(abaDoEndereco);
-  const [erro, setErro] = useState('');
-  const [aviso, setAviso] = useState('');
+  const [falha, setFalha] = useState('');
+  const [toasts, setToasts] = useState<Toast[]>([]);
   const [busy, setBusy] = useState(false);
+  const seq = useRef(0);
 
   async function refresh() { setState(await api<State>('/state')); }
-  useEffect(() => { void refresh().catch(e => setErro(erroTexto(e))); }, []);
+  const carregar = () => { setFalha(''); void refresh().catch(e => setFalha(erroTexto(e))); };
+  useEffect(carregar, []);
   useEffect(() => {
-    const aoMudar = () => { setAba(abaDoEndereco()); setErro(''); setAviso(''); };
+    const aoMudar = () => setAba(abaDoEndereco());
     window.addEventListener('hashchange', aoMudar);
     return () => window.removeEventListener('hashchange', aoMudar);
   }, []);
 
-  async function agir(task: () => Promise<unknown>, sucesso = '', recarregar = false) {
-    setBusy(true); setErro(''); setAviso('');
-    try { await task(); if (recarregar) await refresh(); setAviso(sucesso); }
-    catch (e) { setErro(erroTexto(e)); }
-    finally { setBusy(false); }
-  }
+  // Avisos flutuantes, iguais aos da Inspeção: ficam à vista em qualquer ponto da página.
+  const fechar = (id: number) => setToasts(t => t.filter(x => x.id !== id));
+  const avisar: Avisar = (tipo, texto) => {
+    if (!texto) return;
+    const id = ++seq.current;
+    setToasts(t => [...t.slice(-2), { id, tipo, texto }]);
+    setTimeout(() => fechar(id), tipo === 'erro' ? 8000 : 4000);
+  };
 
-  const titulo = ABAS.find(a => a.id === aba)!.nome;
+  const agir: Agir = async (task, sucesso = '', recarregar = false) => {
+    setBusy(true);
+    try { await task(); if (recarregar) await refresh(); avisar('ok', sucesso); }
+    catch (e) { avisar('erro', erroTexto(e)); }
+    finally { setBusy(false); }
+  };
+
   return (
-    <div className="workspace">
-      <aside>
-        <a className="brand" href="/">Duas<span>Marias</span></a>
-        <nav aria-label="Gestão">
-          <a className="nav-link" href="/"><Camera size={18} /> Inspeção</a>
-          {ABAS.map(({ id, nome, Icone }) => (
-            <a key={id} href={`#${id}`} className={`nav-link ${aba === id ? 'active' : ''}`} aria-current={aba === id ? 'page' : undefined}>
-              <Icone size={18} /> {nome}
-            </a>
-          ))}
-        </nav>
-        <button className="sair" onClick={() => void fetch('/api/auth/logout', { method: 'POST' }).finally(() => location.assign('/login'))}>
-          <LogOut size={16} /> Sair da conta
-        </button>
-      </aside>
-      <main>
-        <header>
-          <h1>{titulo}</h1>
-          {state && state.storage !== 'supabase' && <span className="badge" title="Os dados ficam guardados neste computador.">Neste computador</span>}
-        </header>
-        {erro && <div className="error" role="alert">{erro}</div>}
-        {aviso && <div className="success" role="status">{aviso}</div>}
+    <>
+      <Casca ativa={aba === 'distribuir' ? 'producao' : aba} local={!!state && state.storage !== 'supabase'}>
+        <div className="pagina-cabecalho"><h1>{TITULOS[aba]}</h1></div>
         {!state
-          ? <section className="card"><p role="status">{erro ? 'Não foi possível carregar.' : 'Carregando…'}</p>{erro && <button onClick={() => void refresh().catch(e => setErro(erroTexto(e)))}>Tentar novamente</button>}</section>
+          ? <div className="vazio">
+              {falha
+                ? <><strong>Não foi possível carregar</strong>{falha}<div className="linha-botoes" style={{ justifyContent: 'center', marginTop: 12 }}><button className="btn btn-secundario" onClick={carregar}>Tentar novamente</button></div></>
+                : <span role="status">Carregando…</span>}
+            </div>
           : <>
-              {aba === 'painel' && <Painel state={state} agir={agir} busy={busy} />}
-              {aba === 'receber' && <ReceberOP state={state} refresh={refresh} />}
-              {aba === 'producao' && <Producao state={state} agir={agir} busy={busy} />}
+              {aba === 'lotes' && <Lotes state={state} agir={agir} busy={busy} />}
+              {aba === 'receber' && <ReceberOP state={state} refresh={refresh} avisar={avisar} />}
+              {(aba === 'producao' || aba === 'distribuir') && <Producao state={state} agir={agir} busy={busy} aba={aba} />}
               {aba === 'equipe' && <Equipe state={state} agir={agir} busy={busy} />}
             </>}
-      </main>
-    </div>
+      </Casca>
+      <div className="toasts" aria-live="polite">
+        {toasts.map(t => (
+          <div key={t.id} className={`toast toast-${t.tipo}`} role={t.tipo === 'erro' ? 'alert' : 'status'} onClick={() => fechar(t.id)}>
+            <span className="toast-texto">{t.texto}</span>
+          </div>
+        ))}
+      </div>
+    </>
   );
 }
 

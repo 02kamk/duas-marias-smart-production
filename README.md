@@ -36,16 +36,19 @@ Para ler a foto da OP no recebimento (opcional): `pip install -r requirements-oc
 .\Iniciar.ps1 -Rede     # também pelo celular, na mesma rede Wi-Fi
 ```
 
-O navegador abre em **http://127.0.0.1:8000/login**. No primeiro acesso, crie a conta com senha forte; não existe senha padrão. As contas das outras pessoas são criadas em **Ajustes › Contas**; para redefinir uma senha esquecida, use `python scriptsedefinir_senha.py email`. Com `-Rede`, a janela mostra o endereço para abrir no celular. Pelo celular, use **Fotografar**: a câmera ao vivo do navegador exige HTTPS.
+O navegador abre em **http://127.0.0.1:8000/login**. No primeiro acesso, crie a conta com senha forte; não existe senha padrão. As contas das outras pessoas são criadas, redefinidas e removidas em **Ajustes › Contas**. Se ninguém mais consegue entrar, use `python scripts\redefinir_senha.py email` no computador do sistema. Com `-Rede`, a janela mostra o endereço para abrir no celular. Pelo celular, use **Fotografar**: a câmera ao vivo do navegador exige HTTPS.
 
 Sem o atalho: `python scripts\rodar.py` (aceita `--rede`, `--porta 8080` e `--abrir`).
 
 ### No dia a dia
 
-1. **Gestão › Receber OP**: cadastre a OP e confira a grade numa tela só. A quantidade do lote é a soma da grade.
-2. **Inspeção › Lotes**: toque em *Inspecionar este lote*. Cada peça inspecionada fica registrada nele, com ou sem banco configurado.
-3. **Inspeção**: *Fotografar* ou *Enviar foto*. Peças aprovadas com segurança passam sozinhas; defeitos e leituras incertas pedem conferência (o número aparece no menu *Histórico*).
-4. **Gestão › Painel**: toque num lote para ver a entrega prevista e o que fazer. Produção e distribuição de tarefas ficam em *Produção*; colaboradoras em *Equipe*.
+O menu é o mesmo em todas as telas, em dois grupos: **Chão de fábrica** (Inspecionar, Conferir, Histórico, Lotes) e **Gestão** (Receber OP, Produção, Equipe, Relatórios).
+
+1. **Receber OP**: dados da OP, grade pedida na horizontal (PP a XGG) e conferência. Se chegou diferente, marque *Há diferença* e corrija a linha *Recebido*. A quantidade do lote é a soma da grade.
+2. **Inspecionar**: escolha o lote no topo e use *Fotografar* ou *Enviar foto*. O resultado mostra a foto, o veredito e o que fazer; *Está certo* confirma com um toque, *Corrigir* abre a lista de defeitos e *Próxima peça* repete a captura.
+3. **Conferir**: fila das peças com defeito ou leitura incerta, uma por vez. O número ao lado do menu mostra quantas faltam.
+4. **Lotes**: a lista já mostra *No prazo*, *Em risco* (com a data prevista) ou *Atrasado*. Toque num lote para ver o que fazer; *Inspecionar* leva o lote para a tela de inspeção.
+5. **Produção**: *Apontamento* registra as peças do dia e permite corrigir ou excluir um lançamento (sempre com motivo); *Distribuir tarefas* reserva o tempo de cada pessoa.
 
 ### Configuração opcional (`.env`)
 
@@ -76,6 +79,12 @@ cd frontend; npm ci; npm test          # testes da tela de Gestão
 | `python scripts\06_treinar_gestao.py` | Treina o modelo experimental de atraso de lotes |
 
 Cada correção feita na conferência humana entra em `artifacts/correcoes_operador.csv`, que serve de base para o próximo treino.
+
+## Interface
+
+Inspeção e Gestão usam uma folha de estilo só, `src/pontocerto/app/static/css/style.css`, e o mesmo menu (`static/index.html` e `frontend/src/management/Casca.tsx`; ao mudar um, mude o outro). A fonte (IBM Plex Sans, licença OFL) fica em `static/fonts`, então o sistema tem a mesma aparência sem internet.
+
+Sobre as cores: a paleta creme e terracota foi mantida por decisão do projeto. Terracota é a cor da marca e dos botões. Verde, âmbar e carmim ficam reservados para estado (aprovado, conferir, defeito) e sempre aparecem com texto, porque terracota e carmim são tons próximos e a cor sozinha não basta para distinguir.
 
 ## Tela de Gestão (React)
 
