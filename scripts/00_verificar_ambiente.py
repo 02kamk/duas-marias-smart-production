@@ -592,19 +592,14 @@ def proximo_comando(
 ) -> str:
     if faltando:
         return "pip install -r requirements.txt"
+    if tem_modelo:
+        # Para operar basta o modelo treinado; o dataset só serve para treinar.
+        return r"python scripts/rodar.py   (ou .\Iniciar.ps1 no Windows)"
     if total_imagens <= 0:
         return "ajuste a chave 'dados.raiz' no config.yaml e rode este verificador de novo"
     if not tem_manifesto:
         return "python scripts/01_preparar_dados.py"
-    if not tem_modelo:
-        return "python scripts/02_treinar.py"
-    if cfg is not None:
-        try:
-            if not (Path(cfg["avaliacao"]["saida_dir"]) / "metricas.json").exists():
-                return "python scripts/03_avaliar.py"
-        except Exception:
-            pass
-    return "python scripts/05_rodar_app.py"
+    return "python scripts/02_treinar.py"
 
 
 def main(argv: list[str] | None = None) -> int:

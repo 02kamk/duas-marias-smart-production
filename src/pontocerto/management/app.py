@@ -45,7 +45,10 @@ def extend(app: FastAPI, root=ROOT):
             origin=request.headers.get('origin')
             if origin and origin.rstrip('/') != str(request.base_url).rstrip('/'):
                 return JSONResponse({'detail':'Origem de gravação não permitida.'},status_code=403)
-            if not request.headers.get('content-type','').startswith('application/json'):
+            # A leitura da OP recebe a foto como formulário; o resto só aceita JSON.
+            tipo=request.headers.get('content-type','')
+            foto_op=request.url.path=='/api/gestao/op/read' and tipo.startswith('multipart/form-data')
+            if not foto_op and not tipo.startswith('application/json'):
                 return JSONResponse({'detail':'Envie JSON.'},status_code=415)
         response=await call_next(request)
         if request.url.path=='/' and response.status_code==200 and 'text/html' in response.headers.get('content-type',''):

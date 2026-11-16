@@ -227,6 +227,13 @@
         return resp.text().then(function (texto) {
           var dados = null;
           if (texto) { try { dados = JSON.parse(texto); } catch (e) { dados = null; } }
+          if (resp.status === 401) {
+            // Sessao expirada: volta ao login em vez de repetir avisos de erro.
+            location.assign("/login");
+            var sessao = new Error("Sessão encerrada. Entre novamente.");
+            sessao.status = 401;
+            throw sessao;
+          }
           if (!resp.ok) {
             var msg = "HTTP " + resp.status;
             if (dados && typeof dados.erro === "string") msg = dados.erro;
@@ -643,10 +650,9 @@
         return;
       }
       var arquivo = new File([blob], "captura.jpg", { type: "image/jpeg" });
-      enviarParaAnalise(arquivo)
+      enviarParaAnalise(arquivo, "camera_servidor")
         .then(function () {
           botaoCarregando(btn, false);
-          irPara("testar");
         })
         .catch(function () { botaoCarregando(btn, false); });
     }, "image/jpeg", 0.92);
@@ -770,9 +776,12 @@
     }
 
     var titulo, sub;
-    if (estado === "aquecendo") {
-      titulo = "Aquecendo";
-      sub = "Estabilizando a leitura da costura...";
+    if (estado === "aquecendo" && !App.cameraAtiva) {
+      titulo = "Câmera desligada";
+      sub = "Toque em Fotografar ou Enviar foto para inspecionar uma peça.";
+    } else if (estado === "aquecendo") {
+      titulo = "Lendo a costura";
+      sub = "Mantenha a peça parada por um instante...";
     } else if (estado === "ok") {
       titulo = "Costura aprovada";
       sub = "Pontos uniformes - " + formatarPercentual(veredito.confianca) + " de confianca";
@@ -1059,7 +1068,7 @@
     enviarParaAnalise(arquivo);
   }
 
-  function enviarParaAnalise(arquivo) {
+  function enviarParaAnalise(arquivo, origem) {
     var resultado = $("resultado-teste");
     mostrar(resultado, false);
     setHTML($("teste-ia"), "", "teste-ia");
@@ -1068,6 +1077,7 @@
 
     var fd = new FormData();
     fd.append("arquivo", arquivo, arquivo.name || "imagem.jpg");
+    fd.append("origem", origem || "upload");
 
     return fetchJSON("/api/analisar", { method: "POST", body: fd, timeout: 60000 })
       .then(function (d) {
@@ -1079,6 +1089,9 @@
         App.analiseAtual = d || {};
         window.dispatchEvent(new CustomEvent("inspecao-analisada",{detail:d}));
         renderResultadoTeste(App.analiseAtual);
+        // Leva a pessoa direto ao resultado, que fica abaixo da captura.
+        var alvo = $("resultado-teste");
+        if (alvo && alvo.scrollIntoView) alvo.scrollIntoView({ behavior: "smooth", block: "start" });
         return App.analiseAtual;
       })
       .catch(function (e) {
@@ -2568,7 +2581,7 @@
     if (modal) {
       modal.addEventListener("click", function (e) {
         // Clique no overlay (fora do conteudo) fecha o post.
-        if (e.target === modal || (e.target.classList && e.target.classList.contains("modal-overlay"))) {
+        if (e.target === modal || (e.target.closest && e.target.closest("[data-fechar-modal]"))) {
           fecharModal();
         }
       });

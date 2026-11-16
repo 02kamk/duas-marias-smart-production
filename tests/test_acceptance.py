@@ -147,4 +147,22 @@ class Acceptance(unittest.TestCase):
             pdf=c.get('/api/relatorios/pdf')
             self.assertTrue(pdf.content.startswith(b'%PDF'))
             self.assertEqual(c.get('/api/relatorios/resumo').json()['revisadas'],1)
+            # Foto da OP vai como formulário e não pode ser barrada como "Envie JSON".
+            op=c.post('/api/gestao/op/read',files={'arquivo':('op.png',image.getvalue(),'image/png')})
+            self.assertNotEqual(op.status_code,415)
+            # A origem real da captura fica registrada.
+            c.post('/api/analisar',files={'arquivo':('cam.png',image.getvalue(),'image/png')},data={'origem':'camera_aparelho'})
+            self.assertEqual(c.get('/api/eventos').json()['eventos'][0]['origem'],'camera_aparelho')
+            # Trocar a classe sempre grava "corrigida", mesmo que o pedido diga "confirmada".
+            last=c.get('/api/eventos').json()['eventos'][0]
+            other='crooked_seam' if last['classe_key']!='crooked_seam' else 'normal'
+            saved=c.post(f'/api/eventos/{last["id"]}/conferencia',json={'classe':other,'decisao':'confirmada'}).json()
+            self.assertEqual(saved['evento']['revisao_humana']['decisao'],'corrigida')
+            self.assertFalse(any(e['id']==last['id'] for e in c.get('/api/eventos?pendentes=true').json()['eventos']))
+            # Ajustes ficam gravados em disco para valer depois de reiniciar.
+            c.post('/api/ajustes',json={'meta_pecas':77})
+            self.assertTrue((self.root/'ajustes.json').exists())
+        with TestClient(app) as c:
+            c.post('/api/auth/login',json=body)
+            self.assertEqual(c.get('/api/ajustes').json()['meta_pecas'],77)
         # O modelo foi executado; a imagem sintética não comprova acurácia em costura.

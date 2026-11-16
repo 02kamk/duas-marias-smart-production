@@ -55,3 +55,14 @@ class RoundTwo(unittest.TestCase):
             config=self.client.get('/api/gestao/configuration').json()
         self.assertIn('SUPABASE_DB_URL',config['supabaseMissing'])
         self.assertNotIn('postgresql://',str(config))
+
+
+class ReviewRule(unittest.TestCase):
+    def test_only_defects_and_uncertain_readings_need_review(self):
+        from pontocerto.app.state import Evento
+        base=dict(id='x',timestamp=0,hora='00:00:00',classe_idx=0,nome='',gravidade='baixa')
+        self.assertFalse(Evento(classe_key='normal',confianca=.95,**base).precisa_revisao)
+        self.assertTrue(Evento(classe_key='normal',confianca=.40,**base).precisa_revisao)
+        self.assertTrue(Evento(classe_key='crooked_seam',confianca=.95,**base).precisa_revisao)
+        self.assertFalse(Evento(classe_key='crooked_seam',confianca=.95,revisao_humana={'decisao':'confirmada'},**base).precisa_revisao)
+

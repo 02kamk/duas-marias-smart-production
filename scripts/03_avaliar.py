@@ -64,7 +64,7 @@ def main() -> int:
     etapa(sys.argv[1:])
     print()
     print("[ok] Etapa 03 concluida. Graficos e metricas em artifacts/avaliacao.")
-    print("     Proximo passo: python scripts/05_rodar_app.py")
+    print("     Proximo passo: python scripts/rodar.py")
     return 0
 
 

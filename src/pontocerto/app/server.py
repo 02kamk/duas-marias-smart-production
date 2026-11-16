@@ -38,7 +38,7 @@ import numpy as np
 if __package__ in (None, ""):  # permite "python src/pontocerto/app/server.py"
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from fastapi import Body, FastAPI, File, Query, UploadFile, Request
+from fastapi import Body, FastAPI, File, Form, Query, UploadFile, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import (
     FileResponse,
@@ -549,6 +549,10 @@ def criar_app(cfg: Any = None) -> FastAPI:
     cfg = cfg if cfg is not None else carregar_config()
     cfg_banco = cfg.get("banco") or {}
 
+    # ---------------------------------------------------------- ajustes
+    def _arquivo_ajustes() -> Path:
+        return Path(cfg.app.pasta_capturas).parent / "ajustes.json"
+
     # ------------------------------------------------------- lote ativo
     def _arquivo_lote_ativo() -> Path | None:
         caminho = cfg_banco.get("lote_ativo")
@@ -661,6 +665,12 @@ def criar_app(cfg: Any = None) -> FastAPI:
                              daemon=True).start()
 
         app.state.motor = Motor(cfg, app.state.camera, app.state.preditor, app.state.estado)
+        salvos = _ler_json(_arquivo_ajustes())
+        if isinstance(salvos, dict):
+            try:
+                aplicar_ajustes(salvos, gravar=False)
+            except Exception:
+                pass
         app.state.motor.iniciar()  # a camera NAO e aberta automaticamente
         try:
             yield
@@ -789,7 +799,10 @@ def criar_app(cfg: Any = None) -> FastAPI:
         }
 
     @app.post("/api/ajustes")
-    def aplicar_ajustes(corpo: dict = Body(default={})):
+    def rota_ajustes(corpo: dict = Body(default={})):
+        return aplicar_ajustes(corpo or {})
+
+    def aplicar_ajustes(corpo: dict, gravar: bool = True):
         corpo = corpo or {}
         inf = cfg.inferencia
         numericos = {
@@ -821,7 +834,16 @@ def criar_app(cfg: Any = None) -> FastAPI:
             app.state.motor.tecido = str(tecido) if tecido else None
         if mudou_suavizador:
             app.state.motor.reconfigurar()
-        return ler_ajustes()
+        atuais = ler_ajustes()
+        if gravar:
+            # Guarda em disco para valer depois que o servidor reiniciar.
+            try:
+                arquivo = _arquivo_ajustes()
+                garantir_pasta(arquivo.parent)
+                arquivo.write_text(json.dumps(atuais, ensure_ascii=False), encoding="utf-8")
+            except Exception:
+                pass
+        return atuais
 
     # ------------------------------------------------------------- camera
     @app.get("/api/camera/dispositivos")
@@ -909,7 +931,9 @@ def criar_app(cfg: Any = None) -> FastAPI:
 
     # ----------------------------------------------------------- analisar
     @app.post("/api/analisar")
-    async def analisar(arquivo: UploadFile = File(...)):
+    async def analisar(arquivo: UploadFile = File(...), origem: str = Form("upload")):
+        if origem not in ("upload", "camera_aparelho", "camera_servidor"):
+            origem = "upload"
         dados = b""
         try:
             while True:
@@ -955,7 +979,7 @@ def criar_app(cfg: Any = None) -> FastAPI:
         else:
             heat = frame
 
-        evento = app.state.estado.registrar_evento(predicao_dict, frame, origem='upload')
+        evento = app.state.estado.registrar_evento(predicao_dict, frame, origem=origem)
         return {
             "predicao": predicao_dict,
             "heatmap": _data_uri(heat),
@@ -966,14 +990,14 @@ def criar_app(cfg: Any = None) -> FastAPI:
 
     # ------------------------------------------------------------ eventos
     @app.get("/api/eventos")
-    def listar_eventos(limite: int = Query(60, ge=1, le=500), classe: str | None = None, dia: str | None = None, defeitos: bool = False):
+    def listar_eventos(limite: int = Query(60, ge=1, le=500), classe: str | None = None, dia: str | None = None, defeitos: bool = False, pendentes: bool = False):
         if dia:
             try:
                 datetime.strptime(dia, '%Y-%m-%d')
             except ValueError:
                 return JSONResponse(status_code=422, content={'erro': 'Data inválida.'})
         return {
-            "eventos": app.state.estado.eventos(limite=limite, classe=classe, dia=dia, defeitos=defeitos),
+            "eventos": app.state.estado.eventos(limite=limite, classe=classe, dia=dia, defeitos=defeitos, pendentes=pendentes),
             "estatisticas": app.state.estado.estatisticas(),
         }
 
@@ -983,12 +1007,12 @@ def criar_app(cfg: Any = None) -> FastAPI:
         if ev is None:
             return JSONResponse(status_code=404, content={'erro': 'Evento não encontrado.'})
         classe = str(corpo.get('classe', ''))
-        decisao = str(corpo.get('decisao', ''))
         observacao = str(corpo.get('observacao', '')).strip()
-        if classe not in CLASS_KEYS or decisao not in ('confirmada', 'corrigida') or len(observacao)>1000:
-            return JSONResponse(status_code=422, content={'erro': 'Classe, decisão ou observação inválida.'})
-        if decisao == 'confirmada' and classe != ev.classe_key:
-            return JSONResponse(status_code=422, content={'erro': 'Para trocar a classe, selecione Corrigir.'})
+        if classe not in CLASS_KEYS or len(observacao)>1000:
+            return JSONResponse(status_code=422, content={'erro': 'Classe ou observação inválida.'})
+        # A decisão sai da comparação com a sugestão: assim nunca grava
+        # "confirmada" com uma classe diferente da que a IA sugeriu.
+        decisao = 'confirmada' if classe == ev.classe_key else 'corrigida'
         app.state.estado.revisar_humano(evento_id, classe, decisao, observacao, getattr(request.state, 'user', 'operador-local'))
         return {'ok': True, 'evento': ev.to_dict()}
 
@@ -1410,33 +1434,10 @@ class _PreditorAusente:
 # CLI
 # ---------------------------------------------------------------------------
 def main(argv: list[str] | None = None) -> None:
-    cfg = carregar_config()
-    parser = argparse.ArgumentParser(
-        prog="pontocerto-servidor",
-        description="Sobe a interface e a API do Ponto Certo.",
-    )
-    parser.add_argument("--host", default=str(cfg.app.get("host", "127.0.0.1")),
-                        help="endereco de escuta (padrao: %(default)s)")
-    parser.add_argument("--porta", type=int, default=int(cfg.app.get("porta", 8000)),
-                        help="porta TCP (padrao: %(default)s)")
-    parser.add_argument("--recarregar", action="store_true",
-                        help="recarrega o servidor quando o codigo mudar (desenvolvimento)")
-    args = parser.parse_args(argv)
+    """Sobe o sistema completo (inspeção + gestão + login)."""
+    from pontocerto.principal import main as principal
 
-    import uvicorn
-
-    print(f"Ponto Certo em http://{args.host}:{args.porta}  (Ctrl+C para encerrar)")
-    if args.recarregar:
-        uvicorn.run(
-            "pontocerto.app.server:criar_app",
-            factory=True,
-            host=args.host,
-            port=args.porta,
-            reload=True,
-            reload_dirs=[str(Path(__file__).resolve().parents[2])],
-        )
-    else:
-        uvicorn.run(criar_app(cfg), host=args.host, port=args.porta, log_level="info")
+    principal(argv)
 
 
 if __name__ == "__main__":
