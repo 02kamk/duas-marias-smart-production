@@ -15,9 +15,11 @@ def criar_app_completo(cfg: Any = None):
     """Monta inspeção, gestão e login numa aplicação só."""
     from pontocerto.app.operational import extend as com_login
     from pontocerto.app.server import criar_app
+    from pontocerto.config import credenciais_supabase
     from pontocerto.management.app import extend as com_gestao
 
-    return com_login(com_gestao(criar_app(cfg)))
+    # Com SUPABASE_DB_URL no .env, as contas de login ficam no Supabase.
+    return com_login(com_gestao(criar_app(cfg)), db_url=credenciais_supabase()["db_url"])
 
 
 def _ip_local() -> str | None:

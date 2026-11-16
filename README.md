@@ -56,6 +56,7 @@ Copie `.env.example` para `.env`. Sem ele tudo funciona e fica guardado neste co
 
 - **`OPENROUTER_API_KEY`**: sem ela, as explicações usam a base técnica local, sem segunda opinião da IA.
 - **`SUPABASE_*`**: grava lotes, inspeções e fotos de defeito no banco. Rode [supabase/schema.sql](supabase/schema.sql) e [supabase/gestao.sql](supabase/gestao.sql) no SQL Editor, crie um bucket **privado** `Capturas`, preencha as variáveis e use `GESTAO_STORAGE=supabase`. Sem internet, as gravações esperam em `artifacts/pendentes.jsonl` e são reenviadas depois.
+  Com a `SUPABASE_DB_URL` preenchida, as **contas de login** também ficam no banco (tabela `contas`, criada sozinha na primeira vez; veja [supabase/contas.sql](supabase/contas.sql)), então a mesma conta entra em qualquer computador. Contas que só existiam no computador são levadas para o banco automaticamente. Para entrar é preciso internet; quem já entrou continua usando o sistema se ela cair.
 - **`OUTLOOK_*`**: avisos de recebimento por e-mail, sempre conferidos antes de enviar.
 
 O passo a passo completo está em [docs/testes/CONFIGURACAO_LOCAL.md](docs/testes/CONFIGURACAO_LOCAL.md).

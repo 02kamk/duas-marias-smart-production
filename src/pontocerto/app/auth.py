@@ -25,8 +25,122 @@ class EmailOnly(BaseModel):
     email: str = Field(min_length=5, max_length=254)
 
 
+_DDL_CONTAS = (
+    'CREATE TABLE IF NOT EXISTS public.contas('
+    'email text PRIMARY KEY, salt text NOT NULL, hash text NOT NULL, criado_em timestamptz NOT NULL DEFAULT now());'
+    'ALTER TABLE public.contas ENABLE ROW LEVEL SECURITY;'
+    'REVOKE ALL ON public.contas FROM anon, authenticated;'
+)
+
+
+class ContasLocais:
+    """Contas na tabela `users` do SQLite local (usado sem SUPABASE_DB_URL e nos testes)."""
+
+    def __init__(self, accounts):
+        self.accounts = accounts
+
+    def exists(self):
+        with self.accounts.db() as db:
+            return bool(db.execute('SELECT 1 FROM users LIMIT 1').fetchone())
+
+    def emails(self):
+        with self.accounts.db() as db:
+            return [r[0] for r in db.execute('SELECT email FROM users ORDER BY email').fetchall()]
+
+    def get(self, email):
+        with self.accounts.db() as db:
+            return db.execute('SELECT salt,hash FROM users WHERE email=?', (email,)).fetchone()
+
+    def insert(self, email, salt, derived, allowed):
+        with self.accounts.db() as db:
+            db.execute('BEGIN IMMEDIATE')
+            if db.execute('SELECT 1 FROM users LIMIT 1').fetchone() and not allowed:
+                raise HTTPException(403, 'O cadastro inicial já foi concluído. Entre para cadastrar outra conta.')
+            try:
+                db.execute('INSERT INTO users VALUES (?,?,?)', (email, salt, derived))
+            except sqlite3.IntegrityError:
+                raise HTTPException(409, 'Conta já cadastrada.')
+
+    def update(self, email, salt, derived):
+        with self.accounts.db() as db:
+            return bool(db.execute('UPDATE users SET salt=?, hash=? WHERE email=?', (salt, derived, email)).rowcount)
+
+    def delete(self, email):
+        with self.accounts.db() as db:
+            return bool(db.execute('DELETE FROM users WHERE email=?', (email,)).rowcount)
+
+
+class ContasSupabase:
+    """Contas na tabela `public.contas` do Supabase, compartilhadas entre computadores.
+
+    Só as contas vão para o banco; sessões e tentativas de login continuam no
+    SQLite local, então quem já entrou segue usando o sistema se a internet cair.
+    """
+
+    def __init__(self, accounts, db_url):
+        self.accounts = accounts
+        self.db_url = db_url
+        self.pronto = False
+
+    @contextmanager
+    def db(self):
+        import psycopg
+        try:
+            conexao = psycopg.connect(self.db_url, connect_timeout=8, prepare_threshold=None)
+        except psycopg.OperationalError:
+            raise HTTPException(503, 'Sem conexão com o banco das contas. Confira a internet e tente de novo.') from None
+        try:
+            with conexao:
+                if not self.pronto:
+                    conexao.execute(_DDL_CONTAS)
+                    self._importar_locais(conexao)
+                    self.pronto = True
+                yield conexao
+        finally:
+            conexao.close()
+
+    def _importar_locais(self, conexao):
+        """Leva para o banco as contas que existiam só neste computador (sem sobrescrever)."""
+        with self.accounts.db() as local:
+            linhas = local.execute('SELECT email,salt,hash FROM users').fetchall()
+        for linha in linhas:
+            conexao.execute('INSERT INTO public.contas(email,salt,hash) VALUES (%s,%s,%s) '
+                            'ON CONFLICT (email) DO NOTHING', linha)
+
+    def exists(self):
+        with self.db() as db:
+            return bool(db.execute('SELECT 1 FROM public.contas LIMIT 1').fetchone())
+
+    def emails(self):
+        with self.db() as db:
+            return [r[0] for r in db.execute('SELECT email FROM public.contas ORDER BY email').fetchall()]
+
+    def get(self, email):
+        with self.db() as db:
+            return db.execute('SELECT salt,hash FROM public.contas WHERE email=%s', (email,)).fetchone()
+
+    def insert(self, email, salt, derived, allowed):
+        with self.db() as db:
+            # Serializa cadastros simultâneos para o "primeiro acesso" ser único.
+            db.execute("SELECT pg_advisory_xact_lock(hashtext('public.contas'))")
+            if db.execute('SELECT 1 FROM public.contas LIMIT 1').fetchone() and not allowed:
+                raise HTTPException(403, 'O cadastro inicial já foi concluído. Entre para cadastrar outra conta.')
+            if not db.execute('INSERT INTO public.contas(email,salt,hash) VALUES (%s,%s,%s) '
+                              'ON CONFLICT (email) DO NOTHING', (email, salt, derived)).rowcount:
+                raise HTTPException(409, 'Conta já cadastrada.')
+
+    def update(self, email, salt, derived):
+        with self.db() as db:
+            return bool(db.execute('UPDATE public.contas SET salt=%s, hash=%s WHERE email=%s',
+                                   (salt, derived, email)).rowcount)
+
+    def delete(self, email):
+        with self.db() as db:
+            return bool(db.execute('DELETE FROM public.contas WHERE email=%s', (email,)).rowcount)
+
+
 class Accounts:
-    def __init__(self, path):
+    def __init__(self, path, db_url=None):
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.lock = Lock()
@@ -34,6 +148,8 @@ class Accounts:
             db.executescript('CREATE TABLE IF NOT EXISTS users(email TEXT PRIMARY KEY,salt TEXT,hash TEXT);'
                              'CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY,email TEXT,expires REAL);'
                              'CREATE TABLE IF NOT EXISTS attempts(ip TEXT PRIMARY KEY,count INTEGER,until REAL);')
+        db_url = (db_url or '').strip()
+        self.contas = ContasSupabase(self, db_url) if db_url else ContasLocais(self)
 
     @contextmanager
     def db(self):
@@ -45,8 +161,7 @@ class Accounts:
             db.close()
 
     def exists(self):
-        with self.db() as db:
-            return bool(db.execute('SELECT 1 FROM users LIMIT 1').fetchone())
+        return self.contas.exists()
 
     @staticmethod
     def derive(password, salt):
@@ -63,18 +178,18 @@ class Accounts:
         return email, password
 
     def emails(self):
-        with self.db() as db:
-            return [r[0] for r in db.execute('SELECT email FROM users ORDER BY email').fetchall()]
+        return self.contas.emails()
 
     def redefinir(self, credentials):
         """Troca a senha de uma conta existente e encerra as sessões abertas dela."""
         email, password = self.validar(credentials)
         salt = secrets.token_hex(16)
         derived = self.derive(password, salt)
-        with self.lock, self.db() as db:
-            if not db.execute('UPDATE users SET salt=?, hash=? WHERE email=?', (salt, derived, email)).rowcount:
+        with self.lock:
+            if not self.contas.update(email, salt, derived):
                 raise HTTPException(404, 'Conta não encontrada.')
-            db.execute('DELETE FROM sessions WHERE email=?', (email,))
+            with self.db() as db:
+                db.execute('DELETE FROM sessions WHERE email=?', (email,))
         return email
 
     def remover(self, email, atual):
@@ -82,24 +197,19 @@ class Accounts:
         email = email.strip().casefold()
         if email == (atual or '').casefold():
             raise HTTPException(409, 'Você não pode remover a própria conta.')
-        with self.lock, self.db() as db:
-            if not db.execute('DELETE FROM users WHERE email=?', (email,)).rowcount:
+        with self.lock:
+            if not self.contas.delete(email):
                 raise HTTPException(404, 'Conta não encontrada.')
-            db.execute('DELETE FROM sessions WHERE email=?', (email,))
+            with self.db() as db:
+                db.execute('DELETE FROM sessions WHERE email=?', (email,))
         return email
 
     def register(self, credentials, allowed=False):
         email, password = self.validar(credentials)
         salt = secrets.token_hex(16)
         derived = self.derive(password, salt)
-        with self.lock, self.db() as db:
-            db.execute('BEGIN IMMEDIATE')
-            if db.execute('SELECT 1 FROM users LIMIT 1').fetchone() and not allowed:
-                raise HTTPException(403, 'O cadastro inicial já foi concluído. Entre para cadastrar outra conta.')
-            try:
-                db.execute('INSERT INTO users VALUES (?,?,?)', (email, salt, derived))
-            except sqlite3.IntegrityError:
-                raise HTTPException(409, 'Conta já cadastrada.')
+        with self.lock:
+            self.contas.insert(email, salt, derived, allowed)
         return email
 
     def login(self, credentials, ip):
@@ -108,7 +218,7 @@ class Accounts:
             attempt = db.execute('SELECT count,until FROM attempts WHERE ip=?', (ip,)).fetchone()
             if attempt and attempt[0]>=10 and attempt[1]>time.time():
                 raise HTTPException(429, 'Muitas tentativas. Aguarde 15 minutos.')
-            row = db.execute('SELECT salt,hash FROM users WHERE email=?', (email,)).fetchone()
+        row = self.contas.get(email)
         # Executa a derivação mesmo quando a conta não existe.
         candidate = self.derive(credentials.password, row[0] if row else '00'*16)
         if not row or not hmac.compare_digest(candidate, row[1]):
@@ -132,8 +242,9 @@ class Accounts:
         return row[0] if row else None
 
 
-def secure(app, root):
-    accounts = Accounts(root/'artifacts'/'local'/'accounts.sqlite3')
+def secure(app, root, db_url=None):
+    """Liga o login. Com `db_url` (SUPABASE_DB_URL) as contas ficam no Supabase."""
+    accounts = Accounts(root/'artifacts'/'local'/'accounts.sqlite3', db_url)
     app.state.accounts = accounts
 
     @app.middleware('http')

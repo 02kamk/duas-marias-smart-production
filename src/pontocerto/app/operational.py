@@ -9,7 +9,7 @@ ROOT=Path(__file__).resolve().parents[3]
 STATIC=Path(__file__).parent/'static'
 
 
-def extend(app,root=ROOT):
+def extend(app,root=ROOT,db_url=None):
     def inspection_rows(day):
         return app.state.estado.eventos(limite=500,dia=day.isoformat() if day else None)
 
@@ -53,4 +53,4 @@ def extend(app,root=ROOT):
     def offline():
         return HTMLResponse('<!doctype html><html lang="pt-BR"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sem conexão</title><h1>Conecte-se ao servidor Duas Marias</h1><p>Inspeções, fotos e dados de sessão não são armazenados no cache do navegador. A câmera e o modelo dependem do servidor.</p><a href="/">Tentar novamente</a></html>')
 
-    return secure(app,root)
+    return secure(app,root,db_url)
