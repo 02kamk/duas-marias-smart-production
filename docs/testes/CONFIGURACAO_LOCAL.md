@@ -6,7 +6,7 @@ Abra `http://127.0.0.1:8000/login`. No primeiro acesso, crie sua conta local com
 
 A inspeção real está em `/`, com webcam do servidor, câmera do aparelho e arquivo na mesma tela. Cada análise de arquivo gera um evento com foto em SQLite e no diretório de capturas. O histórico possui calendário e filtro de defeitos; a conferência humana é persistida. A câmera do aparelho exige permissão e contexto seguro. A câmera do servidor não é ligada automaticamente.
 
-A navegação operacional não inclui financeiro, treinamento, modelo e evidências nem auditoria. Os registros internos de decisões permanecem para rastrear alterações. A entrada da porta 5173 redireciona para a operação da porta 8000, evitando o fluxo antigo MOCK.
+A navegação operacional não inclui financeiro, treinamento, modelo e evidências nem auditoria. Os registros internos de decisões permanecem para rastrear alterações. 
 
 O projeto está dentro de um caminho longo no OneDrive. A instalação do PyTorch no `.venv` interno falhou pelo limite de caminhos do Windows. Nesta máquina, o ambiente funcional foi criado em `$env:TEMP\duas-marias-venv`; ele é temporário e poderá precisar ser recriado se a pasta temporária for limpa.
 
@@ -14,7 +14,7 @@ Na raiz do repositório, iniciar com:
 
 ```powershell
 $pythonProjeto = Join-Path $env:TEMP 'duas-marias-venv\Scripts\python.exe'
-& $pythonProjeto -u scripts\11_rodar_completo.py
+.\Iniciar.ps1   # encontra sozinho o ambiente do TEMP
 ```
 
 Para recriar esse ambiente: `python -m venv "$env:TEMP\duas-marias-venv"` e depois `& $pythonProjeto -m pip install -r requirements.txt`. Para encerrar o servidor no terminal, usar Ctrl+C. Não iniciar dois servidores na mesma porta.
@@ -78,6 +78,6 @@ Para a leitura local de OP, instale `requirements-ocr.txt` no mesmo Python do se
 
 A tela Relatórios da inspeção oferece resumo por dia e download PDF de até 500 eventos recentes no período. A Gestão também oferece download de relatório de produção. Esses PDFs exigem sessão autenticada e são gerados no momento do download. O pacote reportlab faz parte de requirements.txt.
 
-Para repetir a regressão Python, executar `python scripts/15_testar_regressao.py` após instalar as dependências de execução, OCR e documentação usadas nos testes. No frontend, executar `npm.cmd test -- --maxWorkers=1 --no-file-parallelism --testTimeout=20000` e `npx.cmd tsc --noEmit`.
+Para repetir a regressão Python, executar `python scripts/testar.py` após instalar as dependências de execução, OCR e documentação usadas nos testes. No frontend, executar `npm.cmd test -- --maxWorkers=1 --no-file-parallelism --testTimeout=20000` e `npx.cmd tsc --noEmit`.
 
 Primeiro criar o acesso local e repetir inspeção, revisão humana, cadastro, recebimento e redistribuição. Depois configurar e testar Supabase e Outlook. Por fim, validar câmera, instalação e uso no celular real. A fotografia original de costura torta precisa de conferência humana, sem assumir acerto do modelo.

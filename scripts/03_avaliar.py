@@ -48,7 +48,7 @@ Possiveis causas e solucoes:
   4. Voce esta fora da pasta do projeto. Entre na raiz do repositorio
      (a que contem o config.yaml) e rode de novo.
 
-Rode 'python scripts/00_verificar_ambiente.py' para um diagnostico completo.
+Rode 'python scripts/verificar_ambiente.py' para um diagnostico completo.
 """
 
 
@@ -64,7 +64,7 @@ def main() -> int:
     etapa(sys.argv[1:])
     print()
     print("[ok] Etapa 03 concluida. Graficos e metricas em artifacts/avaliacao.")
-    print("     Proximo passo: python scripts/05_rodar_app.py")
+    print("     Proximo passo: python scripts/rodar.py")
     return 0
 
 

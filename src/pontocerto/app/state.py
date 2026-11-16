@@ -28,6 +28,9 @@ from pontocerto.labels import CLASS_KEYS, OK_INDEX, class_by_index, class_by_key
 __all__ = ["Evento", "EstadoSessao"]
 
 META_PECAS_PADRAO = 50
+# Abaixo desta certeza a leitura conta como incerta e vai para conferência.
+# O valor real vem de inferencia.limiar_incerteza no config.yaml.
+LIMIAR_REVISAO = 0.70
 
 
 @dataclass
@@ -51,6 +54,13 @@ class Evento:
     lote_codigo: str | None = None   # None: evento so local, nao vai para o banco
     origem: str = 'ao_vivo'
     revisao_humana: dict | None = None
+
+    @property
+    def precisa_revisao(self) -> bool:
+        """Só defeito ou leitura incerta pedem conferência; aprovada segura passa sozinha."""
+        if self.revisao_humana:
+            return False
+        return self.classe_key != 'normal' or float(self.confianca) < LIMIAR_REVISAO
 
     @property
     def classe_final(self) -> str:
@@ -78,6 +88,7 @@ class Evento:
             "data": datetime.fromtimestamp(self.timestamp).date().isoformat(),
             "origem": self.origem,
             "revisao_humana": self.revisao_humana,
+            "precisa_revisao": self.precisa_revisao,
             "lote_id": self.lote_id,
             "lote_codigo": self.lote_codigo,
         }
@@ -87,7 +98,12 @@ class EstadoSessao:
     """Historico da sessao atual, em memoria, com capturas salvas em disco."""
 
     def __init__(self, cfg: Any) -> None:
+        global LIMIAR_REVISAO
         self._cfg = cfg
+        try:
+            LIMIAR_REVISAO = float(cfg.inferencia.get("limiar_incerteza", LIMIAR_REVISAO))
+        except Exception:
+            pass
         app = cfg.app
         self._max_eventos = int(app.get("max_eventos_memoria", 300))
         self._pasta_capturas = Path(app.pasta_capturas)
@@ -178,7 +194,7 @@ class EstadoSessao:
             tecido=tecido,
             origem=origem,
             imagem=imagem_url,
-            lote_id=int(lote["id"]) if lote else None,
+            lote_id=int(lote["id"]) if lote and lote.get("id") is not None else None,
             lote_codigo=str(lote.get("codigo") or "") if lote else None,
         )
 
@@ -261,7 +277,7 @@ class EstadoSessao:
 
     # ----------------------------------------------------------------- leitura
 
-    def eventos(self, limite: int = 60, classe: str | None = None, dia: str | None = None, defeitos: bool = False) -> list[dict]:
+    def eventos(self, limite: int = 60, classe: str | None = None, dia: str | None = None, defeitos: bool = False, pendentes: bool = False) -> list[dict]:
         """Eventos mais recentes primeiro, opcionalmente filtrados por classe."""
         limite = max(1, int(limite))
         with self._connect() as db:
@@ -275,7 +291,24 @@ class EstadoSessao:
             itens = [e for e in itens if e.classe_final == classe]
         if defeitos:
             itens = [e for e in itens if e.classe_final != 'normal']
+        if pendentes:
+            itens = [e for e in itens if e.precisa_revisao]
         return [e.to_dict() for e in itens[:limite]]
+
+    def resumo_por_lote(self) -> dict[str, dict]:
+        """Peças inspecionadas, com defeito e aguardando conferência por código de lote."""
+        with self._connect() as db:
+            rows = db.execute('SELECT payload FROM eventos').fetchall()
+        resumo: dict[str, dict] = {}
+        for row in rows:
+            ev = Evento(**json.loads(row[0]))
+            if not ev.lote_codigo:
+                continue
+            item = resumo.setdefault(ev.lote_codigo, {'inspecionadas': 0, 'defeitos': 0, 'pendentes': 0})
+            item['inspecionadas'] += 1
+            item['defeitos'] += ev.classe_final != 'normal'
+            item['pendentes'] += ev.precisa_revisao
+        return resumo
 
     def evento(self, evento_id: str) -> Evento | None:
         with self._lock:
@@ -301,6 +334,19 @@ class EstadoSessao:
             ev.diagnostico = None
             ev.revisao_humana = {'decisao': decisao, 'classe': classe, 'observacao': observacao,
                                 'autor': autor, 'timestamp': time.time()}
+            linha = {
+                "timestamp": f"{ev.timestamp:.3f}",
+                "hora": datetime.fromtimestamp(ev.timestamp).strftime("%Y-%m-%d %H:%M:%S"),
+                "evento_id": ev.id,
+                "imagem": Path(ev.imagem).name if ev.imagem else "",
+                "classe_predita": ev.classe_key,
+                "classe_corrigida": classe,
+                "confianca": f"{ev.confianca:.4f}",
+                "tecido": ev.tecido or "",
+            }
+        # Correções alimentam o próximo retreino (artifacts/correcoes_operador.csv).
+        if decisao == 'corrigida':
+            self._gravar_correcao(linha)
         self._avisar(ev)
         return True
 
@@ -325,32 +371,6 @@ class EstadoSessao:
         return True
 
     # --------------------------------------------------------- correcao humana
-
-    def corrigir_rotulo(self, evento_id: str, classe_key: str) -> bool:
-        """Registra a correcao do operador e grava uma linha no CSV de correcoes."""
-        classe_key = str(classe_key).strip()
-        try:
-            info = class_by_key(classe_key)
-        except KeyError:
-            return False
-        with self._lock:
-            ev = self._indice.get(str(evento_id))
-            if ev is None:
-                return False
-            ev.rotulo_operador = info.key
-            linha = {
-                "timestamp": f"{ev.timestamp:.3f}",
-                "hora": datetime.fromtimestamp(ev.timestamp).strftime("%Y-%m-%d %H:%M:%S"),
-                "evento_id": ev.id,
-                "imagem": Path(ev.imagem).name if ev.imagem else "",
-                "classe_predita": ev.classe_key,
-                "classe_corrigida": info.key,
-                "confianca": f"{ev.confianca:.4f}",
-                "tecido": ev.tecido or "",
-            }
-        self._gravar_correcao(linha)
-        self._avisar(ev)
-        return True
 
     def _gravar_correcao(self, linha: dict) -> None:
         try:

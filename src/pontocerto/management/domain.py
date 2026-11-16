@@ -81,7 +81,8 @@ def recommendations(state, operation, minutes, period):
             excluded.append({'employeeId': employee['id'], 'name': employee['name'], 'reason': reason})
         else:
             eligible.append({'employeeId': employee['id'], 'name': employee['name'],
-                             'availableMinutes': available, 'skill': skill})
+                             'availableMinutes': available, 'skill': skill,
+                             'rate': skill.get('rate'), 'quality': skill.get('quality')})
     maximum = max((e['skill']['rate'] or 0 for e in eligible), default=1) or 1
     for e in eligible:
         skill = e.pop('skill')

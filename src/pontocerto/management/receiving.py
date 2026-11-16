@@ -35,6 +35,30 @@ class Receipt(BaseModel):
         return self
 
 
+class Intake(Receipt):
+    """Receber uma OP nova: cadastro do lote e conferência num formulário só."""
+    code: str=Field(min_length=1,max_length=40)
+    client: str=Field(min_length=1,max_length=100)
+    model: str=Field(min_length=1,max_length=100)
+    fabric: str=Field(default='',max_length=60)
+    dueDate: date
+
+    @model_validator(mode='after')
+    def quantity(self):
+        if not sum(i.expected for i in self.grade):
+            raise ValueError('Informe a quantidade esperada de pelo menos um tamanho.')
+        return self
+
+
+def ritmo_padrao(state,quantidade,prazo):
+    """Ritmo inicial do lote: média dos lotes em andamento ou o necessário para o prazo."""
+    ativos=[o['recentRate'] for o in state['orders'] if o.get('status')!='Concluído' and o.get('recentRate')]
+    if ativos:
+        return round(sum(ativos)/len(ativos),1)
+    dias=max(1,(prazo-date.today()).days)
+    return float(max(1,-(-quantidade//dias)))
+
+
 class SendInput(BaseModel):
     recipient: str=Field(min_length=5,max_length=254)
     confirm: bool=False
@@ -72,15 +96,9 @@ def router(store):
         return {'outlookConfigured':all(outlook_config().values()),'storage':getattr(store,'backend','local'),
                 'notice':'O aviso só é enviado após revisão e confirmação do operador.'}
 
-    @api.post('/orders/{order_id}/receipts',status_code=201)
-    def receive(order_id:str,body:Receipt):
-        def change(state):
-            order=next((o for o in state['orders'] if o['id']==order_id),None)
-            if not order:
-                raise ValueError('Lote não encontrado.')
-            if sum(i.expected for i in body.grade)!=order['quantity']:
-                raise ValueError('A soma da grade informada pelo cliente deve coincidir com a quantidade do lote.')
-            item={**body.model_dump(mode='json'),'id':str(uuid4()),'orderId':order_id,'createdAt':now()}
+    def conferir(state,order,body):
+            item={**Receipt(**body.model_dump(include={'day','grade','supplies','note'})).model_dump(mode='json'),
+                  'id':str(uuid4()),'orderId':order['id'],'createdAt':now()}
             differences=[{'group':group,'name':i.name,'difference':i.received-i.expected}
                          for group,rows in [('grade',body.grade),('aviamentos',body.supplies)]
                          for i in rows if i.received!=i.expected]
@@ -93,6 +111,35 @@ def router(store):
             item['message']='\n'.join(lines+([body.note] if body.note else []))
             state.setdefault('receipts',[]).append(item)
             return item
+
+    @api.post('/intake',status_code=201)
+    def intake(body:Intake):
+        if body.dueDate<date.today():
+            raise HTTPException(422,'O prazo de entrega não pode estar no passado.')
+        def change(state):
+            if any(o['code'].casefold()==body.code.casefold() for o in state['orders']):
+                raise ValueError('Já existe um lote com este código.')
+            quantidade=sum(i.expected for i in body.grade)
+            ritmo=ritmo_padrao(state,quantidade,body.dueDate)
+            order={'id':str(uuid4()),'code':body.code,'client':body.client,'model':body.model,'fabric':body.fabric,
+                   'quantity':quantidade,'produced':0,'dueDate':body.dueDate.isoformat(),
+                   'capacityPerDay':ritmo,'recentRate':ritmo,'reworkRate':.05,'status':'Planejado'}
+            state['orders'].append(order)
+            return {'order':order,'receipt':conferir(state,order,body)}
+        try:
+            return store.update('intake','Recebimento de OP com conferência',change)
+        except ValueError as exc:
+            raise HTTPException(422,str(exc))
+
+    @api.post('/orders/{order_id}/receipts',status_code=201)
+    def receive(order_id:str,body:Receipt):
+        def change(state):
+            order=next((o for o in state['orders'] if o['id']==order_id),None)
+            if not order:
+                raise ValueError('Lote não encontrado.')
+            if sum(i.expected for i in body.grade)!=order['quantity']:
+                raise ValueError('A soma da grade deve ser igual à quantidade do lote.')
+            return conferir(state,order,body)
         try:
             return store.update('receipt','Conferência de grade e aviamentos',change)
         except ValueError as exc:

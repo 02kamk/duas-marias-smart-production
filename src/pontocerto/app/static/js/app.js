@@ -33,7 +33,7 @@
    * 00. CONSTANTES E ESTADO INTERNO
    * ===================================================================== */
 
-  var PAGINAS = ["ao-vivo", "testar", "historico", "lotes", "treinamento", "relatorios", "ajustes"];
+  var PAGINAS = ["ao-vivo", "conferir", "historico", "relatorios", "ajustes"];
 
   // Situacao do banco (chip da barra superior): consulta lenta, o servidor ja
   // guarda o teste de conexao em cache.
@@ -50,22 +50,6 @@
   var PIXEL_VAZIO =
     "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
 
-  // Paleta usada apenas pelo Canvas do grafico de treino (o CSS nao alcanca o canvas).
-  var COR = {
-    terracota: "#C1502E",
-    terracotaClaro: "#E08258",
-    terracotaEscuro: "#9A3D21",
-    barro: "#7C3A1F",
-    grafite: "#6B625C",
-    grafiteClaro: "#9A918A",
-    linha: "#E4DAD1",
-    areia: "#F2EAE3",
-    osso: "#FAF7F3",
-    branco: "#FFFFFF",
-    tinta: "#1C1917",
-    sage: "#4F7A56"
-  };
-
   // Estado unico da aplicacao. Nada fora daqui.
   var App = {
     pagina: null,
@@ -78,10 +62,9 @@
     ultimoEventoId: null,
     eventoAberto: null,
     analiseAtual: null,   // resultado da pagina Testar
-    treino: { dados: null, historico: [], metricas: null },
-    relatorioMarkdown: "",
+    ultimoEvento: null,   // ultimo evento visto pela camera ao vivo
     banco: null,          // ultimo /api/db/status
-    lotes: { lista: [], porId: {}, clientes: [], ativo: null, detalheId: null, carregado: false },
+    lotes: { lista: [], ativo: null },
     poll: { ativo: false, timer: null, abort: null, falhas: 0 },
     cache: {}             // memoria do ultimo valor escrito em cada elemento
   };
@@ -181,16 +164,13 @@
     var d = new Date(n);
     if (isNaN(d.getTime())) return "--:--";
     function dois(x) { return x < 10 ? "0" + x : String(x); }
-    return dois(d.getHours()) + ":" + dois(d.getMinutes()) + ":" + dois(d.getSeconds());
+    return dois(d.getHours()) + ":" + dois(d.getMinutes());
   }
 
-  function formatarDuracao(segundos) {
-    var s = Math.max(0, Math.round(numero(segundos, 0)));
-    var h = Math.floor(s / 3600);
-    var m = Math.floor((s % 3600) / 60);
-    var r = s % 60;
-    function dois(x) { return x < 10 ? "0" + x : String(x); }
-    return (h > 0 ? h + "h " : "") + dois(m) + "min " + dois(r) + "s";
+  /** "14:22:03" -> "14:22". Segundos não ajudam ninguém na bancada. */
+  function horaCurta(ev) {
+    var h = (ev && ev.hora) || formatarHora(ev && ev.timestamp);
+    return /^\d{2}:\d{2}/.test(h) ? h.slice(0, 5) : h;
   }
 
   /**
@@ -227,6 +207,13 @@
         return resp.text().then(function (texto) {
           var dados = null;
           if (texto) { try { dados = JSON.parse(texto); } catch (e) { dados = null; } }
+          if (resp.status === 401) {
+            // Sessao expirada: volta ao login em vez de repetir avisos de erro.
+            location.assign("/login");
+            var sessao = new Error("Sessão encerrada. Entre novamente.");
+            sessao.status = 401;
+            throw sessao;
+          }
           if (!resp.ok) {
             var msg = "HTTP " + resp.status;
             if (dados && typeof dados.erro === "string") msg = dados.erro;
@@ -241,12 +228,12 @@
       })
       .catch(function (e) {
         if (e && e.name === "AbortError") {
-          var abortado = new Error(expirou ? "Tempo esgotado ao falar com o servidor." : "Requisicao cancelada.");
+          var abortado = new Error(expirou ? "Tempo esgotado ao falar com o servidor." : "Requisição cancelada.");
           abortado.abortada = true;
           abortado.expirou = expirou;
           throw abortado;
         }
-        if (e instanceof TypeError) throw new Error("Nao foi possivel falar com o servidor.");
+        if (e instanceof TypeError) throw new Error("Não foi possível falar com o servidor.");
         throw e;
       })
       .then(
@@ -375,10 +362,14 @@
 
   function paginaDoHash() {
     var bruto = (location.hash || "").replace(/^#\/?/, "").trim();
+    if (bruto === "lotes") return "lotes";
     return PAGINAS.indexOf(bruto) >= 0 ? bruto : PAGINA_PADRAO;
   }
 
   function irPara(pagina, atualizarHash) {
+    // Os lotes agora ficam numa tela só, na Gestão.
+    if (pagina === "lotes") { location.assign("/gestao#lotes"); return; }
+    // Endereços antigos (#testar, #treinamento) caem na inspeção.
     if (pagina === "testar" || pagina === "treinamento") pagina = "ao-vivo";
     if (PAGINAS.indexOf(pagina) < 0) pagina = PAGINA_PADRAO;
     var anterior = App.pagina;
@@ -417,17 +408,16 @@
   function aoEntrarNaPagina(pagina) {
     if (pagina === "ao-vivo") {
       iniciarPolling();
+      carregarLotes();
+    } else if (pagina === "conferir") {
+      carregarFila();
     } else if (pagina === "historico") {
       carregarHistorico();
-    } else if (pagina === "lotes") {
-      carregarLotes();
-      atualizarBanco(false);
-    } else if (pagina === "treinamento") {
-      carregarTreinamento();
     } else if (pagina === "ajustes") {
       carregarAjustes();
+      atualizarBanco(false);
     }
-    // A pagina "testar" e a "relatorios" nao precisam buscar nada ao entrar.
+    // A pagina "relatorios" nao precisa buscar nada ao entrar.
   }
 
   /* =======================================================================
@@ -441,10 +431,9 @@
         App.tecidos = Array.isArray(d.tecidos) ? d.tecidos : [];
         App.porChave = {};
         App.classes.forEach(function (c) { if (c && c.key) App.porChave[c.key] = c; });
-        popularSelectRotulo();
       })
       .catch(function (e) {
-        toast("Nao foi possivel carregar a taxonomia: " + e.message, "erro");
+        toast("Não foi possível carregar os tipos de defeito: " + e.message, "erro");
       });
   }
 
@@ -457,18 +446,15 @@
 
         if (!modelo.carregado) {
           toast(
-            "Modelo ainda nao treinado. Rode o treino para liberar a inspecao ao vivo." +
+            "A IA de inspeção não está disponível neste servidor. Fale com o responsável." +
             (modelo.erro ? " (" + modelo.erro + ")" : ""),
             "aviso"
           );
         }
-        if (!llm.configurado) {
-          toast("Sem chave do OpenRouter: os diagnosticos usarao a base tecnica local.", "aviso");
-        }
         atualizarChipCamera((d && d.camera) || {});
       })
       .catch(function (e) {
-        toast("Servidor indisponivel: " + e.message, "erro");
+        toast("Servidor indisponível: " + e.message, "erro");
       });
   }
 
@@ -479,8 +465,9 @@
       .then(function (d) {
         var lista = (d && d.dispositivos) || [];
         sel.innerHTML = "";
+        mostrar($("bloco-camera"), lista.length > 0);
         if (!lista.length) {
-          var vazia = criar("option", null, "Nenhuma camera encontrada");
+          var vazia = criar("option", null, "Nenhuma câmera encontrada");
           vazia.value = "";
           sel.appendChild(vazia);
           habilitar(sel, false);
@@ -488,7 +475,7 @@
         }
         habilitar(sel, true);
         lista.forEach(function (indice, i) {
-          var opt = criar("option", null, "Camera " + indice);
+          var opt = criar("option", null, "Câmera " + indice);
           opt.value = String(indice);
           if (i === 0) opt.selected = true;
           sel.appendChild(opt);
@@ -496,7 +483,7 @@
       })
       .catch(function () {
         sel.innerHTML = "";
-        var opt = criar("option", null, "Camera 0");
+        var opt = criar("option", null, "Câmera 0");
         opt.value = "0";
         sel.appendChild(opt);
       });
@@ -514,15 +501,16 @@
 
     if (chip) {
       var texto;
-      if (info.erro) texto = "Camera com erro";
+      if (info.erro) texto = "Câmera com erro";
       else if (ativa) {
-        texto = "Camera " + (info.indice == null ? "" : info.indice) + " - " +
+        texto = "Câmera " + (info.indice == null ? "" : info.indice) + " - " +
           (info.largura || "?") + "x" + (info.altura || "?");
         if (info.fps_real) texto += " - " + Number(info.fps_real).toFixed(0) + " fps";
-      } else texto = "Camera desligada";
+      } else texto = "Câmera desligada";
       setTexto(chip, texto);
-      chip.classList.toggle("chip-ligada", ativa && !info.erro);
-      chip.classList.toggle("chip-desligada", !ativa || !!info.erro);
+      chip.classList.toggle("estado-ok", ativa && !info.erro);
+      chip.classList.toggle("estado-defeito", !!info.erro);
+      chip.classList.toggle("estado-neutro", !ativa && !info.erro);
       chip.setAttribute("data-estado", info.erro ? "erro" : (ativa ? "ligada" : "desligada"));
     }
 
@@ -531,9 +519,9 @@
       btn.setAttribute("aria-pressed", ativa ? "true" : "false");
       btn.classList.toggle("ligado", ativa);
       var rotulo = btn.querySelector(".btn-rotulo");
-      if (rotulo) setTexto(rotulo, ativa ? "Parar camera" : "Ligar camera");
-      else if (!btn.querySelector("svg")) setTexto(btn, ativa ? "Parar camera" : "Ligar camera");
-      btn.setAttribute("aria-label", ativa ? "Parar a camera" : "Ligar a camera");
+      if (rotulo) setTexto(rotulo, ativa ? "Parar câmera" : "Ligar câmera");
+      else if (!btn.querySelector("svg")) setTexto(btn, ativa ? "Parar câmera" : "Ligar câmera");
+      btn.setAttribute("aria-label", ativa ? "Parar a câmera" : "Ligar a câmera");
     }
 
     mostrar($("video-pill"), ativa);
@@ -552,7 +540,7 @@
       .then(function (d) {
         habilitar(btn, true);
         if (d && d.ok === false) {
-          var msg = (d.camera && d.camera.erro) || d.erro || "Nao foi possivel abrir a camera.";
+          var msg = (d.camera && d.camera.erro) || d.erro || "Não foi possível abrir a câmera.";
           toast(msg, "erro");
           atualizarChipCamera((d && d.camera) || { ativa: false });
           return;
@@ -564,11 +552,11 @@
           img.hidden = false;
         }
         atualizarChipCamera((d && d.camera) || { ativa: true });
-        toast("Camera ligada.", "ok");
+        toast("Câmera ligada.", "ok");
       })
       .catch(function (e) {
         habilitar(btn, true);
-        toast("Falha ao ligar a camera: " + e.message, "erro");
+        toast("Não consegui ligar a câmera: " + e.message, "erro");
       });
   }
 
@@ -585,12 +573,12 @@
       .then(function () {
         habilitar(btn, true);
         atualizarChipCamera({ ativa: false });
-        toast("Camera desligada.", "info");
+        toast("Câmera desligada.", "info");
       })
       .catch(function (e) {
         habilitar(btn, true);
         atualizarChipCamera({ ativa: false });
-        toast("Falha ao desligar a camera: " + e.message, "erro");
+        toast("Não consegui desligar a câmera: " + e.message, "erro");
       });
   }
 
@@ -610,7 +598,7 @@
       .catch(function (e) {
         var chk = $("toggle-gradcam");
         if (chk) chk.checked = App.gradcamLigado; // desfaz visualmente
-        toast("Nao foi possivel mudar o mapa de calor: " + e.message, "erro");
+        toast("Não consegui mudar a opção: " + e.message, "erro");
       });
   }
 
@@ -622,7 +610,7 @@
   function capturarQuadro() {
     var img = $("video-ao-vivo");
     if (!App.cameraAtiva || !img || !img.naturalWidth) {
-      toast("Ligue a camera antes de capturar.", "aviso");
+      toast("Ligue a câmera antes de analisar.", "aviso");
       return;
     }
     var btn = $("btn-capturar");
@@ -632,7 +620,7 @@
     try {
       canvas.getContext("2d").drawImage(img, 0, 0);
     } catch (e) {
-      toast("Nao foi possivel capturar o quadro.", "erro");
+      toast("Não consegui capturar a imagem.", "erro");
       return;
     }
     botaoCarregando(btn, true, "Capturando...");
@@ -643,10 +631,9 @@
         return;
       }
       var arquivo = new File([blob], "captura.jpg", { type: "image/jpeg" });
-      enviarParaAnalise(arquivo)
+      enviarParaAnalise(arquivo, "camera_servidor")
         .then(function () {
           botaoCarregando(btn, false);
-          irPara("testar");
         })
         .catch(function () { botaoCarregando(btn, false); });
     }, "image/jpeg", 0.92);
@@ -747,8 +734,10 @@
     var novoId = ev && ev.id ? ev.id : null;
     if (novoId !== App.ultimoEventoId) {
       App.ultimoEventoId = novoId;
+      App.ultimoEvento = ev;
       habilitar($("btn-diagnostico"), !!novoId);
-      habilitar($("btn-segunda-opiniao"), !!novoId);
+      habilitar($("btn-conferir-ultimo"), !!novoId);
+      if (novoId) atualizarPendentes();
       if (novoId) {
         // Evento novo: limpa o painel para nao misturar com a analise anterior.
         mostrar($("painel-ia"), false);
@@ -770,19 +759,22 @@
     }
 
     var titulo, sub;
-    if (estado === "aquecendo") {
-      titulo = "Aquecendo";
-      sub = "Estabilizando a leitura da costura...";
+    if (estado === "aquecendo" && !App.cameraAtiva) {
+      titulo = "Câmera desligada";
+      sub = "Toque em Ligar câmera, ou use Fotografar acima.";
+    } else if (estado === "aquecendo") {
+      titulo = "Lendo a costura";
+      sub = "Mantenha a peça parada por um instante...";
     } else if (estado === "ok") {
       titulo = "Costura aprovada";
-      sub = "Pontos uniformes - " + formatarPercentual(veredito.confianca) + " de confianca";
+      sub = "Pontos uniformes - " + formatarPercentual(veredito.confianca) + " de certeza";
     } else if (estado === "falha") {
       titulo = veredito.nome || nomeDaClasse(veredito.classe_key);
-      sub = "Falha detectada - " + formatarPercentual(veredito.confianca) + " de confianca";
+      sub = "Defeito encontrado - " + formatarPercentual(veredito.confianca) + " de certeza";
     } else {
       titulo = "Leitura incerta";
       sub = (veredito.nome ? veredito.nome + " - " : "") +
-        formatarPercentual(veredito.confianca) + " - vale uma segunda opiniao";
+        formatarPercentual(veredito.confianca) + " de certeza - confira a peça";
     }
 
     setTexto($("veredito-titulo"), titulo);
@@ -793,9 +785,8 @@
     aplicarAnel(numero(conf, 0));
     setTexto($("anel-valor"), conf == null ? "--" : formatarPercentual(conf));
 
-    // A segunda opiniao so faz sentido quando a rede ficou insegura; mesmo assim
-    // o botao continua clicavel, apenas destacado.
-    var btnLlm = $("btn-segunda-opiniao");
+    // Leitura insegura: destaca o "Por que?", que já inclui a segunda opinião.
+    var btnLlm = $("btn-diagnostico");
     if (btnLlm) btnLlm.classList.toggle("destaque", !!veredito.pede_llm);
   }
 
@@ -892,7 +883,7 @@
       segmentos[j].classList.toggle("cheio", j < cheios);
     }
     barra.setAttribute("aria-valuenow", Math.round(progresso * 100));
-    barra.setAttribute("aria-label", "Progresso da meta: " + numero(s.total, 0) + " de " + meta + " pecas");
+    barra.setAttribute("aria-label", "Progresso da meta: " + numero(s.total, 0) + " de " + meta + " peças");
   }
 
   function renderChama(sequencia) {
@@ -913,59 +904,50 @@
       el.classList.add("nivel-" + nivel);
       el.classList.toggle("acesa", nivel > 0);
     }
-    el.setAttribute("aria-label", "Sequencia de " + sequencia + " pecas aprovadas");
+    el.setAttribute("aria-label", "Sequencia de " + sequencia + " peças aprovadas");
   }
 
   /* =======================================================================
    * 08. PAINEL DE IA (DIAGNOSTICO E SEGUNDA OPINIAO)
    * ===================================================================== */
 
-  function seloFonte(fonte, modelo) {
-    var eLlm = fonte === "llm";
-    return '<span class="selo-fonte ' + (eLlm ? "selo-llm" : "selo-local") + '">' +
-      '<span class="selo-icone" aria-hidden="true">' + (eLlm ? ICONES.ia : ICONES.livro) + "</span>" +
-      esc(eLlm ? "IA generativa" : "base tecnica local") +
-      (eLlm && modelo ? ' <span class="selo-modelo">' + esc(modelo) + "</span>" : "") +
-      "</span>";
+  function seloFonte(fonte) {
+    return '<p class="explicacao-fonte">Fonte: ' + esc(fonte === "llm" ? "IA generativa" : "base técnica do sistema") + "</p>";
   }
 
-  function listaHTML(titulo, itens, classe) {
+  function listaHTML(titulo, itens) {
     if (!Array.isArray(itens) || !itens.length) return "";
     var li = itens.map(function (x) { return "<li>" + esc(x) + "</li>"; }).join("");
-    return '<div class="ia-bloco ' + (classe || "") + '">' +
-      '<h4 class="ia-subtitulo">' + esc(titulo) + "</h4>" +
-      '<ul class="ia-lista">' + li + "</ul></div>";
+    return "<h4>" + esc(titulo) + '</h4><ul class="explicacao-lista">' + li + "</ul>";
   }
 
+  /**
+   * Explicação em uma frase (a primeira ação), com causas e prevenção recolhidas.
+   * Quem está na bancada precisa saber o que fazer agora; o resto é consulta.
+   */
   function htmlDiagnostico(diag) {
     if (!diag) return "";
-    var html = '<article class="ia-card ia-diagnostico">' +
-      '<header class="ia-cabecalho">' +
-      '<h3 class="ia-titulo">' + esc(diag.nome || nomeDaClasse(diag.classe_key)) + "</h3>" +
-      seloFonte(diag.fonte, diag.modelo) +
-      "</header>";
-    if (diag.resumo) html += '<p class="ia-resumo">' + esc(diag.resumo) + "</p>";
-    html += listaHTML("Causas provaveis", diag.causas, "ia-causas");
-    html += listaHTML("O que fazer agora", diag.acoes, "ia-acoes");
-    html += listaHTML("Como prevenir", diag.prevencao, "ia-prevencao");
-    if (diag.ms) html += '<p class="ia-rodape">Resposta em ' + esc(Math.round(diag.ms)) + " ms</p>";
-    html += "</article>";
-    return html;
+    var acoes = Array.isArray(diag.acoes) ? diag.acoes : [];
+    var frase = acoes[0] || diag.resumo || "";
+    var resto = (diag.resumo && acoes[0] ? '<p>' + esc(diag.resumo) + "</p>" : "") +
+      listaHTML("O que fazer agora", acoes) +
+      listaHTML("Causas prováveis", diag.causas) +
+      listaHTML("Como prevenir", diag.prevencao) +
+      seloFonte(diag.fonte);
+    return (frase ? '<p class="explicacao-frase">' + esc(frase) + "</p>" : "") +
+      "<details><summary>Ver causas e prevenção</summary>" + resto + "</details>";
   }
 
   function htmlRevisao(rev) {
     if (!rev) return "";
     var concorda = rev.concorda;
     var rotulo, classeSelo;
-    if (concorda === true) { rotulo = "A IA de visao concordou"; classeSelo = "selo-ok"; }
-    else if (concorda === false) { rotulo = "A IA de visao discordou"; classeSelo = "selo-nao"; }
-    else { rotulo = "Sem veredito da IA de visao"; classeSelo = "selo-neutro"; }
+    if (concorda === true) { rotulo = "A segunda opinião concordou"; classeSelo = "selo-ok"; }
+    else if (concorda === false) { rotulo = "A segunda opinião discordou"; classeSelo = "selo-nao"; }
+    else { rotulo = "Sem resposta da segunda opinião"; classeSelo = "selo-neutro"; }
 
-    var html = '<article class="ia-card ia-revisao">' +
-      '<header class="ia-cabecalho">' +
-      '<h3 class="ia-titulo">Segunda opiniao</h3>' +
-      '<span class="selo-fonte ' + classeSelo + '">' + esc(rotulo) + "</span>" +
-      "</header>";
+    var html = '<div class="explicacao ia-revisao"><h4>Segunda opinião</h4>' +
+      '<span class="selo-fonte ' + classeSelo + '">' + esc(rotulo) + "</span>";
 
     if (rev.erro) {
       html += '<p class="ia-erro">' + esc(rev.erro) + "</p>";
@@ -978,19 +960,17 @@
       if (rev.justificativa) html += '<p class="ia-resumo">' + esc(rev.justificativa) + "</p>";
       html += listaHTML("Sinais observados", rev.sinais, "ia-sinais");
     }
-    if (rev.modelo) html += '<p class="ia-rodape">' + esc(rev.modelo) +
-      (rev.ms ? " - " + esc(Math.round(rev.ms)) + " ms" : "") + "</p>";
-    html += "</article>";
+    html += "</div>";
     return html;
   }
 
   function pedirDiagnostico() {
     var id = App.ultimoEventoId;
     var btn = $("btn-diagnostico");
-    if (!id) { toast("Nenhum evento registrado ainda.", "aviso"); return; }
-    botaoCarregando(btn, true, "Diagnosticando...");
+    if (!id) { toast("Nenhuma peça registrada ainda.", "aviso"); return; }
+    botaoCarregando(btn, true, "Buscando explicação...");
     mostrar($("painel-ia"), true);
-    setHTML($("ia-conteudo"), '<p class="ia-carregando">Consultando a base tecnica...</p>', "ia-conteudo");
+    setHTML($("ia-conteudo"), '<p class="ia-carregando">Buscando causas e soluções...</p>', "ia-conteudo");
     postJSON("/api/eventos/" + encodeURIComponent(id) + "/diagnostico", {}, { timeout: 60000 })
       .then(function (d) {
         botaoCarregando(btn, false);
@@ -1000,106 +980,127 @@
           return;
         }
         setHTML($("ia-conteudo"), htmlDiagnostico(d && d.diagnostico), "ia-conteudo");
+        // Leitura incerta: pede também a segunda opinião, sem outro clique.
+        var ultimo = App.ultimoEvento;
+        if (ultimo && ultimo.id === id && ultimo.precisa_revisao && !ultimo.revisao_humana) pedirSegundaOpiniao(true);
       })
       .catch(function (e) {
         botaoCarregando(btn, false);
         setHTML($("ia-conteudo"), '<p class="ia-erro">' + esc(e.message) + "</p>", "ia-conteudo");
-        toast("Diagnostico falhou: " + e.message, "erro");
+        toast("Não consegui buscar a explicação: " + e.message, "erro");
       });
   }
 
-  function pedirSegundaOpiniao() {
+  function pedirSegundaOpiniao(anexar) {
     var id = App.ultimoEventoId;
-    var btn = $("btn-segunda-opiniao");
-    if (!id) { toast("Nenhum evento registrado ainda.", "aviso"); return; }
-    botaoCarregando(btn, true, "Revisando...");
+    var btn = $("btn-diagnostico");
+    if (!id) return;
+    var antes = anexar ? (($("ia-conteudo") || {}).innerHTML || "") : "";
+    botaoCarregando(btn, true, "Pedindo segunda opinião...");
     mostrar($("painel-ia"), true);
-    setHTML($("ia-conteudo"), '<p class="ia-carregando">Enviando a imagem para o modelo de visao...</p>', "ia-conteudo");
+    setHTML($("ia-conteudo"), antes + '<p class="ia-carregando">Pedindo uma segunda opinião...</p>', "ia-conteudo");
     postJSON("/api/eventos/" + encodeURIComponent(id) + "/revisao", {}, { timeout: 90000 })
       .then(function (d) {
         botaoCarregando(btn, false);
         if (d && d.erro && !d.revisao) {
-          setHTML($("ia-conteudo"), '<p class="ia-erro">' + esc(d.erro) + "</p>", "ia-conteudo");
-          toast(d.erro, "erro");
+          setHTML($("ia-conteudo"), antes + '<p class="ia-erro">' + esc(d.erro) + "</p>", "ia-conteudo");
           return;
         }
-        setHTML($("ia-conteudo"), htmlRevisao(d && d.revisao), "ia-conteudo");
+        setHTML($("ia-conteudo"), antes + htmlRevisao(d && d.revisao), "ia-conteudo");
       })
       .catch(function (e) {
         botaoCarregando(btn, false);
-        setHTML($("ia-conteudo"), '<p class="ia-erro">' + esc(e.message) + "</p>", "ia-conteudo");
-        toast("Segunda opiniao falhou: " + e.message, "erro");
+        setHTML($("ia-conteudo"), antes + '<p class="ia-erro">' + esc(e.message) + "</p>", "ia-conteudo");
       });
   }
 
   /* =======================================================================
-   * 09. PAGINA TESTAR
+   * 09. CAPTURA POR FOTO E CONFERENCIA HUMANA
    * ===================================================================== */
 
-  window.addEventListener('inspecao-conferida',function(e){
-    if(App.analiseAtual){App.analiseAtual.evento=e.detail;}
-  });
+  var NOMES_ORIGEM = { upload: "Foto enviada", camera_aparelho: "Foto do celular", camera_servidor: "Câmera ao vivo", ao_vivo: "Câmera ao vivo" };
+
   window.analisarArquivoInspecao = tratarArquivoEscolhido;
-  function tratarArquivoEscolhido(arquivo) {
+  function tratarArquivoEscolhido(arquivo, origem) {
     if (!arquivo) return;
     if (!/^image\//.test(arquivo.type)) {
       toast("Escolha um arquivo de imagem (JPG ou PNG).", "aviso");
       return;
     }
-    // Preview local imediato: o operador ve a foto antes de a rede responder.
-    var preview = $("preview-teste");
-    if (preview) {
-      var url = URL.createObjectURL(arquivo);
-      if (preview.dataset.blobUrl) URL.revokeObjectURL(preview.dataset.blobUrl);
-      preview.dataset.blobUrl = url;
-      preview.src = url;
-      preview.hidden = false;
-    }
-    mostrar($("teste-vazio"), false);
-    enviarParaAnalise(arquivo);
+    enviarParaAnalise(arquivo, origem || "upload").catch(function () {});
   }
 
-  function enviarParaAnalise(arquivo) {
+  function enviarParaAnalise(arquivo, origem) {
     var resultado = $("resultado-teste");
-    mostrar(resultado, false);
+    mostrar(resultado, true);
+    // "Próxima peça" repete o caminho que a pessoa acabou de usar.
+    var proxima = $("btn-proxima");
+    if (proxima) proxima.setAttribute("for", origem === "camera_aparelho" ? "foto-camera" : "input-arquivo");
     setHTML($("teste-ia"), "", "teste-ia");
-    setTexto($("teste-classe"), "Analisando...");
+    setHTML($("conferencia-upload"), "", "conferencia-upload");
+    setTexto($("teste-classe"), "Analisando a costura...");
     setTexto($("teste-confianca"), "");
+    if (resultado) resultado.classList.remove("resultado-ok", "resultado-falha", "resultado-incerto");
+    var fotoAnterior = $("peca-analisada");
+    if (fotoAnterior) fotoAnterior.src = PIXEL_VAZIO;
 
     var fd = new FormData();
     fd.append("arquivo", arquivo, arquivo.name || "imagem.jpg");
+    fd.append("origem", origem || "upload");
 
     return fetchJSON("/api/analisar", { method: "POST", body: fd, timeout: 60000 })
       .then(function (d) {
         if (d && d.erro) {
-          toast(d.erro, "erro");
-          setTexto($("teste-classe"), "Falhou");
+          setTexto($("teste-classe"), "Não foi possível analisar");
+          setTexto($("teste-confianca"), d.erro);
           throw new Error(d.erro);
         }
         App.analiseAtual = d || {};
-        window.dispatchEvent(new CustomEvent("inspecao-analisada",{detail:d}));
         renderResultadoTeste(App.analiseAtual);
+        atualizarPendentes();
+        // Leva a pessoa direto ao resultado.
+        if (resultado && resultado.scrollIntoView) resultado.scrollIntoView({ behavior: "smooth", block: "start" });
         return App.analiseAtual;
       })
       .catch(function (e) {
-        setTexto($("teste-classe"), "Falhou");
-        toast("Analise falhou: " + e.message, "erro");
+        setTexto($("teste-classe"), "Não foi possível analisar");
+        toast(e.message, "erro");
         throw e;
       });
   }
 
+  function mostrarMidiaResultado(mapa) {
+    var d = App.analiseAtual || {};
+    var img = $("peca-analisada");
+    if (img) img.src = (mapa && d.heatmap) ? d.heatmap : (d.imagem || PIXEL_VAZIO);
+    [["ver-foto", !mapa], ["ver-mapa", !!mapa]].forEach(function (par) {
+      var b = $(par[0]);
+      if (!b) return;
+      b.classList.toggle("ativo", par[1]);
+      b.setAttribute("aria-pressed", par[1] ? "true" : "false");
+    });
+  }
+
   function renderResultadoTeste(d) {
     var p = d.predicao || {};
-    if ($("peca-analisada")) $("peca-analisada").src = d.imagem || "";
+    var ev = d.evento || {};
+    // A predição nem sempre traz e_falha; o evento sempre traz.
+    if (p.e_falha == null) p.e_falha = ev.e_falha != null ? !!ev.e_falha : p.classe_key !== "normal";
     mostrar($("resultado-teste"), true);
+    mostrarMidiaResultado(false);
+    setTexto($("resultado-lote"), ev.lote_codigo ? "Lote " + ev.lote_codigo : "Sem lote");
+    setTexto($("resultado-ordem"), (NOMES_ORIGEM[ev.origem] || "Foto enviada") + (ev.hora ? " · " + horaCurta(ev) : ""));
+    habilitar($("ver-mapa"), !!d.heatmap);
 
-    setTexto($("teste-classe"), p.nome || nomeDaClasse(p.classe_key));
-    setTexto($("teste-confianca"), formatarPercentual(p.confianca, 1) + " de confianca" +
-      (p.ms ? " - " + Math.round(p.ms) + " ms" : ""));
+    var incerta = !p.e_falha && !!ev.precisa_revisao;
+    setTexto($("teste-classe"), p.e_falha ? (p.nome || nomeDaClasse(p.classe_key))
+      : (incerta ? "Leitura incerta: parece normal" : "Costura aprovada"));
+    setTexto($("teste-confianca"), "A IA tem " + formatarPercentual(p.confianca, 0) + " de certeza" + (incerta ? ". Confira a peça." : ""));
 
     var caixa = $("resultado-teste");
     if (caixa) {
-      caixa.classList.toggle("resultado-ok", p.e_falha === false);
+      caixa.classList.toggle("resultado-ok", p.e_falha === false && !incerta);
+      caixa.classList.toggle("resultado-incerto", incerta);
       caixa.classList.toggle("resultado-falha", p.e_falha === true);
       caixa.setAttribute("data-gravidade", p.gravidade || "");
     }
@@ -1107,143 +1108,211 @@
     var topo = $("teste-top");
     if (topo) {
       var itens = Array.isArray(p.top) ? p.top : [];
-      var html = itens.map(function (item) {
+      setHTML(topo, itens.map(function (item) {
         var pct = limitar(numero(item.prob, 0) * 100, 0, 100);
         return '<li class="barra-item" data-classe="' + esc(item.key) + '">' +
           '<div class="barra-linha">' +
           '<span class="barra-nome">' + esc(item.nome || nomeDaClasse(item.key)) + "</span>" +
-          '<span class="barra-valor">' + esc(formatarPercentual(item.prob, 1)) + "</span>" +
+          '<span class="barra-valor">' + esc(formatarPercentual(item.prob, 0)) + "</span>" +
           "</div>" +
           '<div class="barra-trilho"><div class="barra-preenche" style="width:' +
           pct.toFixed(1) + '%"></div></div>' +
           "</li>";
-      }).join("");
-      setHTML(topo, html, "teste-top");
+      }).join(""), "teste-top");
     }
 
-    var heat = $("teste-heatmap");
-    if (heat) {
-      if (d.heatmap) { heat.src = d.heatmap; heat.hidden = false; }
-      else { heat.src = PIXEL_VAZIO; heat.hidden = true; }
-    }
-
-    // Se a API tambem devolveu a imagem processada, usamos ela no preview
-    // (ja vem no tamanho que a rede enxergou).
-    var preview = $("preview-teste");
-    if (preview && d.imagem) {
-      preview.src = d.imagem;
-      preview.hidden = false;
-    }
+    montarConferencia($("conferencia-upload"), ev, function (salvo) {
+      App.analiseAtual.evento = salvo;
+      setTexto($("teste-classe"), salvo.e_falha ? salvo.nome_final : "Costura aprovada");
+      var c = $("resultado-teste");
+      if (c) {
+        c.classList.remove("resultado-incerto");
+        c.classList.toggle("resultado-ok", !salvo.e_falha);
+        c.classList.toggle("resultado-falha", !!salvo.e_falha);
+      }
+      setTexto($("teste-confianca"), "Conferido por você. Sugestão da IA: " + (p.nome || nomeDaClasse(p.classe_key)));
+    });
 
     habilitar($("btn-teste-diagnostico"), true);
+    // Com defeito, a explicação e a solução já aparecem sem precisar pedir.
+    if (p.e_falha) diagnosticoDoTeste();
   }
 
   /**
-   * Diagnostico da classe prevista na aba Testar.
-   * A rota oficial e por evento; quando a analise avulsa nao gera evento,
-   * tentamos a rota generica /api/diagnostico. Se nenhuma existir, avisamos
-   * sem quebrar a interface.
+   * Bloco único de conferência, usado no resultado da foto e no detalhe da peça.
+   * A classe sugerida pela IA vem marcada; trocar a classe registra "corrigida".
    */
+  function montarConferencia(host, ev, aoSalvar) {
+    if (!host || !ev || !ev.id) { setHTML(host, "", host && host.id); return; }
+    var escolhida = ev.classe_final || ev.classe_key;
+    var feita = !!ev.revisao_humana;
+    var pendente = !feita && !!ev.precisa_revisao;
+
+    var opcoes = App.classes.map(function (c) {
+      var ativo = c.key === escolhida;
+      return '<button type="button" class="classe-opcao' + (ativo ? " ativo" : "") +
+        '" data-classe="' + esc(c.key) + '" aria-pressed="' + (ativo ? "true" : "false") + '">' + esc(c.nome) +
+        (c.key === ev.classe_key ? " <small>(sugestão da IA)</small>" : "") + "</button>";
+    }).join("");
+
+    var topo = pendente
+      ? '<div class="conferencia-acoes">' +
+        '<button type="button" class="btn btn-principal conferencia-certo">Está certo</button>' +
+        '<button type="button" class="btn btn-secundario conferencia-corrigir">Corrigir</button></div>'
+      : '<div class="conferencia-situacao"><span class="estado ' + (feita ? "estado-ok" : "estado-neutro") + '">' +
+        esc(feita ? "Conferida" : "Aprovada automaticamente") + "</span>" +
+        '<button type="button" class="btn btn-quieto conferencia-corrigir">' + (feita ? "Alterar" : "Corrigir") + "</button></div>";
+
+    host.innerHTML = topo +
+      '<div class="conferencia-corrigir-caixa" hidden>' +
+      '<p class="campo-rotulo">Qual é o resultado certo?</p>' +
+      '<div class="classe-opcoes" role="group" aria-label="Resultado certo">' + opcoes + "</div>" +
+      '<label class="campo"><span class="campo-rotulo">Observação (opcional)</span>' +
+      '<input class="entrada conferencia-obs" maxlength="1000" value="' + esc((ev.revisao_humana && ev.revisao_humana.observacao) || "") + '"></label>' +
+      '<div class="linha-botoes"><button type="button" class="btn btn-principal conferencia-salvar">Salvar correção</button>' +
+      '<button type="button" class="btn btn-quieto conferencia-cancelar">Cancelar</button></div>' +
+      "</div>";
+    if (host.id) App.cache[host.id] = null;
+
+    var caixa = host.querySelector(".conferencia-corrigir-caixa");
+    function abrir(sim) { caixa.hidden = !sim; }
+    host.querySelector(".conferencia-corrigir").addEventListener("click", function () { abrir(caixa.hidden); });
+    host.querySelector(".conferencia-cancelar").addEventListener("click", function () { abrir(false); });
+
+    host.querySelectorAll(".classe-opcao").forEach(function (b) {
+      b.addEventListener("click", function () {
+        escolhida = b.getAttribute("data-classe");
+        host.querySelectorAll(".classe-opcao").forEach(function (x) {
+          var on = x === b;
+          x.classList.toggle("ativo", on);
+          x.setAttribute("aria-pressed", on ? "true" : "false");
+        });
+      });
+    });
+
+    function enviar(botao, classe) {
+      botaoCarregando(botao, true, "Salvando...");
+      postJSON("/api/eventos/" + encodeURIComponent(ev.id) + "/conferencia",
+        { classe: classe, observacao: host.querySelector(".conferencia-obs").value })
+        .then(function (d) {
+          botaoCarregando(botao, false);
+          if (d && d.erro) { toast(d.erro, "erro"); return; }
+          Object.assign(ev, d.evento || {});
+          toast(ev.revisao_humana && ev.revisao_humana.decisao === "corrigida"
+            ? "Correção salva. Ela ajuda a treinar a IA." : "Conferência salva.", "ok");
+          atualizarPendentes();
+          montarConferencia(host, ev, aoSalvar);
+          if (aoSalvar) aoSalvar(ev);
+        })
+        .catch(function (e) {
+          botaoCarregando(botao, false);
+          toast("Não consegui salvar: " + e.message, "erro");
+        });
+    }
+    var certo = host.querySelector(".conferencia-certo");
+    // "Está certo" confirma a sugestão da IA com um toque.
+    if (certo) certo.addEventListener("click", function () { enviar(certo, ev.classe_key); });
+    var salvar = host.querySelector(".conferencia-salvar");
+    salvar.addEventListener("click", function () { enviar(salvar, escolhida); });
+  }
+
   function diagnosticoDoTeste() {
     var d = App.analiseAtual;
     var btn = $("btn-teste-diagnostico");
-    if (!d || !d.predicao) { toast("Analise uma imagem primeiro.", "aviso"); return; }
-    var p = d.predicao;
-    var eventoId = d.evento_id || (d.evento && d.evento.id) || null;
+    var eventoId = d && (d.evento_id || (d.evento && d.evento.id));
+    if (!eventoId) { toast("Analise uma foto primeiro.", "aviso"); return; }
 
-    botaoCarregando(btn, true, "Diagnosticando...");
-    setHTML($("teste-ia"), '<p class="ia-carregando">Consultando a base tecnica...</p>', "teste-ia");
-
-    var pedido = eventoId
-      ? postJSON("/api/eventos/" + encodeURIComponent(eventoId) + "/diagnostico", {}, { timeout: 60000 })
-      : postJSON("/api/diagnostico", { classe_key: p.classe_key, confianca: p.confianca }, { timeout: 60000 });
-
-    pedido
+    setHTML($("teste-ia"), '<p class="ia-carregando">Buscando o que fazer...</p>', "teste-ia");
+    postJSON("/api/eventos/" + encodeURIComponent(eventoId) + "/diagnostico", {}, { timeout: 60000 })
       .then(function (r) {
         botaoCarregando(btn, false);
         var diag = (r && r.diagnostico) || r;
         if (!diag || diag.erro) {
-          var msg = (diag && diag.erro) || "Diagnostico indisponivel.";
-          setHTML($("teste-ia"), '<p class="ia-erro">' + esc(msg) + "</p>", "teste-ia");
+          setHTML($("teste-ia"), '<p class="ia-erro">' + esc((diag && diag.erro) || "Explicação indisponível.") + "</p>", "teste-ia");
           return;
         }
         setHTML($("teste-ia"), htmlDiagnostico(diag), "teste-ia");
       })
       .catch(function (e) {
         botaoCarregando(btn, false);
-        var aviso = e.status === 404
-          ? "Esta versao do servidor so diagnostica eventos registrados ao vivo."
-          : e.message;
-        setHTML($("teste-ia"), '<p class="ia-erro">' + esc(aviso) + "</p>", "teste-ia");
-        toast(aviso, "aviso");
+        setHTML($("teste-ia"), '<p class="ia-erro">' + esc(e.message) + "</p>", "teste-ia");
       });
   }
 
   /* =======================================================================
-   * 10. PAGINA HISTORICO
+   * 10. PAGINA HISTORICO E DETALHE DA PECA
    * ===================================================================== */
 
-  var historico = { eventos: [], filtro: null, porId: {} };
+  var historico = { eventos: [], filtro: null, modo: "todas", porId: {} };
+
+  function hojeISO() {
+    var d = new Date();
+    function dois(x) { return x < 10 ? "0" + x : String(x); }
+    return d.getFullYear() + "-" + dois(d.getMonth() + 1) + "-" + dois(d.getDate());
+  }
 
   function carregarHistorico() {
     var params = "?limite=500";
-    if ($("historico-dia") && $("historico-dia").value) params += "&dia="+encodeURIComponent($("historico-dia").value);
-    if ($("historico-defeitos") && $("historico-defeitos").checked) params += "&defeitos=true";
+    if ($("historico-dia") && $("historico-dia").value) params += "&dia=" + encodeURIComponent($("historico-dia").value);
+    if (historico.modo === "defeitos") params += "&defeitos=true";
+    if (historico.modo === "pendentes") params += "&pendentes=true";
     if (historico.filtro) params += "&classe=" + encodeURIComponent(historico.filtro);
     return fetchJSON("/api/eventos" + params)
       .then(function (d) {
         historico.eventos = (d && d.eventos) || [];
         historico.porId = {};
         historico.eventos.forEach(function (ev) { if (ev && ev.id) historico.porId[ev.id] = ev; });
-        renderStories(historico.eventos, (d && d.estatisticas) || {});
+        renderTipos(historico.eventos);
         renderGrade(historico.eventos);
       })
       .catch(function (e) {
-        toast("Nao consegui carregar o historico: " + e.message, "erro");
+        toast("Não consegui carregar o histórico: " + e.message, "erro");
       });
   }
 
-  function renderStories(eventos, stats) {
-    var caixa = $("stories");
-    if (!caixa) return;
-
-    // Contagem por classe: prefere a estatistica do servidor, mas cai para a
-    // contagem local quando o filtro esta ativo (a lista vem filtrada).
-    var contagem = {};
-    var capa = {};
-    eventos.forEach(function (ev) {
-      if (!ev || !ev.classe_key) return;
-      var key=ev.classe_final||ev.classe_key;
-      contagem[key] = (contagem[key] || 0) + 1;
-      if (!capa[key] && ev.imagem) capa[key] = ev.imagem;
-    });
-    var porClasse = (stats && stats.por_classe) || null;
-    // O contador acompanha exatamente a data e os filtros da lista visível.
-
-    var total = 0;
-    Object.keys(contagem).forEach(function (k) { total += numero(contagem[k], 0); });
-
-    var partes = [];
-    partes.push(storyHTML("tudo", "Tudo", total, eventos.length ? eventos[0].imagem : null, historico.filtro === null));
-
-    App.classes.forEach(function (c) {
-      var n = numero(contagem[c.key], 0);
-      if (!n && historico.filtro !== c.key) return; // so mostra classes com ocorrencia
-      partes.push(storyHTML(c.key, c.nome, n, capa[c.key], historico.filtro === c.key));
-    });
-
-    setHTML(caixa, partes.join(""), "stories");
+  /** Conta as peças aguardando conferência (todos os dias) e mostra nos menus. */
+  function atualizarPendentes() {
+    return fetchJSON("/api/eventos?limite=500&pendentes=true")
+      .then(function (d) {
+        var n = ((d && d.eventos) || []).length;
+        document.querySelectorAll("[data-badge-pendentes]").forEach(function (el) {
+          el.textContent = n >= 500 ? "500+" : String(n);
+          el.hidden = n === 0;
+        });
+      })
+      .catch(function () {});
   }
 
-  function storyHTML(chave, nome, contagem, imagem, ativo) {
-    return '<button type="button" class="story' + (ativo ? " ativo" : "") +
-      '" data-classe="' + esc(chave) + '" aria-pressed="' + (ativo ? "true" : "false") +
-      '" aria-label="' + esc("Filtrar por " + nome + " (" + contagem + ")") + '">' +
-      '<span class="story-anel"><img class="story-img" src="' + esc(imagem || PIXEL_VAZIO) +
-      '" alt="" loading="lazy"></span>' +
-      '<span class="story-nome">' + esc(nome) + "</span>" +
-      '<span class="story-contagem">' + esc(contagem) + "</span>" +
-      "</button>";
+  /** Menu "Tipo": só os tipos que apareceram no dia, com a contagem. */
+  function renderTipos(eventos) {
+    var sel = $("historico-tipo");
+    if (!sel) return;
+    var contagem = {};
+    eventos.forEach(function (ev) {
+      if (!ev || !ev.classe_key) return;
+      var key = ev.classe_final || ev.classe_key;
+      contagem[key] = (contagem[key] || 0) + 1;
+    });
+    var html = '<option value="">Todos os tipos</option>';
+    App.classes.forEach(function (c) {
+      var n = numero(contagem[c.key], 0);
+      if (!n && historico.filtro !== c.key) return;
+      html += '<option value="' + esc(c.key) + '"' + (historico.filtro === c.key ? " selected" : "") + ">" +
+        esc(c.nome) + " (" + n + ")</option>";
+    });
+    setHTML(sel, html, "historico-tipo");
+    sel.value = historico.filtro || "";
+  }
+
+  function classeDoEstado(ev) {
+    if (ev.revisao_humana) return "estado-ok";
+    return ev.precisa_revisao ? "estado-atencao" : "estado-neutro";
+  }
+
+
+  function situacaoConferencia(ev) {
+    if (ev.revisao_humana) return "Conferida";
+    return ev.precisa_revisao ? "Aguardando conferência" : "Aprovada automaticamente";
   }
 
   function renderGrade(eventos) {
@@ -1258,13 +1327,15 @@
 
     var html = eventos.map(function (ev) {
       var nome = ev.nome_final || ev.nome || nomeDaClasse(ev.classe_key);
-      var corrigido = ev.rotulo_operador ? " corrigido" : "";
       var semFoto = ev.imagem ? "" : " sem-foto";
-      return '<button type="button" class="celula' + corrigido + semFoto + '" data-id="' + esc(ev.id) +
-        '" data-gravidade="' + esc(ev.gravidade || "") + '" aria-label="' +
-        esc(nome + " às " + (ev.hora || formatarHora(ev.timestamp))) + '">' +
-        '<img src="' + esc(ev.imagem || PIXEL_VAZIO) + '" alt="" loading="lazy">' +
-        '<span class="selo">' + esc(nome) + "</span>" + '<span class="historico-meta">'+esc((ev.data||'')+' · '+(ev.hora||'')+' · '+(ev.origem==='upload'?'Arquivo':'Câmera'))+'</span><span class="historico-revisao">'+(ev.revisao_humana?'Conferência salva':'Aguardando revisão')+'</span>' +
+      return '<button type="button" class="celula linha linha-clicavel' + semFoto + '" data-id="' + esc(ev.id) +
+        '" aria-label="' + esc(nome + " às " + horaCurta(ev)) + '">' +
+        '<span class="h-foto"><img class="miniatura" src="' + esc(ev.imagem || PIXEL_VAZIO) + '" alt="" loading="lazy"></span>' +
+        '<span class="h-nome"><strong>' + esc(nome) + "</strong></span>" +
+        '<span class="h-lote">' + esc(ev.lote_codigo || "Sem lote") + "</span>" +
+        '<span class="h-hora num">' + esc(horaCurta(ev)) + "</span>" +
+        '<span class="h-origem">' + esc(NOMES_ORIGEM[ev.origem] || "Câmera ao vivo") + "</span>" +
+        '<span class="h-situacao"><span class="estado ' + classeDoEstado(ev) + '">' + esc(situacaoConferencia(ev)) + "</span></span>" +
         "</button>";
     }).join("");
     setHTML(grade, html, "grade-historico");
@@ -1275,47 +1346,77 @@
     carregarHistorico();
   }
 
-  function popularSelectRotulo() {
-    var sel = $("modal-select-rotulo");
-    if (!sel || !App.classes.length) return;
-    sel.innerHTML = "";
-    App.classes.forEach(function (c) {
-      var opt = criar("option", null, c.nome);
-      opt.value = c.key;
-      sel.appendChild(opt);
-    });
+  function mudarModoHistorico(modo) {
+    historico.modo = modo;
+    carregarHistorico();
+  }
+
+  /* --- Conferir: fila das peças que pedem conferência -------------------- */
+
+  var fila = { eventos: [], puladas: {} };
+
+  function carregarFila() {
+    return fetchJSON("/api/eventos?limite=500&pendentes=true")
+      .then(function (d) {
+        fila.eventos = ((d && d.eventos) || []).filter(function (ev) { return ev && ev.id; });
+        mostrarProximaDaFila();
+      })
+      .catch(function (e) { toast("Não consegui carregar a fila: " + e.message, "erro"); });
+  }
+
+  function mostrarProximaDaFila() {
+    var restantes = fila.eventos.filter(function (ev) { return ev.precisa_revisao && !ev.revisao_humana; });
+    // As puladas voltam para o fim: só some da fila o que foi conferido.
+    var ev = restantes.filter(function (x) { return !fila.puladas[x.id]; })[0] || restantes[0];
+    if (ev && fila.puladas[ev.id]) fila.puladas = {};
+    var n = restantes.length;
+    setTexto($("fila-contagem"), n ? (n === 1 ? "1 peça aguardando" : n + " peças aguardando") : "");
+    mostrar($("fila-peca"), !!ev);
+    mostrar($("fila-vazia"), !ev);
+    mostrar($("fila-pular"), n > 1);
+    if (!ev) return;
+
+    var img = $("fila-img");
+    if (img) img.src = ev.imagem || PIXEL_VAZIO;
+    var falha = ev.e_falha != null ? !!ev.e_falha : ev.classe_key !== "normal";
+    var caixa = $("fila-peca");
+    caixa.classList.toggle("resultado-falha", falha);
+    caixa.classList.toggle("resultado-incerto", !falha);
+    setTexto($("fila-classe"), falha ? (ev.nome || nomeDaClasse(ev.classe_key)) : "Leitura incerta: parece normal");
+    setTexto($("fila-confianca"), "A IA tem " + formatarPercentual(ev.confianca, 0) + " de certeza");
+    setTexto($("fila-lote"), ev.lote_codigo ? "Lote " + ev.lote_codigo : "Sem lote");
+    setTexto($("fila-hora"), (ev.data ? ev.data.split("-").reverse().slice(0, 2).join("/") + " " : "") + horaCurta(ev));
+    $("fila-pular").onclick = function () { fila.puladas[ev.id] = true; mostrarProximaDaFila(); };
+    // Depois de conferir, passa sozinha para a próxima.
+    montarConferencia($("fila-conferencia"), ev, function () { mostrarProximaDaFila(); });
   }
 
   function abrirModal(id) {
     var ev = historico.porId[id];
+    if (ev) abrirModalEvento(ev);
+  }
+
+  function abrirModalEvento(ev) {
     if (!ev) return;
     App.eventoAberto = ev;
 
     var img = $("modal-img");
-    if (img) { img.src = ev.imagem || PIXEL_VAZIO; img.alt = esc(ev.nome || ""); }
+    if (img) { img.src = ev.imagem || PIXEL_VAZIO; img.alt = ev.nome_final || ev.nome || ""; }
     atualizarFotoDoModal(ev);
 
-    var heat = $("modal-heatmap");
-    if (heat) {
-      var url = ev.heatmap || ev.imagem_heatmap || ev.mapa || null;
-      if (url) { heat.src = url; heat.hidden = false; }
-      else { heat.src = PIXEL_VAZIO; heat.hidden = true; }
-    }
-
     setTexto($("modal-classe"), ev.nome_final || ev.nome || nomeDaClasse(ev.classe_key));
-    setTexto($("modal-confianca"), formatarPercentual(ev.confianca, 1));
-    setTexto($("modal-hora"), ev.hora || formatarHora(ev.timestamp));
-    setTexto($("modal-tecido"), ev.tecido || "Tecido nao informado");
-    setTexto($("modal-lote"), ev.lote_codigo ? "Lote " + ev.lote_codigo : "Sem lote (so local)");
+    setTexto($("modal-confianca"), "IA: " + formatarPercentual(ev.confianca, 0) + " de certeza");
+    setTexto($("modal-hora"), (ev.data ? ev.data.split("-").reverse().join("/") + " " : "") + horaCurta(ev));
+    setTexto($("modal-lote"), ev.lote_codigo ? "Lote " + ev.lote_codigo : "Sem lote");
 
-    var sel = $("modal-select-rotulo");
-    if (sel) sel.value = ev.rotulo_operador || ev.classe_key || "";
+    montarConferencia($("modal-conferencia"), ev, function (salvo) {
+      setTexto($("modal-classe"), salvo.nome_final);
+      if (historico.porId[salvo.id]) Object.assign(historico.porId[salvo.id], salvo);
+      if (App.pagina === "historico") carregarHistorico();
+    });
 
     var diag = $("modal-diagnostico");
-    if (diag) {
-      if (ev.diagnostico) setHTML(diag, htmlDiagnostico(ev.diagnostico), "modal-diagnostico");
-      else setHTML(diag, '<p class="ia-vazio">Sem diagnostico ainda. Peca um para esta peca.</p>', "modal-diagnostico");
-    }
+    if (diag) setHTML(diag, ev.diagnostico ? htmlDiagnostico(ev.diagnostico) : "", "modal-diagnostico");
 
     var modal = $("modal-evento");
     if (modal) {
@@ -1336,34 +1437,7 @@
     App.eventoAberto = null;
   }
 
-  /**
-   * Correcao de rotulo pelo operador.
-   * Cada correcao vira uma linha em artifacts/correcoes_operador.csv, que e
-   * exatamente o insumo do proximo ciclo de re-treino: o operador no chao de
-   * fabrica esta rotulando dado novo sem sair da tela de inspecao.
-   */
-  function enviarRotulo(chave, botao) {
-    var ev = App.eventoAberto;
-    if (!ev) return;
-    if (!chave) { toast("Escolha uma classe.", "aviso"); return; }
-    botaoCarregando(botao, true, "Salvando...");
-    postJSON("/api/eventos/" + encodeURIComponent(ev.id) + "/conferencia", { classe: chave, decisao: botao.id === "btn-modal-confirmar" ? "confirmada" : "corrigida", observacao: "Revisão humana no histórico" })
-      .then(function (d) {
-        botaoCarregando(botao, false);
-        if (d && d.erro) { toast(d.erro, "erro"); return; }
-        ev.rotulo_operador = chave;
-        if(d.evento){Object.assign(ev,d.evento);}
-        toast("Conferência salva. A sugestão original permanece registrada.", "ok");
-        carregarHistorico();
-        fecharModal();
-      })
-      .catch(function (e) {
-        botaoCarregando(botao, false);
-        toast("Nao consegui salvar o rotulo: " + e.message, "erro");
-      });
-  }
-
-  /** Mostra/esconde o botao "Apagar foto" e o aviso "Foto apagada" no modal. */
+  /** Mostra/esconde o botão "Apagar foto" e o aviso "Foto apagada" no detalhe. */
   function atualizarFotoDoModal(ev) {
     var temFoto = !!(ev && ev.imagem);
     var midia = document.querySelector("#modal-evento .modal-midia");
@@ -1374,14 +1448,14 @@
       btn.hidden = !temFoto;
     }
     setTexto($("modal-foto-texto"), temFoto
-      ? "A peca continua no historico; so a imagem e apagada deste computador e do banco."
-      : "A foto desta peca foi apagada. A inspecao continua contando nas estatisticas.");
+      ? "A peça continua no histórico; só a imagem é apagada."
+      : "A foto desta peça foi apagada. A inspeção continua contando nos números.");
   }
 
   function desarmarApagarFoto(btn) {
     if (!btn) return;
-    clearTimeout(btn._tempoConfirmar);
     btn.classList.remove("confirmando");
+    mostrar($("btn-modal-cancelar-apagar"), false);
     if (btn.dataset.rotuloOriginal != null && !btn.disabled) {
       btn.innerHTML = btn.dataset.rotuloOriginal;
       delete btn.dataset.rotuloOriginal;
@@ -1389,8 +1463,8 @@
   }
 
   /**
-   * Apagar a foto de um evento. Primeiro clique arma ("Clique de novo para
-   * apagar"), segundo clique em ate 4 s apaga de vez: nao ha como desfazer.
+   * Apagar a foto de um evento. O primeiro clique pede confirmação ("Apagar de
+   * vez" ou "Cancelar"); não há como desfazer.
    */
   function apagarFotoDoModal() {
     var ev = App.eventoAberto;
@@ -1400,13 +1474,13 @@
     if (!btn.classList.contains("confirmando")) {
       btn.dataset.rotuloOriginal = btn.innerHTML;
       btn.classList.add("confirmando");
-      btn.innerHTML = "<span>Clique de novo para apagar</span>";
-      btn._tempoConfirmar = setTimeout(function () { desarmarApagarFoto(btn); }, 4000);
+      btn.innerHTML = "<span>Apagar de vez</span>";
+      mostrar($("btn-modal-cancelar-apagar"), true);
       return;
     }
 
-    clearTimeout(btn._tempoConfirmar);
     btn.classList.remove("confirmando");
+    mostrar($("btn-modal-cancelar-apagar"), false);
     var original = btn.dataset.rotuloOriginal;
     delete btn.dataset.rotuloOriginal;
     btn.innerHTML = original;
@@ -1419,18 +1493,14 @@
         ev.imagem = null;
         if (historico.porId[ev.id]) historico.porId[ev.id].imagem = null;
         var nuvem = (d && d.nuvem) || {};
-        if (nuvem.erro) {
-          toast("Foto apagada deste computador, mas nao do banco: " + nuvem.erro, "aviso");
-        } else {
-          toast("Foto apagada.", "ok");
-        }
+        if (nuvem.erro) toast("Foto apagada deste computador, mas não do banco: " + nuvem.erro, "aviso");
+        else toast("Foto apagada.", "ok");
         atualizarFotoDoModal(ev);
-        renderGrade(historico.eventos);
-        carregarHistorico(); // atualiza as capas dos filtros (stories)
+        if (App.pagina === "historico") carregarHistorico();
       })
       .catch(function (e) {
         botaoCarregando(btn, false);
-        toast("Nao consegui apagar a foto: " + e.message, "erro");
+        toast("Não consegui apagar a foto: " + e.message, "erro");
       });
   }
 
@@ -1438,8 +1508,8 @@
     var ev = App.eventoAberto;
     var btn = $("btn-modal-diagnostico");
     if (!ev) return;
-    botaoCarregando(btn, true, "Diagnosticando...");
-    setHTML($("modal-diagnostico"), '<p class="ia-carregando">Consultando...</p>', "modal-diagnostico");
+    botaoCarregando(btn, true, "Buscando explicação...");
+    setHTML($("modal-diagnostico"), '<p class="ia-carregando">Buscando causas e soluções...</p>', "modal-diagnostico");
     postJSON("/api/eventos/" + encodeURIComponent(ev.id) + "/diagnostico", {}, { timeout: 60000 })
       .then(function (d) {
         botaoCarregando(btn, false);
@@ -1447,9 +1517,8 @@
           setHTML($("modal-diagnostico"), '<p class="ia-erro">' + esc(d.erro) + "</p>", "modal-diagnostico");
           return;
         }
-        var diag = d && d.diagnostico;
-        ev.diagnostico = diag;
-        setHTML($("modal-diagnostico"), htmlDiagnostico(diag), "modal-diagnostico");
+        ev.diagnostico = d && d.diagnostico;
+        setHTML($("modal-diagnostico"), htmlDiagnostico(ev.diagnostico), "modal-diagnostico");
       })
       .catch(function (e) {
         botaoCarregando(btn, false);
@@ -1458,429 +1527,25 @@
   }
 
   /* =======================================================================
-   * 11. PAGINA TREINAMENTO
-   * ===================================================================== */
-
-  function carregarTreinamento() {
-    return fetchJSON("/api/treino/historico")
-      .then(function (d) {
-        d = d || {};
-        // O servidor pode devolver a lista pura ou um envelope; aceitamos os dois.
-        var hist = Array.isArray(d) ? d : (d.historico || d.epocas || d.treino || []);
-        if (!Array.isArray(hist)) hist = [];
-        var metricas = d.metricas || d.avaliacao || null;
-
-        App.treino.dados = d;
-        App.treino.historico = hist;
-        App.treino.metricas = metricas;
-
-        var temAlgo = hist.length > 0 || !!metricas;
-        mostrar($("treino-vazio"), !temAlgo);
-        mostrar($("treino-resumo"), temAlgo);
-        if (!temAlgo) return;
-
-        preencherResumoTreino(hist, metricas, d);
-        preencherTabelaClasses(metricas);
-        desenharGraficoTreino();
-        carregarMatrizConfusao(d, metricas);
-      })
-      .catch(function (e) {
-        mostrar($("treino-vazio"), true);
-        mostrar($("treino-resumo"), false);
-        toast("Sem dados de treino: " + e.message, "aviso");
-      });
-  }
-
-  function preencherResumoTreino(hist, metricas, bruto) {
-    var ultima = hist.length ? hist[hist.length - 1] : {};
-    var melhorF1 = 0;
-    hist.forEach(function (h) { melhorF1 = Math.max(melhorF1, numero(h.f1_val, 0)); });
-
-    var acc = metricas && metricas.acuracia != null ? metricas.acuracia : ultima.acc_val;
-    var f1 = metricas && metricas.macro_f1 != null ? metricas.macro_f1 : (melhorF1 || ultima.f1_val);
-
-    setTexto($("treino-acuracia"), formatarPercentual(acc, 1));
-    setTexto($("treino-f1"), formatarPercentual(f1, 1));
-    setTexto($("treino-epocas"), hist.length ? hist.length : "--");
-
-    var backbone = (bruto && (bruto.backbone || (bruto.meta && bruto.meta.backbone))) ||
-      (App.saude && App.saude.modelo && App.saude.modelo.backbone) || "--";
-    setTexto($("treino-backbone"), backbone);
-  }
-
-  /** Aceita chaves em portugues (do nosso relatorio) ou em ingles (sklearn). */
-  function valorMetrica(obj, nomes) {
-    if (!obj) return null;
-    for (var i = 0; i < nomes.length; i++) {
-      if (obj[nomes[i]] != null) return obj[nomes[i]];
-    }
-    return null;
-  }
-
-  function preencherTabelaClasses(metricas) {
-    var tbody = $("tabela-classes");
-    if (!tbody) return;
-    var porClasse = metricas && (metricas.por_classe || metricas.classes);
-    if (!porClasse) {
-      setHTML(tbody, '<tr><td colspan="5">Avalie o modelo para ver as metricas por classe.</td></tr>', "tabela-classes");
-      return;
-    }
-    var linhas = [];
-    App.classes.forEach(function (c) {
-      var m = porClasse[c.key] || porClasse[String(c.index)] || porClasse[c.nome];
-      if (!m) return;
-      var p = valorMetrica(m, ["precisao", "precision"]);
-      var r = valorMetrica(m, ["recall", "revocacao"]);
-      var f = valorMetrica(m, ["f1", "f1_score", "f1-score"]);
-      var s = valorMetrica(m, ["suporte", "support", "n"]);
-      linhas.push(
-        "<tr data-classe=\"" + esc(c.key) + "\">" +
-        '<th scope="row">' + esc(c.nome) + "</th>" +
-        "<td>" + esc(formatarPercentual(p, 1)) + "</td>" +
-        "<td>" + esc(formatarPercentual(r, 1)) + "</td>" +
-        "<td>" + esc(formatarPercentual(f, 1)) + "</td>" +
-        "<td>" + esc(s == null ? "--" : s) + "</td>" +
-        "</tr>"
-      );
-    });
-    if (!linhas.length) linhas.push('<tr><td colspan="5">Sem metricas por classe.</td></tr>');
-    setHTML(tbody, linhas.join(""), "tabela-classes");
-  }
-
-  function carregarMatrizConfusao(bruto, metricas) {
-    var img = $("matriz-img");
-    if (!img) return;
-    var url = (bruto && (bruto.matriz_confusao || bruto.matriz || bruto.matriz_url)) ||
-      (metricas && (metricas.matriz_confusao || metricas.matriz_url)) || null;
-    if (!url) { img.hidden = true; img.removeAttribute("src"); return; }
-    img.onerror = function () { img.hidden = true; };
-    img.onload = function () { img.hidden = false; };
-    img.src = url;
-  }
-
-  /* --- Grafico de treino em Canvas 2D puro ------------------------------ */
-
-  function desenharGraficoTreino() {
-    var canvas = $("grafico-treino");
-    var hist = App.treino.historico;
-    if (!canvas || !canvas.getContext || !hist || !hist.length) return;
-
-    var ctx = canvas.getContext("2d");
-    var dpr = window.devicePixelRatio || 1;
-    var caixa = canvas.getBoundingClientRect();
-    var larguraCss = Math.max(280, Math.round(caixa.width || canvas.clientWidth || 640));
-    var alturaCss = Math.max(180, Math.round(caixa.height || canvas.clientHeight || 280));
-
-    // devicePixelRatio correto: buffer em pixels fisicos, desenho em pixels CSS.
-    canvas.width = Math.round(larguraCss * dpr);
-    canvas.height = Math.round(alturaCss * dpr);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, larguraCss, alturaCss);
-
-    var padE = 48, padD = 48, padT = 28, padB = 42;
-    var larg = larguraCss - padE - padD;
-    var alt = alturaCss - padT - padB;
-    if (larg < 40 || alt < 40) return;
-
-    var n = hist.length;
-    var perdas = [];
-    hist.forEach(function (h) {
-      if (h.perda_treino != null) perdas.push(numero(h.perda_treino, 0));
-      if (h.perda_val != null) perdas.push(numero(h.perda_val, 0));
-    });
-    var perdaMax = perdas.length ? Math.max.apply(null, perdas) : 1;
-    perdaMax = perdaMax <= 0 ? 1 : perdaMax * 1.12;
-
-    function x(i) { return padE + (n === 1 ? larg / 2 : (i / (n - 1)) * larg); }
-    function yPerda(v) { return padT + alt - (limitar(numero(v, 0) / perdaMax, 0, 1) * alt); }
-    function yTaxa(v) {
-      var f = numero(v, 0);
-      if (f > 1.0001) f = f / 100;
-      return padT + alt - (limitar(f, 0, 1) * alt);
-    }
-
-    // Fundo e grade suave
-    ctx.fillStyle = COR.branco;
-    ctx.fillRect(0, 0, larguraCss, alturaCss);
-    ctx.strokeStyle = COR.linha;
-    ctx.lineWidth = 1;
-    ctx.font = "11px 'Roboto', 'Segoe UI', Arial, sans-serif";
-    ctx.textBaseline = "middle";
-
-    for (var g = 0; g <= 4; g++) {
-      var yy = padT + (g / 4) * alt;
-      ctx.beginPath();
-      ctx.moveTo(padE, Math.round(yy) + 0.5);
-      ctx.lineTo(padE + larg, Math.round(yy) + 0.5);
-      ctx.stroke();
-
-      // Eixo esquerdo: perda. Eixo direito: acuracia/F1 em porcentagem.
-      ctx.fillStyle = COR.grafiteClaro;
-      ctx.textAlign = "right";
-      ctx.fillText((perdaMax * (1 - g / 4)).toFixed(2).replace(".", ","), padE - 8, yy);
-      ctx.textAlign = "left";
-      ctx.fillStyle = COR.terracotaClaro;
-      ctx.fillText(Math.round((1 - g / 4) * 100) + "%", padE + larg + 8, yy);
-    }
-
-    // Eixo X: rotulos de epoca (com passo para nao amontoar)
-    var passo = Math.max(1, Math.ceil(n / 10));
-    ctx.textAlign = "center";
-    ctx.fillStyle = COR.grafite;
-    for (var i = 0; i < n; i++) {
-      if (i % passo !== 0 && i !== n - 1) continue;
-      var ep = hist[i].epoca != null ? hist[i].epoca : (i + 1);
-      ctx.fillText(String(ep), x(i), padT + alt + 16);
-    }
-    ctx.fillStyle = COR.grafiteClaro;
-    ctx.fillText("epoca", padE + larg / 2, padT + alt + 32);
-
-    function linhaSerie(campo, fnY, cor, tracejada, raioPonto) {
-      var pontos = [];
-      for (var i2 = 0; i2 < n; i2++) {
-        var v = hist[i2][campo];
-        if (v == null) continue;
-        pontos.push([x(i2), fnY(v)]);
-      }
-      if (!pontos.length) return false;
-      ctx.save();
-      ctx.strokeStyle = cor;
-      ctx.lineWidth = 2;
-      ctx.lineJoin = "round";
-      ctx.lineCap = "round";
-      if (tracejada) ctx.setLineDash([5, 4]);
-      ctx.beginPath();
-      pontos.forEach(function (p, k) { if (k === 0) ctx.moveTo(p[0], p[1]); else ctx.lineTo(p[0], p[1]); });
-      ctx.stroke();
-      ctx.setLineDash([]);
-      if (raioPonto) {
-        ctx.fillStyle = COR.branco;
-        pontos.forEach(function (p) {
-          ctx.beginPath();
-          ctx.arc(p[0], p[1], raioPonto, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.stroke();
-        });
-      }
-      ctx.restore();
-      return true;
-    }
-
-    var series = [];
-    if (linhaSerie("perda_treino", yPerda, COR.grafiteClaro, true, 0)) series.push(["Perda treino", COR.grafiteClaro, true]);
-    if (linhaSerie("perda_val", yPerda, COR.grafite, false, 2.5)) series.push(["Perda validacao", COR.grafite, false]);
-    if (linhaSerie("f1_val", yTaxa, COR.terracotaClaro, true, 0)) series.push(["F1 validacao", COR.terracotaClaro, true]);
-    if (linhaSerie("acc_val", yTaxa, COR.terracota, false, 2.5)) series.push(["Acuracia validacao", COR.terracota, false]);
-
-    // Moldura do grafico
-    ctx.strokeStyle = COR.linha;
-    ctx.strokeRect(padE + 0.5, padT + 0.5, larg, alt);
-
-    // Legenda
-    ctx.font = "12px 'Roboto', 'Segoe UI', Arial, sans-serif";
-    ctx.textAlign = "left";
-    var lx = padE + 6, ly = padT - 14;
-    if (ly < 10) ly = 10;
-    series.forEach(function (s) {
-      ctx.strokeStyle = s[1];
-      ctx.lineWidth = 2.5;
-      if (s[2]) ctx.setLineDash([5, 4]);
-      ctx.beginPath();
-      ctx.moveTo(lx, ly);
-      ctx.lineTo(lx + 16, ly);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.fillStyle = COR.tinta;
-      ctx.fillText(s[0], lx + 22, ly);
-      lx += 22 + ctx.measureText(s[0]).width + 18;
-    });
-  }
-
-  /* =======================================================================
-   * 12. PAGINA RELATORIOS
-   * ===================================================================== */
-
-  /** Converte um subconjunto de markdown para HTML - sem biblioteca, tudo escapado. */
-  function renderizarMarkdown(md) {
-    var linhas = String(md || "").replace(/\r\n/g, "\n").split("\n");
-    var saida = [];
-    var lista = null;      // "ul" | "ol" | null
-    var emCodigo = false;
-    var tabela = [];
-
-    function fecharLista() { if (lista) { saida.push("</" + lista + ">"); lista = null; } }
-    function fecharTabela() {
-      if (!tabela.length) return;
-      saida.push(montarTabela(tabela));
-      tabela = [];
-    }
-
-    for (var i = 0; i < linhas.length; i++) {
-      var bruta = linhas[i];
-      var linha = bruta.replace(/\s+$/, "");
-
-      if (/^\s*```/.test(linha)) {
-        fecharLista(); fecharTabela();
-        if (emCodigo) { saida.push("</code></pre>"); emCodigo = false; }
-        else { saida.push('<pre class="md-codigo"><code>'); emCodigo = true; }
-        continue;
-      }
-      if (emCodigo) { saida.push(esc(bruta) + "\n"); continue; }
-
-      if (/^\s*\|.*\|\s*$/.test(linha)) { fecharLista(); tabela.push(linha); continue; }
-      fecharTabela();
-
-      if (!linha.trim()) { fecharLista(); continue; }
-
-      if (/^\s*(-{3,}|\*{3,}|_{3,})\s*$/.test(linha)) {
-        fecharLista();
-        saida.push('<hr class="md-hr">');
-        continue;
-      }
-
-      var h = linha.match(/^(#{1,6})\s+(.*)$/);
-      if (h) {
-        fecharLista();
-        var nivel = h[1].length;
-        saida.push("<h" + nivel + ' class="md-h' + nivel + '">' + inlineMarkdown(h[2]) + "</h" + nivel + ">");
-        continue;
-      }
-
-      var ul = linha.match(/^\s*[-*+]\s+(.*)$/);
-      if (ul) {
-        if (lista !== "ul") { fecharLista(); saida.push('<ul class="md-lista">'); lista = "ul"; }
-        saida.push("<li>" + inlineMarkdown(ul[1]) + "</li>");
-        continue;
-      }
-
-      var ol = linha.match(/^\s*\d+[.)]\s+(.*)$/);
-      if (ol) {
-        if (lista !== "ol") { fecharLista(); saida.push('<ol class="md-lista">'); lista = "ol"; }
-        saida.push("<li>" + inlineMarkdown(ol[1]) + "</li>");
-        continue;
-      }
-
-      var bq = linha.match(/^\s*>\s?(.*)$/);
-      if (bq) {
-        fecharLista();
-        saida.push('<blockquote class="md-citacao">' + inlineMarkdown(bq[1]) + "</blockquote>");
-        continue;
-      }
-
-      fecharLista();
-      saida.push('<p class="md-p">' + inlineMarkdown(linha) + "</p>");
-    }
-
-    if (emCodigo) saida.push("</code></pre>");
-    fecharLista();
-    fecharTabela();
-    return saida.join("\n");
-  }
-
-  function montarTabela(linhas) {
-    function celulas(l) {
-      return l.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map(function (c) { return c.trim(); });
-    }
-    var cabecalho = celulas(linhas[0]);
-    var inicio = 1;
-    if (linhas.length > 1 && /^[\s|:-]+$/.test(linhas[1])) inicio = 2;
-
-    var html = '<div class="md-tabela-wrap"><table class="md-tabela"><thead><tr>';
-    cabecalho.forEach(function (c) { html += "<th>" + inlineMarkdown(c) + "</th>"; });
-    html += "</tr></thead><tbody>";
-    for (var i = inicio; i < linhas.length; i++) {
-      html += "<tr>";
-      celulas(linhas[i]).forEach(function (c) { html += "<td>" + inlineMarkdown(c) + "</td>"; });
-      html += "</tr>";
-    }
-    return html + "</tbody></table></div>";
-  }
-
-  /** Formatacao em linha. Escapa primeiro, formata depois: nunca o contrario. */
-  function inlineMarkdown(texto) {
-    var s = esc(texto);
-    s = s.replace(/`([^`]+)`/g, '<code class="md-cod">$1</code>');
-    s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
-    s = s.replace(/__([^_]+)__/g, "<strong>$1</strong>");
-    s = s.replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>");
-    // Links apenas http/https; qualquer outro esquema fica como texto puro.
-    s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
-      '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
-    return s;
-  }
-
-  function gerarRelatorio() {
-    var btn = $("btn-gerar-relatorio");
-    var status = $("relatorio-status");
-    botaoCarregando(btn, true, "Gerando...");
-    setTexto(status, "Reunindo os eventos da sessao...");
-    habilitar($("btn-baixar-relatorio"), false);
-
-    postJSON("/api/relatorio", {}, { timeout: 120000 })
-      .then(function (d) {
-        botaoCarregando(btn, false);
-        if (d && d.erro && !d.markdown) {
-          setTexto(status, d.erro);
-          toast(d.erro, "erro");
-          return;
-        }
-        App.relatorioMarkdown = (d && d.markdown) || "";
-        setHTML($("relatorio-saida"), renderizarMarkdown(App.relatorioMarkdown), "relatorio-saida");
-        var onde = d && d.arquivo ? " Salvo em: " + d.arquivo : "";
-        setTexto(status, "Relatorio gerado." + onde);
-        habilitar($("btn-baixar-relatorio"), !!App.relatorioMarkdown);
-        toast("Relatorio pronto.", "ok");
-      })
-      .catch(function (e) {
-        botaoCarregando(btn, false);
-        setTexto(status, "Falhou: " + e.message);
-        toast("Nao consegui gerar o relatorio: " + e.message, "erro");
-      });
-  }
-
-  function baixarRelatorio() {
-    if (!App.relatorioMarkdown) { toast("Gere o relatorio primeiro.", "aviso"); return; }
-    var blob = new Blob([App.relatorioMarkdown], { type: "text/markdown;charset=utf-8" });
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement("a");
-    var d = new Date();
-    function dois(x) { return x < 10 ? "0" + x : String(x); }
-    a.href = url;
-    a.download = "relatorio_ponto_certo_" + d.getFullYear() + dois(d.getMonth() + 1) + dois(d.getDate()) +
-      "_" + dois(d.getHours()) + dois(d.getMinutes()) + ".md";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
-  }
-
-  /* =======================================================================
    * 13. PAGINA AJUSTES
    * ===================================================================== */
 
   var CAMPOS_AJUSTE = [
-    { id: "aj-limiar-alerta", chaves: ["limiar_alerta"], casas: 2 },
-    { id: "aj-limiar-incerteza", chaves: ["limiar_incerteza"], casas: 2 },
-    { id: "aj-frames", chaves: ["frames_para_confirmar", "frames"], casas: 0 },
-    { id: "aj-ema", chaves: ["ema_alpha", "ema"], casas: 2 }
+    { id: "aj-limiar-alerta", chave: "limiar_alerta", casas: 2 },
+    { id: "aj-limiar-incerteza", chave: "limiar_incerteza", casas: 2 },
+    { id: "aj-frames", chave: "frames_para_confirmar", casas: 0 },
+    { id: "aj-ema", chave: "ema_alpha", casas: 2 }
   ];
 
-  /** Acha o <output> que acompanha o range (por for=, por irmao ou dentro do rotulo). */
-  function saidaDoRange(input) {
-    if (!input) return null;
-    var porFor = document.querySelector('output[for="' + input.id + '"]');
-    if (porFor) return porFor;
-    var irmao = input.nextElementSibling;
-    while (irmao) {
-      if (irmao.tagName === "OUTPUT") return irmao;
-      irmao = irmao.nextElementSibling;
-    }
-    if (input.parentElement) return input.parentElement.querySelector("output");
-    return null;
-  }
+  // Cada nível de rigor é só uma combinação pronta dos controles avançados.
+  var NIVEIS_RIGOR = {
+    baixa: { limiar_alerta: 0.75, limiar_incerteza: 0.6, frames_para_confirmar: 6, ema_alpha: 0.35 },
+    normal: { limiar_alerta: 0.55, limiar_incerteza: 0.7, frames_para_confirmar: 4, ema_alpha: 0.45 },
+    alta: { limiar_alerta: 0.4, limiar_incerteza: 0.8, frames_para_confirmar: 3, ema_alpha: 0.55 }
+  };
 
   function sincronizarSaida(input) {
-    var out = saidaDoRange(input);
+    var out = document.querySelector('output[for="' + input.id + '"]');
     if (!out) return;
     var casas = 2;
     CAMPOS_AJUSTE.forEach(function (c) { if (c.id === input.id) casas = c.casas; });
@@ -1888,76 +1553,79 @@
     out.textContent = isFinite(v) ? v.toFixed(casas).replace(".", ",") : input.value;
   }
 
-  function primeiroValor(fonte, chaves) {
-    if (!fonte) return null;
-    for (var i = 0; i < chaves.length; i++) {
-      if (fonte[chaves[i]] != null) return fonte[chaves[i]];
-    }
-    return null;
+  function valoresAvancados() {
+    var v = {};
+    CAMPOS_AJUSTE.forEach(function (c) {
+      var input = $(c.id);
+      if (input && isFinite(Number(input.value))) v[c.chave] = c.casas === 0 ? Math.round(Number(input.value)) : Number(input.value);
+    });
+    return v;
+  }
+
+  /** Descobre qual nível de rigor bate com os controles avançados. */
+  function marcarNivelRigor() {
+    var sel = $("aj-sensibilidade");
+    if (!sel) return;
+    var atual = valoresAvancados();
+    var achou = "personalizado";
+    Object.keys(NIVEIS_RIGOR).forEach(function (nome) {
+      var n = NIVEIS_RIGOR[nome];
+      var igual = Object.keys(n).every(function (k) { return Math.abs(numero(atual[k], -1) - n[k]) < 0.001; });
+      if (igual) achou = nome;
+    });
+    sel.value = achou;
+    var opt = sel.querySelector('option[value="personalizado"]');
+    if (opt) opt.hidden = achou !== "personalizado";
+  }
+
+  function aplicarNivelRigor(nome) {
+    var n = NIVEIS_RIGOR[nome];
+    if (!n) return;
+    CAMPOS_AJUSTE.forEach(function (c) {
+      var input = $(c.id);
+      if (input && n[c.chave] != null) { input.value = String(n[c.chave]); sincronizarSaida(input); }
+    });
+    marcarNivelRigor();
   }
 
   function carregarAjustes() {
     return fetchJSON("/api/ajustes")
       .then(function (d) {
         d = d || {};
-        // Aceita tanto o objeto plano quanto o aninhado em "inferencia".
-        var inf = d.inferencia || d;
-        CAMPOS_AJUSTE.forEach(function (campo) {
-          var input = $(campo.id);
+        CAMPOS_AJUSTE.forEach(function (c) {
+          var input = $(c.id);
           if (!input) return;
-          var v = primeiroValor(inf, campo.chaves);
-          if (v != null) input.value = String(v);
+          if (d[c.chave] != null) input.value = String(d[c.chave]);
           sincronizarSaida(input);
         });
-        var chk = $("aj-llm");
-        if (chk) {
-          var llm = d.llm || {};
-          var ativo = llm.ativo != null ? llm.ativo : (d.llm_ativo != null ? d.llm_ativo : true);
-          chk.checked = !!ativo;
-        }
-        var modelo = $("aj-modelo");
-        if (modelo) {
-          var m = (d.llm && (d.llm.modelo_visao || d.llm.modelo)) || d.modelo || d.modelo_visao || "";
-          if (m) modelo.value = m;
-        }
+        if ($("aj-meta") && d.meta_pecas != null) $("aj-meta").value = String(d.meta_pecas);
+        marcarNivelRigor();
         setTexto($("ajustes-status"), "");
       })
       .catch(function (e) {
-        setTexto($("ajustes-status"), "Nao consegui ler os ajustes: " + e.message);
+        setTexto($("ajustes-status"), "Não consegui ler os ajustes: " + e.message);
       });
   }
 
   function salvarAjustes() {
     var btn = $("btn-salvar-ajustes");
-    var corpo = {};
-    CAMPOS_AJUSTE.forEach(function (campo) {
-      var input = $(campo.id);
-      if (!input) return;
-      var v = Number(input.value);
-      if (isFinite(v)) corpo[campo.chaves[0]] = campo.casas === 0 ? Math.round(v) : v;
-    });
-    var chk = $("aj-llm");
-    if (chk) corpo.llm_ativo = !!chk.checked;
-    var modelo = $("aj-modelo");
-    if (modelo && modelo.value.trim()) corpo.modelo = modelo.value.trim();
+    var corpo = valoresAvancados();
+    var meta = $("aj-meta") && Number($("aj-meta").value);
+    if (meta && isFinite(meta)) corpo.meta_pecas = Math.round(meta);
 
     botaoCarregando(btn, true, "Salvando...");
     setTexto($("ajustes-status"), "");
     postJSON("/api/ajustes", corpo)
       .then(function (d) {
         botaoCarregando(btn, false);
-        if (d && d.erro) {
-          setTexto($("ajustes-status"), d.erro);
-          toast(d.erro, "erro");
-          return;
-        }
-        setTexto($("ajustes-status"), "Ajustes aplicados nesta sessao.");
-        toast("Ajustes aplicados.", "ok");
+        if (d && d.erro) { setTexto($("ajustes-status"), d.erro); toast(d.erro, "erro"); return; }
+        setTexto($("ajustes-status"), "Ajustes salvos.");
+        toast("Ajustes salvos.", "ok");
       })
       .catch(function (e) {
         botaoCarregando(btn, false);
         setTexto($("ajustes-status"), "Falhou: " + e.message);
-        toast("Nao consegui salvar: " + e.message, "erro");
+        toast("Não consegui salvar: " + e.message, "erro");
       });
   }
 
@@ -1965,65 +1633,34 @@
     var btn = $("btn-testar-llm");
     var caixa = $("llm-status");
     botaoCarregando(btn, true, "Testando...");
-    setHTML(caixa, '<p class="ia-carregando">Falando com o OpenRouter...</p>', "llm-status");
+    setHTML(caixa, '<p class="ia-carregando">Testando a conexão...</p>', "llm-status");
     fetchJSON("/api/llm/status", { timeout: 45000 })
       .then(function (d) {
         botaoCarregando(btn, false);
         d = d || {};
         var ok = !!d.ok;
-        var est = d.estatisticas || {};
-        var html = '<div class="llm-cartao ' + (ok ? "llm-ok" : "llm-erro") + '">' +
+        setHTML(caixa, '<div class="llm-cartao ' + (ok ? "llm-ok" : "llm-erro") + '">' +
           '<span class="selo-fonte ' + (ok ? "selo-ok" : "selo-nao") + '">' +
           '<span class="selo-icone" aria-hidden="true">' + (ok ? ICONES.check : ICONES.erro) + "</span>" +
-          esc(ok ? "Conectado" : "Indisponivel") + "</span>" +
-          '<p class="llm-mensagem">' + esc(d.mensagem || (ok ? "Tudo certo." : "Sem detalhes.")) + "</p>";
-        if (d.modelo_visao) html += '<p class="llm-modelo">Modelo de visao: <strong>' + esc(d.modelo_visao) + "</strong></p>";
-        if (d.creditos) {
-          var c = d.creditos;
-          var resumo = (c.usados != null || c.limite != null)
-            ? "usados " + esc(c.usados) + " de " + esc(c.limite == null ? "sem limite" : c.limite)
-            : esc(JSON.stringify(c).slice(0, 180));
-          html += '<p class="llm-creditos">Creditos: ' + resumo + "</p>";
-        }
-        html += '<p class="llm-uso">Chamadas: ' + esc(numero(est.chamadas, 0)) +
-          " - tokens entrada: " + esc(numero(est.tokens_entrada, 0)) +
-          " - tokens saida: " + esc(numero(est.tokens_saida, 0)) +
-          " - erros: " + esc(numero(est.erros, 0)) + "</p></div>";
-        setHTML(caixa, html, "llm-status");
+          esc(ok ? "Conectado" : "Sem conexão") + "</span>" +
+          '<p class="llm-mensagem">' + esc(ok ? "As explicações usam a IA." : (d.mensagem || "As explicações usam a base técnica local.")) + "</p></div>", "llm-status");
       })
       .catch(function (e) {
         botaoCarregando(btn, false);
-        setHTML(caixa, '<div class="llm-cartao llm-erro"><p class="llm-mensagem">' +
-          esc(e.message) + "</p></div>", "llm-status");
+        setHTML(caixa, '<div class="llm-cartao llm-erro"><p class="llm-mensagem">' + esc(e.message) + "</p></div>", "llm-status");
       });
   }
 
   /* =======================================================================
-   * 13b. BANCO E LOTES
+   * 13b. BANCO E LOTE EM PRODUCAO
    * ===================================================================== */
-
-  var NOMES_STATUS_LOTE = { aberto: "Aberto", em_inspecao: "Em inspecao", concluido: "Concluido" };
 
   function formatarData(iso) {
     var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ""));
     return m ? m[3] + "/" + m[2] + "/" + m[1] : "--";
   }
 
-  function diasOuNulo(valor) {
-    if (valor === null || valor === undefined || valor === "") return null;
-    var n = Number(valor);
-    return isFinite(n) ? n : null;
-  }
-
-  function textoPrazo(dias) {
-    var n = diasOuNulo(dias);
-    if (n === null) return "";
-    if (n < 0) return "atrasado " + Math.abs(n) + (Math.abs(n) === 1 ? " dia" : " dias");
-    if (n === 0) return "vence hoje";
-    return "faltam " + n + (n === 1 ? " dia" : " dias");
-  }
-
-  /* --- Situacao do banco (chip da barra + card da pagina) ---------------- */
+  /* --- Situação do banco (chip da barra + card em Ajustes) --------------- */
 
   function iniciarMonitorBanco() {
     atualizarBanco(false).then(function () {
@@ -2047,105 +1684,96 @@
   function renderBanco(d) {
     var chip = $("chip-banco");
     var pend = numero(d.pendentes, 0);
-    var classe = "chip-neutro";
-    var texto = "Processamento local";
-    var titulo = "Banco nao configurado: tudo fica so neste computador.";
+    var classe = "";
+    var texto = "Dados neste computador";
+    var titulo = "Banco não configurado: as inspeções ficam guardadas neste computador.";
     if (d.configurado) {
       if (d.conectado && pend === 0) {
-        classe = "chip-ok"; texto = "Banco conectado";
-        titulo = "Supabase conectado" + (d.latencia_ms != null ? " (" + d.latencia_ms + " ms)" : "");
+        classe = "estado-ok"; texto = "Banco conectado";
+        titulo = "Inspeções sendo enviadas ao banco.";
       } else if (d.conectado) {
-        classe = "chip-ambar"; texto = "Enviando " + pend;
-        titulo = pend + " gravacao(oes) aguardando envio";
+        classe = "estado-atencao"; texto = "Enviando " + pend;
+        titulo = pend + " inspeções aguardando envio.";
       } else {
-        classe = "chip-ambar";
-        texto = "Banco offline" + (pend ? " - " + pend + " pendentes" : "");
-        titulo = (d.erro || "sem conexao com o banco") +
-          (pend ? ". As pecas ficam guardadas e sobem quando a conexao voltar." : "");
+        classe = "estado-atencao";
+        texto = "Banco sem conexão" + (pend ? " (" + pend + ")" : "");
+        titulo = "Sem conexão com o banco. As inspeções ficam guardadas e sobem quando a conexão voltar.";
       }
     }
     if (chip) {
-      chip.className = "chip chip-botao " + classe;
+      chip.className = "menu-estado " + classe;
       chip.title = titulo;
       setTexto(chip.querySelector(".chip-texto"), texto);
     }
 
-    var semBanco = $("lotes-sem-banco");
-    var conteudo = $("lotes-conteudo");
-    var mostrarSemBanco = !d.configurado && !d.servidorFora;
-    mostrar(semBanco, mostrarSemBanco);
-    mostrar(conteudo, !mostrarSemBanco);
-    habilitar($("btn-novo-lote"), !!d.configurado);
-    if (mostrarSemBanco && d.erro) {
-      setTexto($("lotes-sem-banco-motivo"),
-        d.erro + ". Preencha as variaveis SUPABASE_* no arquivo .env e reinicie o servidor. " +
-        "Sem isso a inspecao continua funcionando, so que sem lotes.");
-    }
-
     var caixa = $("banco-status");
     if (!caixa) return;
-    caixa.classList.remove("ok", "erro", "aviso");
     if (!d.configurado) {
-      caixa.classList.add("aviso");
-      setHTML(caixa, '<p class="card-texto">' + esc(d.erro || "Banco nao configurado.") + "</p>", "banco-status");
+      setHTML(caixa, "<p>As inspeções ficam guardadas neste computador. Para guardar também na nuvem, " +
+        "peça a quem instalou o sistema para configurar o banco.</p>", "banco-status");
       return;
     }
-    caixa.classList.add(d.conectado ? (pend ? "aviso" : "ok") : "erro");
     var st = d.storage || {};
     var sinc = d.sincronizacao || {};
     var linhas = [];
-    linhas.push("<span><strong>Banco:</strong> " + (d.conectado
-      ? "conectado" + (d.latencia_ms != null ? " (" + esc(d.latencia_ms) + " ms)" : "")
-      : "desconectado - " + esc(d.erro || "sem conexao")) + "</span>");
-    linhas.push("<span><strong>Fotos (Storage):</strong> " + (st.ok
-      ? "ok, bucket " + esc(st.bucket)
-      : esc(st.erro || "nao configurado - as inspecoes sobem sem foto")) + "</span>");
-    linhas.push("<span><strong>Aguardando envio:</strong> " + esc(pend) +
-      (sinc.offline && sinc.proxima_tentativa_s ? " (nova tentativa em " + esc(sinc.proxima_tentativa_s) + " s)" : "") +
-      "</span>");
-    if (sinc.enviados) linhas.push("<span><strong>Enviadas nesta sessao:</strong> " + esc(sinc.enviados) + "</span>");
-    if (sinc.ultimo_erro) linhas.push("<span><strong>Ultimo erro:</strong> " + esc(sinc.ultimo_erro) + "</span>");
+    linhas.push("<span><strong>Banco:</strong> " + (d.conectado ? "conectado" : "sem conexão - " + esc(d.erro || "")) + "</span>");
+    linhas.push("<span><strong>Fotos:</strong> " + (st.ok ? "sendo enviadas" : esc(st.erro || "não configurado; as inspeções sobem sem foto")) + "</span>");
+    linhas.push("<span><strong>Aguardando envio:</strong> " + esc(pend) + "</span>");
+    if (sinc.ultimo_erro) linhas.push("<span><strong>Último erro:</strong> " + esc(sinc.ultimo_erro) + "</span>");
     setHTML(caixa, '<div class="banco-linhas">' + linhas.join("") + "</div>", "banco-status");
   }
 
-  /* --- Lote ativo ------------------------------------------------------- */
+  /* --- Lote em produção ------------------------------------------------- */
 
+  /** Lote em inspeção: o seletor no topo da tela Inspecionar. */
   function renderChipLote(lote) {
     App.lotes.ativo = lote || null;
-    var chip = $("chip-lote");
-    if (chip) {
-      chip.className = "chip chip-botao " + (lote ? "chip-terracota" : "chip-neutro");
-      setTexto(chip.querySelector(".chip-texto"), lote ? "Lote " + lote.codigo : "Sem lote - so local");
-      chip.title = lote
-        ? "Gravando no lote " + lote.codigo + (lote.cliente ? " (" + lote.cliente + ")" : "") + ". Toque para trocar."
-        : "Nenhum lote em producao: as pecas ficam so neste computador. Toque para escolher.";
+    var sel = $("sel-lote");
+    if (sel) {
+      var id = lote ? String(lote.ordem_id || "") : "";
+      // O lote ativo pode não estar na lista ainda (ou ter sido concluído).
+      if (id && !sel.querySelector('option[value="' + id.replace(/"/g, "") + '"]')) {
+        var opt = criar("option", null, lote.codigo + (lote.modelo_peca ? " · " + lote.modelo_peca : ""));
+        opt.value = id;
+        sel.appendChild(opt);
+      }
+      if (document.activeElement !== sel) sel.value = id;
     }
-    var chipPagina = $("lote-ativo-chip");
-    if (chipPagina) {
-      chipPagina.className = "chip " + (lote ? "chip-terracota" : "chip-neutro");
-      setTexto(chipPagina, lote ? lote.codigo : "Nenhum");
-    }
-    setTexto($("lote-ativo-texto"), lote
-      ? "Cada peca inspecionada agora e gravada no lote " + lote.codigo +
-        (lote.cliente ? " do cliente " + lote.cliente : "") +
-        ". Fotos so das pecas com defeito."
-      : "Nenhum lote ativo: as pecas ficam so no historico deste computador.");
-    habilitar($("btn-parar-lote"), !!lote);
+    mostrar($("aviso-sem-lote"), !lote && App.lotes.lista.length > 0);
   }
 
-  function usarLote(id, btn) {
-    if (!id) { toast("Escolha um lote na lista.", "aviso"); return; }
-    botaoCarregando(btn, true, "Ativando...");
-    postJSON("/api/lotes/ativo", { lote_id: Number(id) })
+  function carregarLotes() {
+    return fetchJSON("/api/gestao/inspecao")
       .then(function (d) {
-        botaoCarregando(btn, false);
-        renderChipLote(d.lote);
-        toast("Lote " + d.lote.codigo + " em producao. As proximas pecas vao para ele.", "ok");
-        carregarLotes();
+        App.lotes.lista = (d && d.lotes) || [];
+        App.lotes.ativo = (d && d.ativo) || null;
+        renderLotes();
       })
       .catch(function (e) {
-        botaoCarregando(btn, false);
-        toast("Nao consegui ativar o lote: " + e.message, "erro");
+        App.lotes.lista = [];
+        renderLotes();
+      });
+  }
+
+  function renderLotes() {
+    var sel = $("sel-lote");
+    if (!sel) return;
+    var html = '<option value="">Sem lote</option>' + App.lotes.lista.map(function (l) {
+      return '<option value="' + esc(l.id) + '">' + esc(l.code) + " · " + esc(l.model) + "</option>";
+    }).join("");
+    setHTML(sel, html, "sel-lote");
+    renderChipLote(App.lotes.ativo);
+  }
+
+  function usarLote(id) {
+    postJSON("/api/gestao/orders/" + encodeURIComponent(id) + "/inspecionar", {})
+      .then(function (d) {
+        renderChipLote(d.lote);
+        toast("As próximas peças vão para o lote " + d.lote.codigo + ".", "ok");
+      })
+      .catch(function (e) {
+        renderChipLote(App.lotes.ativo);
+        toast("Não consegui escolher o lote: " + e.message, "erro");
       });
   }
 
@@ -2153,289 +1781,9 @@
     postJSON("/api/lotes/ativo", { lote_id: null })
       .then(function () {
         renderChipLote(null);
-        toast("Nenhum lote ativo: as pecas ficam so neste computador.", "info");
-        renderLotes();
+        toast("Nenhum lote em inspeção.", "info");
       })
-      .catch(function (e) { toast("Nao consegui parar: " + e.message, "erro"); });
-  }
-
-  /* --- Lista ------------------------------------------------------------ */
-
-  function carregarLotes() {
-    return fetchJSON("/api/lotes")
-      .then(function (d) {
-        App.lotes.lista = (d && d.lotes) || [];
-        App.lotes.porId = {};
-        App.lotes.lista.forEach(function (l) { App.lotes.porId[l.id] = l; });
-        App.lotes.carregado = true;
-        renderChipLote(d.ativo || null);
-        renderLotes();
-        if (App.lotes.detalheId && App.lotes.porId[App.lotes.detalheId]) abrirDetalheLote(App.lotes.detalheId);
-      })
-      .catch(function (e) {
-        if (e.status !== 503) toast("Nao consegui carregar os lotes: " + e.message, "erro");
-        App.lotes.lista = [];
-        renderLotes(e.status === 503 ? e.message : null);
-      });
-  }
-
-  function renderLotes(erroBanco) {
-    var grade = $("grade-lotes");
-    var vazio = $("lotes-vazio");
-    var lista = App.lotes.lista;
-    var ativoId = App.lotes.ativo ? App.lotes.ativo.id : null;
-
-    var sel = $("sel-lote-ativo");
-    if (sel) {
-      var abertos = lista.filter(function (l) { return l.status !== "concluido"; });
-      var opcoes = '<option value="">' + (abertos.length ? "Selecione um lote" : "Nenhum lote aberto") + "</option>" +
-        abertos.map(function (l) {
-          return '<option value="' + esc(l.id) + '"' + (l.id === ativoId ? " selected" : "") + ">" +
-            esc(l.codigo + " - " + (l.cliente || "") + " - " + (l.modelo_peca || "")) + "</option>";
-        }).join("");
-      setHTML(sel, opcoes, "sel-lote-ativo");
-    }
-
-    if (!grade) return;
-    if (erroBanco) {
-      setHTML(grade, "", "grade-lotes");
-      mostrar(vazio, true);
-      setHTML(vazio, '<p class="vazio-titulo">Banco indisponivel</p><p class="vazio-texto">' +
-        esc(erroBanco) + "</p>", "lotes-vazio");
-      return;
-    }
-    if (!lista.length) {
-      setHTML(grade, "", "grade-lotes");
-      mostrar(vazio, App.lotes.carregado);
-      setHTML(vazio, '<p class="vazio-titulo">Nenhum lote cadastrado</p><p class="vazio-texto">' +
-        "Toque em <strong>Novo lote</strong> para cadastrar o primeiro.</p>", "lotes-vazio");
-      return;
-    }
-    mostrar(vazio, false);
-    setHTML(grade, lista.map(function (l) { return loteCardHTML(l, l.id === ativoId); }).join(""), "grade-lotes");
-  }
-
-  function loteCardHTML(l, ativo) {
-    var qtd = numero(l.quantidade, 0);
-    var insp = numero(l.inspecionadas, 0);
-    var pct = qtd ? limitar(insp / qtd * 100, 0, 100) : 0;
-    var taxa = numero(l.taxa_defeito, 0);
-    var limite = numero(l.limite_defeito, 0.05);
-    var classes = "lote-card" + (ativo ? " ativo" : "") + (l.alerta ? " alerta" : "") +
-      (l.status === "concluido" ? " concluido" : "");
-    var chips = "";
-    if (ativo) chips += '<span class="chip chip-terracota">Em producao</span>';
-    else chips += '<span class="chip chip-neutro">' + esc(NOMES_STATUS_LOTE[l.status] || l.status) + "</span>";
-    if (l.alerta) chips += '<span class="chip chip-terracota">Defeito acima do limite</span>';
-    var dias = diasOuNulo(l.dias_restantes);
-    var prazoRuim = l.status !== "concluido" && dias !== null && dias < 0;
-
-    return '<button type="button" class="' + classes + '" data-lote="' + esc(l.id) + '" aria-label="' +
-      esc("Ver detalhes do lote " + l.codigo) + '">' +
-      '<div class="lote-topo"><div>' +
-      '<div class="lote-codigo">' + esc(l.codigo) + "</div>" +
-      '<div class="lote-sub">' + esc((l.cliente || "") + " - " + (l.modelo_peca || "") +
-        (l.tecido ? " - " + l.tecido : "")) + "</div>" +
-      '</div><div class="lote-chips">' + chips + "</div></div>" +
-      '<div class="barra-linha lote-progresso">' +
-      '<span class="barra-nome">' + esc(insp + " de " + qtd + " pecas") + "</span>" +
-      '<span class="barra-valor">' + esc(Math.round(pct) + "%") + "</span>" +
-      '<div class="barra-trilho"><div class="barra-preenche" style="width:' + pct.toFixed(1) + '%"></div></div>' +
-      "</div>" +
-      '<div class="lote-numeros">' +
-      loteNumeroHTML(numero(l.reprovadas, 0), "reprovadas", false) +
-      loteNumeroHTML(formatarPercentual(taxa, 1), "defeito (limite " + formatarPercentual(limite, 0) + ")", l.alerta) +
-      loteNumeroHTML(formatarData(l.prazo_entrega), textoPrazo(dias) || "prazo", prazoRuim) +
-      "</div></button>";
-  }
-
-  function loteNumeroHTML(valor, rotulo, ruim) {
-    return '<div class="lote-numero"><span class="lote-numero-valor' + (ruim ? " ruim" : "") + '">' +
-      esc(valor) + '</span><span class="lote-numero-rotulo">' + esc(rotulo) + "</span></div>";
-  }
-
-  /* --- Detalhe ---------------------------------------------------------- */
-
-  function abrirDetalheLote(id) {
-    App.lotes.detalheId = Number(id);
-    var card = $("card-detalhe-lote");
-    fetchJSON("/api/lotes/" + encodeURIComponent(id) + "?limite=60")
-      .then(function (d) {
-        renderDetalheLote(d);
-        mostrar(card, true);
-        if (card && card.scrollIntoView && App.lotes._rolar) {
-          card.scrollIntoView({ behavior: "smooth", block: "start" });
-        }
-        App.lotes._rolar = false;
-      })
-      .catch(function (e) { toast("Nao consegui abrir o lote: " + e.message, "erro"); });
-  }
-
-  function renderDetalheLote(d) {
-    var l = d.lote || {};
-    setTexto($("detalhe-lote-titulo"), "Lote " + (l.codigo || "") + (l.cliente ? " - " + l.cliente : ""));
-    var ativo = App.lotes.ativo && App.lotes.ativo.id === l.id;
-    var btnUsar = $("btn-detalhe-usar");
-    mostrar(btnUsar, l.status !== "concluido" && !ativo);
-    var btnStatus = $("btn-detalhe-status");
-    if (btnStatus) {
-      btnStatus.dataset.status = l.status === "concluido" ? "em_inspecao" : "concluido";
-      setTexto(btnStatus.querySelector("span"), l.status === "concluido" ? "Reabrir lote" : "Concluir lote");
-    }
-
-    var defeitos = (d.defeitos || []).filter(function (x) { return x.classe_final !== "normal"; });
-    var total = numero(l.inspecionadas, 0);
-    var lista = $("detalhe-defeitos");
-    if (lista) {
-      if (!defeitos.length) {
-        setHTML(lista, '<li class="lista-vazia">' + (total ? "Nenhum defeito ate agora." : "Nenhuma peca inspecionada ainda.") +
-          "</li>", "detalhe-defeitos");
-      } else {
-        setHTML(lista, defeitos.map(function (x) {
-          var n = numero(x.quantidade, 0);
-          var pct = total ? n / total * 100 : 0;
-          return '<li class="barra-item"><div class="barra-linha">' +
-            '<span class="barra-nome">' + esc(nomeDaClasse(x.classe_final)) + "</span>" +
-            '<span class="barra-valor">' + esc(n + " (" + pct.toFixed(1).replace(".", ",") + "%)") + "</span>" +
-            '<div class="barra-trilho"><div class="barra-preenche" style="width:' + limitar(pct, 0, 100).toFixed(1) +
-            '%"></div></div></div></li>';
-        }).join(""), "detalhe-defeitos");
-      }
-    }
-
-    var comFoto = (d.inspecoes || []).filter(function (i) { return i.imagem_path; });
-    var grade = $("detalhe-fotos");
-    if (grade) {
-      setHTML(grade, comFoto.map(function (i) {
-        var nome = nomeDaClasse(i.classe_final);
-        return '<a class="celula falha" href="/api/inspecoes/' + encodeURIComponent(i.evento_id) +
-          '/foto" target="_blank" rel="noopener" aria-label="' + esc("Abrir foto: " + nome) + '">' +
-          '<img src="/api/inspecoes/' + encodeURIComponent(i.evento_id) + '/foto" alt="" loading="lazy">' +
-          '<span class="selo">' + esc(nome) + "</span></a>";
-      }).join(""), "detalhe-fotos");
-    }
-    mostrar($("detalhe-fotos-vazio"), !comFoto.length);
-  }
-
-  function mudarStatusLote() {
-    var id = App.lotes.detalheId;
-    var btn = $("btn-detalhe-status");
-    if (!id || !btn) return;
-    var novo = btn.dataset.status;
-    botaoCarregando(btn, true, "Salvando...");
-    postJSON("/api/lotes/" + id + "/status", { status: novo })
-      .then(function (d) {
-        botaoCarregando(btn, false);
-        toast(novo === "concluido" ? "Lote " + d.lote.codigo + " concluido." : "Lote " + d.lote.codigo + " reaberto.", "ok");
-        if (novo === "concluido" && App.lotes.ativo && App.lotes.ativo.id === id) renderChipLote(null);
-        carregarLotes();
-      })
-      .catch(function (e) {
-        botaoCarregando(btn, false);
-        toast("Nao consegui mudar o status: " + e.message, "erro");
-      });
-  }
-
-  /* --- Cadastro --------------------------------------------------------- */
-
-  function mostrarFormLote(visivel) {
-    var card = $("card-novo-lote");
-    mostrar(card, visivel);
-    if (!visivel) return;
-    carregarClientes();
-    var prazo = $("lote-prazo");
-    if (prazo && !prazo.value) {
-      var d = new Date(Date.now() + 14 * 86400000);
-      prazo.value = d.toISOString().slice(0, 10);
-    }
-    var codigo = $("lote-codigo");
-    if (codigo) codigo.focus();
-  }
-
-  function carregarClientes(selecionar) {
-    return fetchJSON("/api/clientes")
-      .then(function (d) {
-        App.lotes.clientes = (d && d.clientes) || [];
-        var sel = $("lote-cliente");
-        if (!sel) return;
-        var atual = selecionar != null ? String(selecionar) : sel.value;
-        setHTML(sel, '<option value="">' + (App.lotes.clientes.length ? "Selecione o cliente" : "Cadastre um cliente") +
-          "</option>" + App.lotes.clientes.map(function (c) {
-            return '<option value="' + esc(c.id) + '">' + esc(c.nome + (c.cnpj ? " (" + c.cnpj + ")" : "")) + "</option>";
-          }).join(""), "lote-cliente");
-        sel.value = atual;
-        if (!App.lotes.clientes.length) mostrar($("caixa-novo-cliente"), true);
-      })
-      .catch(function (e) { toast("Nao consegui carregar os clientes: " + e.message, "erro"); });
-  }
-
-  function salvarCliente() {
-    var nome = ($("cliente-nome") || {}).value || "";
-    var cnpj = ($("cliente-cnpj") || {}).value || "";
-    if (!nome.trim()) { toast("Informe o nome do cliente.", "aviso"); return; }
-    var btn = $("btn-salvar-cliente");
-    botaoCarregando(btn, true, "Salvando...");
-    postJSON("/api/clientes", { nome: nome.trim(), cnpj: cnpj.trim() || null })
-      .then(function (d) {
-        botaoCarregando(btn, false);
-        $("cliente-nome").value = "";
-        $("cliente-cnpj").value = "";
-        mostrar($("caixa-novo-cliente"), false);
-        toast("Cliente " + d.cliente.nome + " cadastrado.", "ok");
-        return carregarClientes(d.cliente.id);
-      })
-      .catch(function (e) {
-        botaoCarregando(btn, false);
-        toast("Nao consegui cadastrar o cliente: " + e.message, "erro");
-      });
-  }
-
-  function valorCampo(id) {
-    var el = $(id);
-    return el ? String(el.value || "").trim() : "";
-  }
-
-  function salvarLote(ev) {
-    if (ev) ev.preventDefault();
-    var obrigatorios = [["lote-cliente", "o cliente"], ["lote-codigo", "o codigo"], ["lote-modelo", "o modelo da peca"],
-      ["lote-quantidade", "a quantidade"], ["lote-prazo", "o prazo de entrega"]];
-    for (var i = 0; i < obrigatorios.length; i++) {
-      if (!valorCampo(obrigatorios[i][0])) {
-        toast("Informe " + obrigatorios[i][1] + ".", "aviso");
-        var el = $(obrigatorios[i][0]);
-        if (el) el.focus();
-        return;
-      }
-    }
-    var limitePct = numero(valorCampo("lote-limite"), 5);
-    var corpo = {
-      cliente_id: Number(valorCampo("lote-cliente")),
-      codigo: valorCampo("lote-codigo"),
-      modelo_peca: valorCampo("lote-modelo"),
-      tecido: valorCampo("lote-tecido") || null,
-      quantidade: Number(valorCampo("lote-quantidade")),
-      prazo_entrega: valorCampo("lote-prazo"),
-      limite_defeito: limitePct / 100,
-      observacoes: valorCampo("lote-obs") || null
-    };
-    var btn = $("btn-salvar-lote");
-    botaoCarregando(btn, true, "Salvando...");
-    postJSON("/api/lotes", corpo)
-      .then(function (d) {
-        botaoCarregando(btn, false);
-        var form = $("form-novo-lote");
-        if (form) form.reset();
-        mostrarFormLote(false);
-        toast("Lote " + d.lote.codigo + " cadastrado. Toque em Usar lote para comecar a gravar nele.", "ok");
-        return carregarLotes().then(function () {
-          var sel = $("sel-lote-ativo");
-          if (sel && !App.lotes.ativo) sel.value = String(d.lote.id);
-        });
-      })
-      .catch(function (e) {
-        botaoCarregando(btn, false);
-        toast("Nao consegui cadastrar o lote: " + e.message, "erro");
-      });
+      .catch(function (e) { toast("Não consegui parar: " + e.message, "erro"); });
   }
 
   /* =======================================================================
@@ -2453,25 +1801,6 @@
       if (item) {
         ev.preventDefault();
         irPara(item.getAttribute("data-pagina"));
-        return;
-      }
-      // Stories do historico
-      var story = ev.target.closest ? ev.target.closest(".story[data-classe]") : null;
-      if (story) {
-        filtrarHistorico(story.getAttribute("data-classe"));
-        return;
-      }
-      // Chips que levam para outra pagina (banco, lote)
-      var atalho = ev.target.closest ? ev.target.closest("[data-pagina-destino]") : null;
-      if (atalho) {
-        irPara(atalho.getAttribute("data-pagina-destino"));
-        return;
-      }
-      // Cards de lote
-      var cardLote = ev.target.closest ? ev.target.closest(".lote-card[data-lote]") : null;
-      if (cardLote) {
-        App.lotes._rolar = true;
-        abrirDetalheLote(cardLote.getAttribute("data-lote"));
         return;
       }
       // Miniaturas do historico
@@ -2497,78 +1826,69 @@
     ligar($("toggle-gradcam"), "change", function (e) { alternarGradcam(e.target.checked); });
     ligar($("btn-capturar"), "click", capturarQuadro);
     ligar($("btn-diagnostico"), "click", pedirDiagnostico);
-    ligar($("btn-segunda-opiniao"), "click", pedirSegundaOpiniao);
+    ligar($("btn-conferir-ultimo"), "click", function () { abrirModalEvento(App.ultimoEvento); });
+    // A câmera ao vivo começa recolhida; abre de novo se a pessoa deixou aberta.
+    var blocoCamera = $("bloco-camera");
+    if (blocoCamera) {
+      var salvo = null;
+      try { salvo = localStorage.getItem("blocoCameraAberto"); } catch (e) {}
+      blocoCamera.open = salvo === "1";
+      blocoCamera.addEventListener("toggle", function () {
+        try { localStorage.setItem("blocoCameraAberto", blocoCamera.open ? "1" : "0"); } catch (e) {}
+      });
+    }
 
     var video = $("video-ao-vivo");
     ligar(video, "error", function () {
-      if (App.cameraAtiva) toast("O video parou de chegar. Tente religar a camera.", "erro");
+      if (App.cameraAtiva) toast("A imagem da câmera parou de chegar. Tente religar a câmera.", "erro");
     });
 
-    /* --- Testar --------------------------------------------------------- */
-    var input = $("input-arquivo");
-    ligar($("btn-escolher"), "click", function () { if (input) input.click(); });
-    ligar(input, "change", function (e) {
-      var f = e.target.files && e.target.files[0];
-      tratarArquivoEscolhido(f);
-      e.target.value = ""; // permite reescolher o mesmo arquivo
+    /* --- Foto ----------------------------------------------------------- */
+    [["input-arquivo", "upload"], ["foto-camera", "camera_aparelho"]].forEach(function (par) {
+      ligar($(par[0]), "change", function (e) {
+        var f = e.target.files && e.target.files[0];
+        tratarArquivoEscolhido(f, par[1]);
+        e.target.value = ""; // permite reescolher o mesmo arquivo
+      });
     });
-
-    var drop = $("drop-zone");
+    var drop = document.querySelector(".card-captura");
     if (drop) {
       ["dragenter", "dragover"].forEach(function (nome) {
-        drop.addEventListener(nome, function (e) {
-          e.preventDefault();
-          e.stopPropagation();
-          drop.classList.add("arrastando");
-        });
+        drop.addEventListener(nome, function (e) { e.preventDefault(); drop.classList.add("arrastando"); });
       });
       ["dragleave", "drop"].forEach(function (nome) {
         drop.addEventListener(nome, function (e) {
           e.preventDefault();
-          e.stopPropagation();
           if (nome === "dragleave" && drop.contains(e.relatedTarget)) return;
           drop.classList.remove("arrastando");
         });
       });
       drop.addEventListener("drop", function (e) {
-        var dt = e.dataTransfer;
-        var f = dt && dt.files && dt.files[0];
-        tratarArquivoEscolhido(f);
-      });
-      // A zona tambem abre o seletor no clique e no teclado (acessibilidade).
-      drop.addEventListener("click", function (e) {
-        if (e.target.closest && e.target.closest("button")) return;
-        if (input) input.click();
-      });
-      drop.addEventListener("keydown", function (e) {
-        if ((e.key === "Enter" || e.key === " ") && input) { e.preventDefault(); input.click(); }
+        var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+        tratarArquivoEscolhido(f, "upload");
       });
     }
-    ligar($("btn-teste-diagnostico"), "click", diagnosticoDoTeste);
-    ligar($("historico-atualizar"), "click", carregarHistorico);
+    ligar($("ver-foto"), "click", function () { mostrarMidiaResultado(false); });
+    ligar($("ver-mapa"), "click", function () { mostrarMidiaResultado(true); });
     ligar($("historico-dia"), "change", carregarHistorico);
-    ligar($("historico-defeitos"), "change", carregarHistorico);
-
+    ligar($("historico-modo"), "change", function (e) { mudarModoHistorico(e.target.value); });
+    ligar($("historico-tipo"), "change", function (e) { filtrarHistorico(e.target.value); });
+    ligar($("sel-lote"), "change", function (e) {
+      if (e.target.value) usarLote(e.target.value);
+      else pararLote();
+    });
 
     /* --- Historico e modal ---------------------------------------------- */
     ligar($("btn-modal-fechar"), "click", fecharModal);
-    ligar($("btn-modal-confirmar"), "click", function () {
-      // Confirmar = o operador concorda com a classe prevista pela rede.
-      var ev = App.eventoAberto;
-      if (ev) enviarRotulo(ev.classe_key, $("btn-modal-confirmar"));
-    });
-    ligar($("btn-modal-corrigir"), "click", function () {
-      var sel = $("modal-select-rotulo");
-      enviarRotulo(sel ? sel.value : null, $("btn-modal-corrigir"));
-    });
     ligar($("btn-modal-diagnostico"), "click", diagnosticoDoModal);
     ligar($("btn-modal-apagar-foto"), "click", apagarFotoDoModal);
+    ligar($("btn-modal-cancelar-apagar"), "click", function () { desarmarApagarFoto($("btn-modal-apagar-foto")); });
 
     var modal = $("modal-evento");
     if (modal) {
       modal.addEventListener("click", function (e) {
         // Clique no overlay (fora do conteudo) fecha o post.
-        if (e.target === modal || (e.target.classList && e.target.classList.contains("modal-overlay"))) {
+        if (e.target === modal || (e.target.closest && e.target.closest("[data-fechar-modal]"))) {
           fecharModal();
         }
       });
@@ -2577,58 +1897,24 @@
       if (e.key === "Escape") fecharModal();
     });
 
-    /* --- Relatorios ------------------------------------------------------ */
-    ligar($("btn-gerar-relatorio"), "click", gerarRelatorio);
-    ligar($("btn-baixar-relatorio"), "click", baixarRelatorio);
 
     /* --- Ajustes --------------------------------------------------------- */
     CAMPOS_AJUSTE.forEach(function (campo) {
       var el = $(campo.id);
-      ligar(el, "input", function () { sincronizarSaida(el); });
+      ligar(el, "input", function () { sincronizarSaida(el); marcarNivelRigor(); });
     });
+    ligar($("aj-sensibilidade"), "change", function (e) { aplicarNivelRigor(e.target.value); });
     ligar($("btn-salvar-ajustes"), "click", salvarAjustes);
     ligar($("btn-testar-llm"), "click", testarLLM);
 
-    /* --- Lotes ----------------------------------------------------------- */
-    ligar($("btn-novo-lote"), "click", function () {
-      var card = $("card-novo-lote");
-      mostrarFormLote(!(card && !card.hidden));
-    });
-    ligar($("btn-cancelar-lote"), "click", function () { mostrarFormLote(false); });
-    ligar($("form-novo-lote"), "submit", salvarLote);
-    ligar($("btn-novo-cliente"), "click", function () {
-      var caixa = $("caixa-novo-cliente");
-      mostrar(caixa, !!(caixa && caixa.hidden));
-      if (caixa && !caixa.hidden && $("cliente-nome")) $("cliente-nome").focus();
-    });
-    ligar($("btn-cancelar-cliente"), "click", function () { mostrar($("caixa-novo-cliente"), false); });
-    ligar($("btn-salvar-cliente"), "click", salvarCliente);
-    ligar($("btn-usar-lote"), "click", function () {
-      usarLote(valorCampo("sel-lote-ativo"), $("btn-usar-lote"));
-    });
-    ligar($("btn-parar-lote"), "click", pararLote);
+    /* --- Lotes e banco --------------------------------------------------- */
     ligar($("btn-testar-banco"), "click", function () {
       var btn = $("btn-testar-banco");
       botaoCarregando(btn, true, "Testando...");
       atualizarBanco(true).then(function () { botaoCarregando(btn, false); });
     });
-    ligar($("btn-detalhe-usar"), "click", function () {
-      usarLote(App.lotes.detalheId, $("btn-detalhe-usar"));
-    });
-    ligar($("btn-detalhe-status"), "click", mudarStatusLote);
-    ligar($("btn-detalhe-fechar"), "click", function () {
-      App.lotes.detalheId = null;
-      mostrar($("card-detalhe-lote"), false);
-    });
 
     /* --- Janela ---------------------------------------------------------- */
-    var tempoResize = null;
-    window.addEventListener("resize", function () {
-      if (tempoResize) clearTimeout(tempoResize);
-      tempoResize = setTimeout(function () {
-        if (App.pagina === "treinamento") desenharGraficoTreino();
-      }, 150);
-    });
 
     document.addEventListener("visibilitychange", function () {
       // Voltar para a aba deve retomar o ritmo de 5 Hz imediatamente.
@@ -2649,23 +1935,29 @@
     registrarListeners();
     prepararAnel();
     habilitar($("btn-diagnostico"), false);
-    habilitar($("btn-segunda-opiniao"), false);
-    habilitar($("btn-baixar-relatorio"), false);
+    habilitar($("btn-conferir-ultimo"), false);
     habilitar($("btn-teste-diagnostico"), false);
+    if ($("historico-dia") && !$("historico-dia").value) $("historico-dia").value = hojeISO();
+    atualizarPendentes();
+    setInterval(atualizarPendentes, 30000);
     atualizarChipCamera({ ativa: false });
     renderVeredito({ estado: "aquecendo" }, null);
     renderChipLote(null);
     iniciarMonitorBanco();
 
-    // Ordem do bootstrap: taxonomia primeiro (os outros renders dependem dela).
+    // A página pedida abre na hora; o resto carrega em segundo plano.
+    // Listar câmeras no servidor pode levar segundos e não deve segurar a tela.
+    irPara(paginaDoHash(), false);
+    var chk = $("toggle-gradcam");
+    if (chk) App.gradcamLigado = !!chk.checked;
     carregarTaxonomia()
-      .then(function () { return carregarSaude(); })
-      .then(function () { return carregarDispositivos(); })
       .then(function () {
-        var chk = $("toggle-gradcam");
-        if (chk) App.gradcamLigado = !!chk.checked;
-        irPara(paginaDoHash(), false);
-      });
+        // Conferência e filtros dependem dos tipos de defeito.
+        if (App.pagina === "historico") carregarHistorico();
+        if (App.pagina === "conferir") carregarFila();
+        return carregarSaude();
+      })
+      .then(function () { return carregarDispositivos(); });
   }
 
   if (document.readyState === "loading") {
@@ -2679,7 +1971,6 @@
     estado: App,
     irPara: irPara,
     toast: toast,
-    recarregarHistorico: carregarHistorico,
-    recarregarTreinamento: carregarTreinamento
+    recarregarHistorico: carregarHistorico
   };
 })();

@@ -126,7 +126,8 @@ class Sincronizador:
         return {
             "evento_id": str(evento.id),
             "lote_id": int(evento.lote_id),
-            "origem": getattr(evento, 'origem', 'ao_vivo'),
+            # O banco só conhece "ao_vivo" e "upload"; foto do celular conta como upload.
+            "origem": 'ao_vivo' if getattr(evento, 'origem', 'ao_vivo') in ('ao_vivo', 'camera_servidor') else 'upload',
             "classe_predita": evento.classe_key,
             "confianca": float(evento.confianca),
             "classe_confirmada": evento.rotulo_operador,
