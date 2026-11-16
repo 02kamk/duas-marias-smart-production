@@ -62,7 +62,7 @@
     ultimoEventoId: null,
     eventoAberto: null,
     analiseAtual: null,   // resultado da pagina Testar
-    relatorioMarkdown: "",
+    ultimoEvento: null,   // ultimo evento visto pela camera ao vivo
     banco: null,          // ultimo /api/db/status
     lotes: { lista: [], porId: {}, clientes: [], ativo: null, detalheId: null, carregado: false },
     poll: { ativo: false, timer: null, abort: null, falhas: 0 },
@@ -222,12 +222,12 @@
       })
       .catch(function (e) {
         if (e && e.name === "AbortError") {
-          var abortado = new Error(expirou ? "Tempo esgotado ao falar com o servidor." : "Requisicao cancelada.");
+          var abortado = new Error(expirou ? "Tempo esgotado ao falar com o servidor." : "Requisição cancelada.");
           abortado.abortada = true;
           abortado.expirou = expirou;
           throw abortado;
         }
-        if (e instanceof TypeError) throw new Error("Nao foi possivel falar com o servidor.");
+        if (e instanceof TypeError) throw new Error("Não foi possível falar com o servidor.");
         throw e;
       })
       .then(
@@ -421,10 +421,9 @@
         App.tecidos = Array.isArray(d.tecidos) ? d.tecidos : [];
         App.porChave = {};
         App.classes.forEach(function (c) { if (c && c.key) App.porChave[c.key] = c; });
-        popularSelectRotulo();
       })
       .catch(function (e) {
-        toast("Nao foi possivel carregar a taxonomia: " + e.message, "erro");
+        toast("Não foi possível carregar os tipos de defeito: " + e.message, "erro");
       });
   }
 
@@ -437,18 +436,15 @@
 
         if (!modelo.carregado) {
           toast(
-            "Modelo ainda nao treinado. Rode o treino para liberar a inspecao ao vivo." +
+            "A IA de inspeção não está disponível neste servidor. Fale com o responsável." +
             (modelo.erro ? " (" + modelo.erro + ")" : ""),
             "aviso"
           );
         }
-        if (!llm.configurado) {
-          toast("Sem chave do OpenRouter: os diagnosticos usarao a base tecnica local.", "aviso");
-        }
         atualizarChipCamera((d && d.camera) || {});
       })
       .catch(function (e) {
-        toast("Servidor indisponivel: " + e.message, "erro");
+        toast("Servidor indisponível: " + e.message, "erro");
       });
   }
 
@@ -460,7 +456,7 @@
         var lista = (d && d.dispositivos) || [];
         sel.innerHTML = "";
         if (!lista.length) {
-          var vazia = criar("option", null, "Nenhuma camera encontrada");
+          var vazia = criar("option", null, "Nenhuma câmera encontrada");
           vazia.value = "";
           sel.appendChild(vazia);
           habilitar(sel, false);
@@ -468,7 +464,7 @@
         }
         habilitar(sel, true);
         lista.forEach(function (indice, i) {
-          var opt = criar("option", null, "Camera " + indice);
+          var opt = criar("option", null, "Câmera " + indice);
           opt.value = String(indice);
           if (i === 0) opt.selected = true;
           sel.appendChild(opt);
@@ -476,7 +472,7 @@
       })
       .catch(function () {
         sel.innerHTML = "";
-        var opt = criar("option", null, "Camera 0");
+        var opt = criar("option", null, "Câmera 0");
         opt.value = "0";
         sel.appendChild(opt);
       });
@@ -494,12 +490,12 @@
 
     if (chip) {
       var texto;
-      if (info.erro) texto = "Camera com erro";
+      if (info.erro) texto = "Câmera com erro";
       else if (ativa) {
-        texto = "Camera " + (info.indice == null ? "" : info.indice) + " - " +
+        texto = "Câmera " + (info.indice == null ? "" : info.indice) + " - " +
           (info.largura || "?") + "x" + (info.altura || "?");
         if (info.fps_real) texto += " - " + Number(info.fps_real).toFixed(0) + " fps";
-      } else texto = "Camera desligada";
+      } else texto = "Câmera desligada";
       setTexto(chip, texto);
       chip.classList.toggle("chip-ligada", ativa && !info.erro);
       chip.classList.toggle("chip-desligada", !ativa || !!info.erro);
@@ -511,9 +507,9 @@
       btn.setAttribute("aria-pressed", ativa ? "true" : "false");
       btn.classList.toggle("ligado", ativa);
       var rotulo = btn.querySelector(".btn-rotulo");
-      if (rotulo) setTexto(rotulo, ativa ? "Parar camera" : "Ligar camera");
-      else if (!btn.querySelector("svg")) setTexto(btn, ativa ? "Parar camera" : "Ligar camera");
-      btn.setAttribute("aria-label", ativa ? "Parar a camera" : "Ligar a camera");
+      if (rotulo) setTexto(rotulo, ativa ? "Parar câmera" : "Ligar câmera");
+      else if (!btn.querySelector("svg")) setTexto(btn, ativa ? "Parar câmera" : "Ligar câmera");
+      btn.setAttribute("aria-label", ativa ? "Parar a câmera" : "Ligar a câmera");
     }
 
     mostrar($("video-pill"), ativa);
@@ -532,7 +528,7 @@
       .then(function (d) {
         habilitar(btn, true);
         if (d && d.ok === false) {
-          var msg = (d.camera && d.camera.erro) || d.erro || "Nao foi possivel abrir a camera.";
+          var msg = (d.camera && d.camera.erro) || d.erro || "Não foi possível abrir a câmera.";
           toast(msg, "erro");
           atualizarChipCamera((d && d.camera) || { ativa: false });
           return;
@@ -544,11 +540,11 @@
           img.hidden = false;
         }
         atualizarChipCamera((d && d.camera) || { ativa: true });
-        toast("Camera ligada.", "ok");
+        toast("Câmera ligada.", "ok");
       })
       .catch(function (e) {
         habilitar(btn, true);
-        toast("Falha ao ligar a camera: " + e.message, "erro");
+        toast("Não consegui ligar a câmera: " + e.message, "erro");
       });
   }
 
@@ -565,12 +561,12 @@
       .then(function () {
         habilitar(btn, true);
         atualizarChipCamera({ ativa: false });
-        toast("Camera desligada.", "info");
+        toast("Câmera desligada.", "info");
       })
       .catch(function (e) {
         habilitar(btn, true);
         atualizarChipCamera({ ativa: false });
-        toast("Falha ao desligar a camera: " + e.message, "erro");
+        toast("Não consegui desligar a câmera: " + e.message, "erro");
       });
   }
 
@@ -590,7 +586,7 @@
       .catch(function (e) {
         var chk = $("toggle-gradcam");
         if (chk) chk.checked = App.gradcamLigado; // desfaz visualmente
-        toast("Nao foi possivel mudar o mapa de calor: " + e.message, "erro");
+        toast("Não consegui mudar a opção: " + e.message, "erro");
       });
   }
 
@@ -602,7 +598,7 @@
   function capturarQuadro() {
     var img = $("video-ao-vivo");
     if (!App.cameraAtiva || !img || !img.naturalWidth) {
-      toast("Ligue a camera antes de capturar.", "aviso");
+      toast("Ligue a câmera antes de analisar.", "aviso");
       return;
     }
     var btn = $("btn-capturar");
@@ -612,7 +608,7 @@
     try {
       canvas.getContext("2d").drawImage(img, 0, 0);
     } catch (e) {
-      toast("Nao foi possivel capturar o quadro.", "erro");
+      toast("Não consegui capturar a imagem.", "erro");
       return;
     }
     botaoCarregando(btn, true, "Capturando...");
@@ -726,8 +722,10 @@
     var novoId = ev && ev.id ? ev.id : null;
     if (novoId !== App.ultimoEventoId) {
       App.ultimoEventoId = novoId;
+      App.ultimoEvento = ev;
       habilitar($("btn-diagnostico"), !!novoId);
-      habilitar($("btn-segunda-opiniao"), !!novoId);
+      habilitar($("btn-conferir-ultimo"), !!novoId);
+      if (novoId) atualizarPendentes();
       if (novoId) {
         // Evento novo: limpa o painel para nao misturar com a analise anterior.
         mostrar($("painel-ia"), false);
@@ -751,20 +749,20 @@
     var titulo, sub;
     if (estado === "aquecendo" && !App.cameraAtiva) {
       titulo = "Câmera desligada";
-      sub = "Toque em Fotografar ou Enviar foto para inspecionar uma peça.";
+      sub = "Toque em Ligar câmera, ou use Fotografar acima.";
     } else if (estado === "aquecendo") {
       titulo = "Lendo a costura";
       sub = "Mantenha a peça parada por um instante...";
     } else if (estado === "ok") {
       titulo = "Costura aprovada";
-      sub = "Pontos uniformes - " + formatarPercentual(veredito.confianca) + " de confianca";
+      sub = "Pontos uniformes - " + formatarPercentual(veredito.confianca) + " de certeza";
     } else if (estado === "falha") {
       titulo = veredito.nome || nomeDaClasse(veredito.classe_key);
-      sub = "Falha detectada - " + formatarPercentual(veredito.confianca) + " de confianca";
+      sub = "Defeito encontrado - " + formatarPercentual(veredito.confianca) + " de certeza";
     } else {
       titulo = "Leitura incerta";
       sub = (veredito.nome ? veredito.nome + " - " : "") +
-        formatarPercentual(veredito.confianca) + " - vale uma segunda opiniao";
+        formatarPercentual(veredito.confianca) + " de certeza - confira a peça";
     }
 
     setTexto($("veredito-titulo"), titulo);
@@ -775,9 +773,8 @@
     aplicarAnel(numero(conf, 0));
     setTexto($("anel-valor"), conf == null ? "--" : formatarPercentual(conf));
 
-    // A segunda opiniao so faz sentido quando a rede ficou insegura; mesmo assim
-    // o botao continua clicavel, apenas destacado.
-    var btnLlm = $("btn-segunda-opiniao");
+    // Leitura insegura: destaca o "Por que?", que já inclui a segunda opinião.
+    var btnLlm = $("btn-diagnostico");
     if (btnLlm) btnLlm.classList.toggle("destaque", !!veredito.pede_llm);
   }
 
@@ -874,7 +871,7 @@
       segmentos[j].classList.toggle("cheio", j < cheios);
     }
     barra.setAttribute("aria-valuenow", Math.round(progresso * 100));
-    barra.setAttribute("aria-label", "Progresso da meta: " + numero(s.total, 0) + " de " + meta + " pecas");
+    barra.setAttribute("aria-label", "Progresso da meta: " + numero(s.total, 0) + " de " + meta + " peças");
   }
 
   function renderChama(sequencia) {
@@ -895,7 +892,7 @@
       el.classList.add("nivel-" + nivel);
       el.classList.toggle("acesa", nivel > 0);
     }
-    el.setAttribute("aria-label", "Sequencia de " + sequencia + " pecas aprovadas");
+    el.setAttribute("aria-label", "Sequencia de " + sequencia + " peças aprovadas");
   }
 
   /* =======================================================================
@@ -906,7 +903,7 @@
     var eLlm = fonte === "llm";
     return '<span class="selo-fonte ' + (eLlm ? "selo-llm" : "selo-local") + '">' +
       '<span class="selo-icone" aria-hidden="true">' + (eLlm ? ICONES.ia : ICONES.livro) + "</span>" +
-      esc(eLlm ? "IA generativa" : "base tecnica local") +
+      esc(eLlm ? "IA generativa" : "base técnica local") +
       (eLlm && modelo ? ' <span class="selo-modelo">' + esc(modelo) + "</span>" : "") +
       "</span>";
   }
@@ -927,7 +924,7 @@
       seloFonte(diag.fonte, diag.modelo) +
       "</header>";
     if (diag.resumo) html += '<p class="ia-resumo">' + esc(diag.resumo) + "</p>";
-    html += listaHTML("Causas provaveis", diag.causas, "ia-causas");
+    html += listaHTML("Causas prováveis", diag.causas, "ia-causas");
     html += listaHTML("O que fazer agora", diag.acoes, "ia-acoes");
     html += listaHTML("Como prevenir", diag.prevencao, "ia-prevencao");
     if (diag.ms) html += '<p class="ia-rodape">Resposta em ' + esc(Math.round(diag.ms)) + " ms</p>";
@@ -939,13 +936,13 @@
     if (!rev) return "";
     var concorda = rev.concorda;
     var rotulo, classeSelo;
-    if (concorda === true) { rotulo = "A IA de visao concordou"; classeSelo = "selo-ok"; }
-    else if (concorda === false) { rotulo = "A IA de visao discordou"; classeSelo = "selo-nao"; }
-    else { rotulo = "Sem veredito da IA de visao"; classeSelo = "selo-neutro"; }
+    if (concorda === true) { rotulo = "A segunda opinião concordou"; classeSelo = "selo-ok"; }
+    else if (concorda === false) { rotulo = "A segunda opinião discordou"; classeSelo = "selo-nao"; }
+    else { rotulo = "Sem resposta da segunda opinião"; classeSelo = "selo-neutro"; }
 
     var html = '<article class="ia-card ia-revisao">' +
       '<header class="ia-cabecalho">' +
-      '<h3 class="ia-titulo">Segunda opiniao</h3>' +
+      '<h3 class="ia-titulo">Segunda opinião</h3>' +
       '<span class="selo-fonte ' + classeSelo + '">' + esc(rotulo) + "</span>" +
       "</header>";
 
@@ -969,10 +966,10 @@
   function pedirDiagnostico() {
     var id = App.ultimoEventoId;
     var btn = $("btn-diagnostico");
-    if (!id) { toast("Nenhum evento registrado ainda.", "aviso"); return; }
-    botaoCarregando(btn, true, "Diagnosticando...");
+    if (!id) { toast("Nenhuma peça registrada ainda.", "aviso"); return; }
+    botaoCarregando(btn, true, "Buscando explicação...");
     mostrar($("painel-ia"), true);
-    setHTML($("ia-conteudo"), '<p class="ia-carregando">Consultando a base tecnica...</p>', "ia-conteudo");
+    setHTML($("ia-conteudo"), '<p class="ia-carregando">Buscando causas e soluções...</p>', "ia-conteudo");
     postJSON("/api/eventos/" + encodeURIComponent(id) + "/diagnostico", {}, { timeout: 60000 })
       .then(function (d) {
         botaoCarregando(btn, false);
@@ -982,71 +979,64 @@
           return;
         }
         setHTML($("ia-conteudo"), htmlDiagnostico(d && d.diagnostico), "ia-conteudo");
+        // Leitura incerta: pede também a segunda opinião, sem outro clique.
+        var ultimo = App.ultimoEvento;
+        if (ultimo && ultimo.id === id && ultimo.precisa_revisao && !ultimo.revisao_humana) pedirSegundaOpiniao(true);
       })
       .catch(function (e) {
         botaoCarregando(btn, false);
         setHTML($("ia-conteudo"), '<p class="ia-erro">' + esc(e.message) + "</p>", "ia-conteudo");
-        toast("Diagnostico falhou: " + e.message, "erro");
+        toast("Não consegui buscar a explicação: " + e.message, "erro");
       });
   }
 
-  function pedirSegundaOpiniao() {
+  function pedirSegundaOpiniao(anexar) {
     var id = App.ultimoEventoId;
-    var btn = $("btn-segunda-opiniao");
-    if (!id) { toast("Nenhum evento registrado ainda.", "aviso"); return; }
-    botaoCarregando(btn, true, "Revisando...");
+    var btn = $("btn-diagnostico");
+    if (!id) return;
+    var antes = anexar ? (($("ia-conteudo") || {}).innerHTML || "") : "";
+    botaoCarregando(btn, true, "Pedindo segunda opinião...");
     mostrar($("painel-ia"), true);
-    setHTML($("ia-conteudo"), '<p class="ia-carregando">Enviando a imagem para o modelo de visao...</p>', "ia-conteudo");
+    setHTML($("ia-conteudo"), antes + '<p class="ia-carregando">Pedindo uma segunda opinião...</p>', "ia-conteudo");
     postJSON("/api/eventos/" + encodeURIComponent(id) + "/revisao", {}, { timeout: 90000 })
       .then(function (d) {
         botaoCarregando(btn, false);
         if (d && d.erro && !d.revisao) {
-          setHTML($("ia-conteudo"), '<p class="ia-erro">' + esc(d.erro) + "</p>", "ia-conteudo");
-          toast(d.erro, "erro");
+          setHTML($("ia-conteudo"), antes + '<p class="ia-erro">' + esc(d.erro) + "</p>", "ia-conteudo");
           return;
         }
-        setHTML($("ia-conteudo"), htmlRevisao(d && d.revisao), "ia-conteudo");
+        setHTML($("ia-conteudo"), antes + htmlRevisao(d && d.revisao), "ia-conteudo");
       })
       .catch(function (e) {
         botaoCarregando(btn, false);
-        setHTML($("ia-conteudo"), '<p class="ia-erro">' + esc(e.message) + "</p>", "ia-conteudo");
-        toast("Segunda opiniao falhou: " + e.message, "erro");
+        setHTML($("ia-conteudo"), antes + '<p class="ia-erro">' + esc(e.message) + "</p>", "ia-conteudo");
       });
   }
 
   /* =======================================================================
-   * 09. PAGINA TESTAR
+   * 09. CAPTURA POR FOTO E CONFERENCIA HUMANA
    * ===================================================================== */
 
-  window.addEventListener('inspecao-conferida',function(e){
-    if(App.analiseAtual){App.analiseAtual.evento=e.detail;}
-  });
+  var NOMES_ORIGEM = { upload: "Foto enviada", camera_aparelho: "Foto do celular", camera_servidor: "Câmera ao vivo", ao_vivo: "Câmera ao vivo" };
+
   window.analisarArquivoInspecao = tratarArquivoEscolhido;
-  function tratarArquivoEscolhido(arquivo) {
+  function tratarArquivoEscolhido(arquivo, origem) {
     if (!arquivo) return;
     if (!/^image\//.test(arquivo.type)) {
       toast("Escolha um arquivo de imagem (JPG ou PNG).", "aviso");
       return;
     }
-    // Preview local imediato: o operador ve a foto antes de a rede responder.
-    var preview = $("preview-teste");
-    if (preview) {
-      var url = URL.createObjectURL(arquivo);
-      if (preview.dataset.blobUrl) URL.revokeObjectURL(preview.dataset.blobUrl);
-      preview.dataset.blobUrl = url;
-      preview.src = url;
-      preview.hidden = false;
-    }
-    mostrar($("teste-vazio"), false);
-    enviarParaAnalise(arquivo);
+    enviarParaAnalise(arquivo, origem || "upload").catch(function () {});
   }
 
   function enviarParaAnalise(arquivo, origem) {
     var resultado = $("resultado-teste");
-    mostrar(resultado, false);
+    mostrar(resultado, true);
     setHTML($("teste-ia"), "", "teste-ia");
-    setTexto($("teste-classe"), "Analisando...");
+    setHTML($("conferencia-upload"), "", "conferencia-upload");
+    setTexto($("teste-classe"), "Analisando a costura...");
     setTexto($("teste-confianca"), "");
+    if (resultado) resultado.classList.remove("resultado-ok", "resultado-falha");
 
     var fd = new FormData();
     fd.append("arquivo", arquivo, arquivo.name || "imagem.jpg");
@@ -1055,37 +1045,54 @@
     return fetchJSON("/api/analisar", { method: "POST", body: fd, timeout: 60000 })
       .then(function (d) {
         if (d && d.erro) {
-          toast(d.erro, "erro");
-          setTexto($("teste-classe"), "Falhou");
+          setTexto($("teste-classe"), "Não foi possível analisar");
+          setTexto($("teste-confianca"), d.erro);
           throw new Error(d.erro);
         }
         App.analiseAtual = d || {};
-        window.dispatchEvent(new CustomEvent("inspecao-analisada",{detail:d}));
         renderResultadoTeste(App.analiseAtual);
-        // Leva a pessoa direto ao resultado, que fica abaixo da captura.
-        var alvo = $("resultado-teste");
-        if (alvo && alvo.scrollIntoView) alvo.scrollIntoView({ behavior: "smooth", block: "start" });
+        atualizarPendentes();
+        // Leva a pessoa direto ao resultado.
+        if (resultado && resultado.scrollIntoView) resultado.scrollIntoView({ behavior: "smooth", block: "start" });
         return App.analiseAtual;
       })
       .catch(function (e) {
-        setTexto($("teste-classe"), "Falhou");
-        toast("Analise falhou: " + e.message, "erro");
+        setTexto($("teste-classe"), "Não foi possível analisar");
+        toast(e.message, "erro");
         throw e;
       });
   }
 
+  function mostrarMidiaResultado(mapa) {
+    var d = App.analiseAtual || {};
+    var img = $("peca-analisada");
+    if (img) img.src = (mapa && d.heatmap) ? d.heatmap : (d.imagem || PIXEL_VAZIO);
+    [["ver-foto", !mapa], ["ver-mapa", !!mapa]].forEach(function (par) {
+      var b = $(par[0]);
+      if (!b) return;
+      b.classList.toggle("ativo", par[1]);
+      b.setAttribute("aria-pressed", par[1] ? "true" : "false");
+    });
+  }
+
   function renderResultadoTeste(d) {
     var p = d.predicao || {};
-    if ($("peca-analisada")) $("peca-analisada").src = d.imagem || "";
+    var ev = d.evento || {};
+    // A predição nem sempre traz e_falha; o evento sempre traz.
+    if (p.e_falha == null) p.e_falha = ev.e_falha != null ? !!ev.e_falha : p.classe_key !== "normal";
     mostrar($("resultado-teste"), true);
+    mostrarMidiaResultado(false);
+    habilitar($("ver-mapa"), !!d.heatmap);
 
-    setTexto($("teste-classe"), p.nome || nomeDaClasse(p.classe_key));
-    setTexto($("teste-confianca"), formatarPercentual(p.confianca, 1) + " de confianca" +
-      (p.ms ? " - " + Math.round(p.ms) + " ms" : ""));
+    var incerta = !p.e_falha && !!ev.precisa_revisao;
+    setTexto($("teste-classe"), p.e_falha ? (p.nome || nomeDaClasse(p.classe_key))
+      : (incerta ? "Leitura incerta: parece normal" : "Costura aprovada"));
+    setTexto($("teste-confianca"), formatarPercentual(p.confianca, 0) + " de certeza" + (incerta ? ". Confira a peça abaixo." : ""));
 
     var caixa = $("resultado-teste");
     if (caixa) {
-      caixa.classList.toggle("resultado-ok", p.e_falha === false);
+      caixa.classList.toggle("resultado-ok", p.e_falha === false && !incerta);
+      caixa.classList.toggle("resultado-incerto", incerta);
       caixa.classList.toggle("resultado-falha", p.e_falha === true);
       caixa.setAttribute("data-gravidade", p.gravidade || "");
     }
@@ -1093,128 +1100,188 @@
     var topo = $("teste-top");
     if (topo) {
       var itens = Array.isArray(p.top) ? p.top : [];
-      var html = itens.map(function (item) {
+      setHTML(topo, itens.map(function (item) {
         var pct = limitar(numero(item.prob, 0) * 100, 0, 100);
         return '<li class="barra-item" data-classe="' + esc(item.key) + '">' +
           '<div class="barra-linha">' +
           '<span class="barra-nome">' + esc(item.nome || nomeDaClasse(item.key)) + "</span>" +
-          '<span class="barra-valor">' + esc(formatarPercentual(item.prob, 1)) + "</span>" +
+          '<span class="barra-valor">' + esc(formatarPercentual(item.prob, 0)) + "</span>" +
           "</div>" +
           '<div class="barra-trilho"><div class="barra-preenche" style="width:' +
           pct.toFixed(1) + '%"></div></div>' +
           "</li>";
-      }).join("");
-      setHTML(topo, html, "teste-top");
+      }).join(""), "teste-top");
     }
 
-    var heat = $("teste-heatmap");
-    if (heat) {
-      if (d.heatmap) { heat.src = d.heatmap; heat.hidden = false; }
-      else { heat.src = PIXEL_VAZIO; heat.hidden = true; }
-    }
-
-    // Se a API tambem devolveu a imagem processada, usamos ela no preview
-    // (ja vem no tamanho que a rede enxergou).
-    var preview = $("preview-teste");
-    if (preview && d.imagem) {
-      preview.src = d.imagem;
-      preview.hidden = false;
-    }
+    montarConferencia($("conferencia-upload"), ev, function (salvo) {
+      App.analiseAtual.evento = salvo;
+      setTexto($("teste-classe"), salvo.e_falha ? salvo.nome_final : "Costura aprovada");
+      var c = $("resultado-teste");
+      if (c) {
+        c.classList.remove("resultado-incerto");
+        c.classList.toggle("resultado-ok", !salvo.e_falha);
+        c.classList.toggle("resultado-falha", !!salvo.e_falha);
+      }
+      setTexto($("teste-confianca"), "Conferido por você. Sugestão da IA: " + (p.nome || nomeDaClasse(p.classe_key)));
+    });
 
     habilitar($("btn-teste-diagnostico"), true);
+    // Com defeito, a explicação e a solução já aparecem sem precisar pedir.
+    if (p.e_falha) diagnosticoDoTeste();
   }
 
   /**
-   * Diagnostico da classe prevista na aba Testar.
-   * A rota oficial e por evento; quando a analise avulsa nao gera evento,
-   * avisamos
-   * sem quebrar a interface.
+   * Bloco único de conferência, usado no resultado da foto e no detalhe da peça.
+   * A classe sugerida pela IA vem marcada; trocar a classe registra "corrigida".
    */
+  function montarConferencia(host, ev, aoSalvar) {
+    if (!host || !ev || !ev.id) { setHTML(host, "", host && host.id); return; }
+    var escolhida = ev.classe_final || ev.classe_key;
+    var feita = !!ev.revisao_humana;
+    var titulo = feita ? "Conferida" : (ev.precisa_revisao ? "Confira o resultado" : "Aprovada automaticamente");
+    var dica = feita
+      ? "Você pode trocar a classe se precisar."
+      : (ev.precisa_revisao
+        ? "Toque na classe certa e salve. A sugestão da IA já vem marcada."
+        : "A IA teve certeza. Só mexa se a classe estiver errada.");
+
+    var botoes = App.classes.map(function (c) {
+      var ativo = c.key === escolhida;
+      return '<button type="button" class="chip chip-botao classe-opcao' + (ativo ? " ativo" : "") +
+        (c.key === ev.classe_key ? " sugerida" : "") + '" data-classe="' + esc(c.key) +
+        '" aria-pressed="' + (ativo ? "true" : "false") + '">' + esc(c.nome) +
+        (c.key === ev.classe_key ? ' <small>(IA)</small>' : "") + "</button>";
+    }).join("");
+
+    var aberta = !feita && ev.precisa_revisao;
+    host.innerHTML =
+      '<details class="conferencia-caixa' + (feita ? " feita" : "") + (ev.precisa_revisao && !feita ? " pendente" : "") + '"' + (aberta ? " open" : "") + ">" +
+      '<summary><strong>' + esc(titulo) + "</strong></summary>" +
+      '<p class="card-texto">' + esc(dica) + "</p>" +
+      '<div class="classe-opcoes" role="group" aria-label="Classe correta">' + botoes + "</div>" +
+      '<label class="campo"><span class="campo-rotulo">Observação (opcional)</span>' +
+      '<input class="entrada conferencia-obs" maxlength="1000" value="' + esc((ev.revisao_humana && ev.revisao_humana.observacao) || "") + '"></label>' +
+      '<button type="button" class="btn btn-principal conferencia-salvar">Salvar conferência</button>' +
+      "</details>";
+    if (host.id) App.cache[host.id] = null;
+
+    host.querySelectorAll(".classe-opcao").forEach(function (b) {
+      b.addEventListener("click", function () {
+        escolhida = b.getAttribute("data-classe");
+        host.querySelectorAll(".classe-opcao").forEach(function (x) {
+          var on = x === b;
+          x.classList.toggle("ativo", on);
+          x.setAttribute("aria-pressed", on ? "true" : "false");
+        });
+      });
+    });
+    var salvar = host.querySelector(".conferencia-salvar");
+    salvar.addEventListener("click", function () {
+      botaoCarregando(salvar, true, "Salvando...");
+      postJSON("/api/eventos/" + encodeURIComponent(ev.id) + "/conferencia",
+        { classe: escolhida, observacao: host.querySelector(".conferencia-obs").value })
+        .then(function (d) {
+          botaoCarregando(salvar, false);
+          if (d && d.erro) { toast(d.erro, "erro"); return; }
+          Object.assign(ev, d.evento || {});
+          toast(ev.revisao_humana && ev.revisao_humana.decisao === "corrigida"
+            ? "Correção salva. Ela ajuda a treinar a IA." : "Conferência salva.", "ok");
+          atualizarPendentes();
+          montarConferencia(host, ev, aoSalvar);
+          if (aoSalvar) aoSalvar(ev);
+        })
+        .catch(function (e) {
+          botaoCarregando(salvar, false);
+          toast("Não consegui salvar: " + e.message, "erro");
+        });
+    });
+  }
+
   function diagnosticoDoTeste() {
     var d = App.analiseAtual;
     var btn = $("btn-teste-diagnostico");
-    if (!d || !d.predicao) { toast("Analise uma imagem primeiro.", "aviso"); return; }
-    var p = d.predicao;
-    var eventoId = d.evento_id || (d.evento && d.evento.id) || null;
+    var eventoId = d && (d.evento_id || (d.evento && d.evento.id));
+    if (!eventoId) { toast("Analise uma foto primeiro.", "aviso"); return; }
 
-    botaoCarregando(btn, true, "Diagnosticando...");
-    setHTML($("teste-ia"), '<p class="ia-carregando">Consultando a base tecnica...</p>', "teste-ia");
-
-    if (!eventoId) { toast("Analise uma imagem primeiro.", "aviso"); return; }
-    var pedido = postJSON("/api/eventos/" + encodeURIComponent(eventoId) + "/diagnostico", {}, { timeout: 60000 });
-
-    pedido
+    botaoCarregando(btn, true, "Buscando explicação...");
+    setHTML($("teste-ia"), '<p class="ia-carregando">Buscando causas e soluções...</p>', "teste-ia");
+    postJSON("/api/eventos/" + encodeURIComponent(eventoId) + "/diagnostico", {}, { timeout: 60000 })
       .then(function (r) {
         botaoCarregando(btn, false);
         var diag = (r && r.diagnostico) || r;
         if (!diag || diag.erro) {
-          var msg = (diag && diag.erro) || "Diagnostico indisponivel.";
-          setHTML($("teste-ia"), '<p class="ia-erro">' + esc(msg) + "</p>", "teste-ia");
+          setHTML($("teste-ia"), '<p class="ia-erro">' + esc((diag && diag.erro) || "Explicação indisponível.") + "</p>", "teste-ia");
           return;
         }
         setHTML($("teste-ia"), htmlDiagnostico(diag), "teste-ia");
       })
       .catch(function (e) {
         botaoCarregando(btn, false);
-        var aviso = e.message;
-        setHTML($("teste-ia"), '<p class="ia-erro">' + esc(aviso) + "</p>", "teste-ia");
-        toast(aviso, "aviso");
+        setHTML($("teste-ia"), '<p class="ia-erro">' + esc(e.message) + "</p>", "teste-ia");
       });
   }
 
   /* =======================================================================
-   * 10. PAGINA HISTORICO
+   * 10. PAGINA HISTORICO E DETALHE DA PECA
    * ===================================================================== */
 
-  var historico = { eventos: [], filtro: null, porId: {} };
+  var historico = { eventos: [], filtro: null, modo: "todas", porId: {} };
+
+  function hojeISO() {
+    var d = new Date();
+    function dois(x) { return x < 10 ? "0" + x : String(x); }
+    return d.getFullYear() + "-" + dois(d.getMonth() + 1) + "-" + dois(d.getDate());
+  }
 
   function carregarHistorico() {
     var params = "?limite=500";
-    if ($("historico-dia") && $("historico-dia").value) params += "&dia="+encodeURIComponent($("historico-dia").value);
-    if ($("historico-defeitos") && $("historico-defeitos").checked) params += "&defeitos=true";
+    if ($("historico-dia") && $("historico-dia").value) params += "&dia=" + encodeURIComponent($("historico-dia").value);
+    if (historico.modo === "defeitos") params += "&defeitos=true";
+    if (historico.modo === "pendentes") params += "&pendentes=true";
     if (historico.filtro) params += "&classe=" + encodeURIComponent(historico.filtro);
     return fetchJSON("/api/eventos" + params)
       .then(function (d) {
         historico.eventos = (d && d.eventos) || [];
         historico.porId = {};
         historico.eventos.forEach(function (ev) { if (ev && ev.id) historico.porId[ev.id] = ev; });
-        renderStories(historico.eventos, (d && d.estatisticas) || {});
+        renderStories(historico.eventos);
         renderGrade(historico.eventos);
       })
       .catch(function (e) {
-        toast("Nao consegui carregar o historico: " + e.message, "erro");
+        toast("Não consegui carregar o histórico: " + e.message, "erro");
       });
   }
 
-  function renderStories(eventos, stats) {
+  /** Conta as peças aguardando conferência (todos os dias) e mostra nos menus. */
+  function atualizarPendentes() {
+    return fetchJSON("/api/eventos?limite=500&pendentes=true")
+      .then(function (d) {
+        var n = ((d && d.eventos) || []).length;
+        document.querySelectorAll("[data-badge-pendentes]").forEach(function (el) {
+          el.textContent = n >= 500 ? "500+" : String(n);
+          el.hidden = n === 0;
+        });
+      })
+      .catch(function () {});
+  }
+
+  function renderStories(eventos) {
     var caixa = $("stories");
     if (!caixa) return;
-
-    // Contagem por classe: prefere a estatistica do servidor, mas cai para a
-    // contagem local quando o filtro esta ativo (a lista vem filtrada).
     var contagem = {};
     var capa = {};
     eventos.forEach(function (ev) {
       if (!ev || !ev.classe_key) return;
-      var key=ev.classe_final||ev.classe_key;
+      var key = ev.classe_final || ev.classe_key;
       contagem[key] = (contagem[key] || 0) + 1;
       if (!capa[key] && ev.imagem) capa[key] = ev.imagem;
     });
-    var porClasse = (stats && stats.por_classe) || null;
-    // O contador acompanha exatamente a data e os filtros da lista visível.
-
-    var total = 0;
-    Object.keys(contagem).forEach(function (k) { total += numero(contagem[k], 0); });
-
-    var partes = [];
-    partes.push(storyHTML("tudo", "Tudo", total, eventos.length ? eventos[0].imagem : null, historico.filtro === null));
-
+    var partes = [storyHTML("tudo", "Todos os tipos", eventos.length, eventos.length ? eventos[0].imagem : null, historico.filtro === null)];
     App.classes.forEach(function (c) {
       var n = numero(contagem[c.key], 0);
-      if (!n && historico.filtro !== c.key) return; // so mostra classes com ocorrencia
+      if (!n && historico.filtro !== c.key) return; // só mostra tipos que apareceram
       partes.push(storyHTML(c.key, c.nome, n, capa[c.key], historico.filtro === c.key));
     });
-
     setHTML(caixa, partes.join(""), "stories");
   }
 
@@ -1229,6 +1296,11 @@
       "</button>";
   }
 
+  function situacaoConferencia(ev) {
+    if (ev.revisao_humana) return "Conferida";
+    return ev.precisa_revisao ? "Aguardando conferência" : "Aprovada automaticamente";
+  }
+
   function renderGrade(eventos) {
     var grade = $("grade-historico");
     if (!grade) return;
@@ -1241,13 +1313,15 @@
 
     var html = eventos.map(function (ev) {
       var nome = ev.nome_final || ev.nome || nomeDaClasse(ev.classe_key);
-      var corrigido = ev.rotulo_operador ? " corrigido" : "";
+      var pendente = ev.precisa_revisao ? " pendente" : "";
       var semFoto = ev.imagem ? "" : " sem-foto";
-      return '<button type="button" class="celula' + corrigido + semFoto + '" data-id="' + esc(ev.id) +
+      return '<button type="button" class="celula' + pendente + semFoto + '" data-id="' + esc(ev.id) +
         '" data-gravidade="' + esc(ev.gravidade || "") + '" aria-label="' +
         esc(nome + " às " + (ev.hora || formatarHora(ev.timestamp))) + '">' +
         '<img src="' + esc(ev.imagem || PIXEL_VAZIO) + '" alt="" loading="lazy">' +
-        '<span class="selo">' + esc(nome) + "</span>" + '<span class="historico-meta">'+esc((ev.data||'')+' · '+(ev.hora||'')+' · '+(ev.origem==='upload'?'Arquivo':'Câmera'))+'</span><span class="historico-revisao">'+(ev.revisao_humana?'Conferência salva':'Aguardando revisão')+'</span>' +
+        '<span class="selo">' + esc(nome) + "</span>" +
+        '<span class="historico-meta">' + esc((ev.hora || "") + " · " + (NOMES_ORIGEM[ev.origem] || "Câmera ao vivo")) + "</span>" +
+        '<span class="historico-revisao">' + esc(situacaoConferencia(ev)) + "</span>" +
         "</button>";
     }).join("");
     setHTML(grade, html, "grade-historico");
@@ -1258,47 +1332,42 @@
     carregarHistorico();
   }
 
-  function popularSelectRotulo() {
-    var sel = $("modal-select-rotulo");
-    if (!sel || !App.classes.length) return;
-    sel.innerHTML = "";
-    App.classes.forEach(function (c) {
-      var opt = criar("option", null, c.nome);
-      opt.value = c.key;
-      sel.appendChild(opt);
+  function mudarModoHistorico(modo) {
+    historico.modo = modo;
+    document.querySelectorAll("[data-filtro-historico]").forEach(function (b) {
+      var on = b.getAttribute("data-filtro-historico") === modo;
+      b.classList.toggle("ativo", on);
+      b.setAttribute("aria-pressed", on ? "true" : "false");
     });
+    carregarHistorico();
   }
 
   function abrirModal(id) {
     var ev = historico.porId[id];
+    if (ev) abrirModalEvento(ev);
+  }
+
+  function abrirModalEvento(ev) {
     if (!ev) return;
     App.eventoAberto = ev;
 
     var img = $("modal-img");
-    if (img) { img.src = ev.imagem || PIXEL_VAZIO; img.alt = esc(ev.nome || ""); }
+    if (img) { img.src = ev.imagem || PIXEL_VAZIO; img.alt = ev.nome_final || ev.nome || ""; }
     atualizarFotoDoModal(ev);
 
-    var heat = $("modal-heatmap");
-    if (heat) {
-      var url = ev.heatmap || ev.imagem_heatmap || ev.mapa || null;
-      if (url) { heat.src = url; heat.hidden = false; }
-      else { heat.src = PIXEL_VAZIO; heat.hidden = true; }
-    }
-
     setTexto($("modal-classe"), ev.nome_final || ev.nome || nomeDaClasse(ev.classe_key));
-    setTexto($("modal-confianca"), formatarPercentual(ev.confianca, 1));
-    setTexto($("modal-hora"), ev.hora || formatarHora(ev.timestamp));
-    setTexto($("modal-tecido"), ev.tecido || "Tecido nao informado");
-    setTexto($("modal-lote"), ev.lote_codigo ? "Lote " + ev.lote_codigo : "Sem lote (so local)");
+    setTexto($("modal-confianca"), formatarPercentual(ev.confianca, 0) + " de certeza");
+    setTexto($("modal-hora"), (ev.data ? ev.data.split("-").reverse().join("/") + " " : "") + (ev.hora || formatarHora(ev.timestamp)));
+    setTexto($("modal-lote"), ev.lote_codigo ? "Lote " + ev.lote_codigo : "Sem lote");
 
-    var sel = $("modal-select-rotulo");
-    if (sel) sel.value = ev.rotulo_operador || ev.classe_key || "";
+    montarConferencia($("modal-conferencia"), ev, function (salvo) {
+      setTexto($("modal-classe"), salvo.nome_final);
+      if (historico.porId[salvo.id]) Object.assign(historico.porId[salvo.id], salvo);
+      if (App.pagina === "historico") carregarHistorico();
+    });
 
     var diag = $("modal-diagnostico");
-    if (diag) {
-      if (ev.diagnostico) setHTML(diag, htmlDiagnostico(ev.diagnostico), "modal-diagnostico");
-      else setHTML(diag, '<p class="ia-vazio">Sem diagnostico ainda. Peca um para esta peca.</p>', "modal-diagnostico");
-    }
+    if (diag) setHTML(diag, ev.diagnostico ? htmlDiagnostico(ev.diagnostico) : "", "modal-diagnostico");
 
     var modal = $("modal-evento");
     if (modal) {
@@ -1319,34 +1388,7 @@
     App.eventoAberto = null;
   }
 
-  /**
-   * Correcao de rotulo pelo operador.
-   * Cada correcao vira uma linha em artifacts/correcoes_operador.csv, que e
-   * exatamente o insumo do proximo ciclo de re-treino: o operador no chao de
-   * fabrica esta rotulando dado novo sem sair da tela de inspecao.
-   */
-  function enviarRotulo(chave, botao) {
-    var ev = App.eventoAberto;
-    if (!ev) return;
-    if (!chave) { toast("Escolha uma classe.", "aviso"); return; }
-    botaoCarregando(botao, true, "Salvando...");
-    postJSON("/api/eventos/" + encodeURIComponent(ev.id) + "/conferencia", { classe: chave, decisao: botao.id === "btn-modal-confirmar" ? "confirmada" : "corrigida", observacao: "Revisão humana no histórico" })
-      .then(function (d) {
-        botaoCarregando(botao, false);
-        if (d && d.erro) { toast(d.erro, "erro"); return; }
-        ev.rotulo_operador = chave;
-        if(d.evento){Object.assign(ev,d.evento);}
-        toast("Conferência salva. A sugestão original permanece registrada.", "ok");
-        carregarHistorico();
-        fecharModal();
-      })
-      .catch(function (e) {
-        botaoCarregando(botao, false);
-        toast("Nao consegui salvar o rotulo: " + e.message, "erro");
-      });
-  }
-
-  /** Mostra/esconde o botao "Apagar foto" e o aviso "Foto apagada" no modal. */
+  /** Mostra/esconde o botão "Apagar foto" e o aviso "Foto apagada" no detalhe. */
   function atualizarFotoDoModal(ev) {
     var temFoto = !!(ev && ev.imagem);
     var midia = document.querySelector("#modal-evento .modal-midia");
@@ -1357,8 +1399,8 @@
       btn.hidden = !temFoto;
     }
     setTexto($("modal-foto-texto"), temFoto
-      ? "A peca continua no historico; so a imagem e apagada deste computador e do banco."
-      : "A foto desta peca foi apagada. A inspecao continua contando nas estatisticas.");
+      ? "A peça continua no histórico; só a imagem é apagada deste computador e do banco."
+      : "A foto desta peça foi apagada. A inspeção continua contando nos números.");
   }
 
   function desarmarApagarFoto(btn) {
@@ -1372,8 +1414,8 @@
   }
 
   /**
-   * Apagar a foto de um evento. Primeiro clique arma ("Clique de novo para
-   * apagar"), segundo clique em ate 4 s apaga de vez: nao ha como desfazer.
+   * Apagar a foto de um evento. Primeiro clique arma ("Toque de novo para
+   * apagar"), segundo clique em até 4 s apaga de vez: não há como desfazer.
    */
   function apagarFotoDoModal() {
     var ev = App.eventoAberto;
@@ -1383,7 +1425,7 @@
     if (!btn.classList.contains("confirmando")) {
       btn.dataset.rotuloOriginal = btn.innerHTML;
       btn.classList.add("confirmando");
-      btn.innerHTML = "<span>Clique de novo para apagar</span>";
+      btn.innerHTML = "<span>Toque de novo para apagar</span>";
       btn._tempoConfirmar = setTimeout(function () { desarmarApagarFoto(btn); }, 4000);
       return;
     }
@@ -1402,18 +1444,14 @@
         ev.imagem = null;
         if (historico.porId[ev.id]) historico.porId[ev.id].imagem = null;
         var nuvem = (d && d.nuvem) || {};
-        if (nuvem.erro) {
-          toast("Foto apagada deste computador, mas nao do banco: " + nuvem.erro, "aviso");
-        } else {
-          toast("Foto apagada.", "ok");
-        }
+        if (nuvem.erro) toast("Foto apagada deste computador, mas não do banco: " + nuvem.erro, "aviso");
+        else toast("Foto apagada.", "ok");
         atualizarFotoDoModal(ev);
-        renderGrade(historico.eventos);
-        carregarHistorico(); // atualiza as capas dos filtros (stories)
+        if (App.pagina === "historico") carregarHistorico();
       })
       .catch(function (e) {
         botaoCarregando(btn, false);
-        toast("Nao consegui apagar a foto: " + e.message, "erro");
+        toast("Não consegui apagar a foto: " + e.message, "erro");
       });
   }
 
@@ -1421,8 +1459,8 @@
     var ev = App.eventoAberto;
     var btn = $("btn-modal-diagnostico");
     if (!ev) return;
-    botaoCarregando(btn, true, "Diagnosticando...");
-    setHTML($("modal-diagnostico"), '<p class="ia-carregando">Consultando...</p>', "modal-diagnostico");
+    botaoCarregando(btn, true, "Buscando explicação...");
+    setHTML($("modal-diagnostico"), '<p class="ia-carregando">Buscando causas e soluções...</p>', "modal-diagnostico");
     postJSON("/api/eventos/" + encodeURIComponent(ev.id) + "/diagnostico", {}, { timeout: 60000 })
       .then(function (d) {
         botaoCarregando(btn, false);
@@ -1430,9 +1468,8 @@
           setHTML($("modal-diagnostico"), '<p class="ia-erro">' + esc(d.erro) + "</p>", "modal-diagnostico");
           return;
         }
-        var diag = d && d.diagnostico;
-        ev.diagnostico = diag;
-        setHTML($("modal-diagnostico"), htmlDiagnostico(diag), "modal-diagnostico");
+        ev.diagnostico = d && d.diagnostico;
+        setHTML($("modal-diagnostico"), htmlDiagnostico(ev.diagnostico), "modal-diagnostico");
       })
       .catch(function (e) {
         botaoCarregando(btn, false);
@@ -1441,190 +1478,25 @@
   }
 
   /* =======================================================================
-   * 12. PAGINA RELATORIOS
-   * ===================================================================== */
-
-  /** Converte um subconjunto de markdown para HTML - sem biblioteca, tudo escapado. */
-  function renderizarMarkdown(md) {
-    var linhas = String(md || "").replace(/\r\n/g, "\n").split("\n");
-    var saida = [];
-    var lista = null;      // "ul" | "ol" | null
-    var emCodigo = false;
-    var tabela = [];
-
-    function fecharLista() { if (lista) { saida.push("</" + lista + ">"); lista = null; } }
-    function fecharTabela() {
-      if (!tabela.length) return;
-      saida.push(montarTabela(tabela));
-      tabela = [];
-    }
-
-    for (var i = 0; i < linhas.length; i++) {
-      var bruta = linhas[i];
-      var linha = bruta.replace(/\s+$/, "");
-
-      if (/^\s*```/.test(linha)) {
-        fecharLista(); fecharTabela();
-        if (emCodigo) { saida.push("</code></pre>"); emCodigo = false; }
-        else { saida.push('<pre class="md-codigo"><code>'); emCodigo = true; }
-        continue;
-      }
-      if (emCodigo) { saida.push(esc(bruta) + "\n"); continue; }
-
-      if (/^\s*\|.*\|\s*$/.test(linha)) { fecharLista(); tabela.push(linha); continue; }
-      fecharTabela();
-
-      if (!linha.trim()) { fecharLista(); continue; }
-
-      if (/^\s*(-{3,}|\*{3,}|_{3,})\s*$/.test(linha)) {
-        fecharLista();
-        saida.push('<hr class="md-hr">');
-        continue;
-      }
-
-      var h = linha.match(/^(#{1,6})\s+(.*)$/);
-      if (h) {
-        fecharLista();
-        var nivel = h[1].length;
-        saida.push("<h" + nivel + ' class="md-h' + nivel + '">' + inlineMarkdown(h[2]) + "</h" + nivel + ">");
-        continue;
-      }
-
-      var ul = linha.match(/^\s*[-*+]\s+(.*)$/);
-      if (ul) {
-        if (lista !== "ul") { fecharLista(); saida.push('<ul class="md-lista">'); lista = "ul"; }
-        saida.push("<li>" + inlineMarkdown(ul[1]) + "</li>");
-        continue;
-      }
-
-      var ol = linha.match(/^\s*\d+[.)]\s+(.*)$/);
-      if (ol) {
-        if (lista !== "ol") { fecharLista(); saida.push('<ol class="md-lista">'); lista = "ol"; }
-        saida.push("<li>" + inlineMarkdown(ol[1]) + "</li>");
-        continue;
-      }
-
-      var bq = linha.match(/^\s*>\s?(.*)$/);
-      if (bq) {
-        fecharLista();
-        saida.push('<blockquote class="md-citacao">' + inlineMarkdown(bq[1]) + "</blockquote>");
-        continue;
-      }
-
-      fecharLista();
-      saida.push('<p class="md-p">' + inlineMarkdown(linha) + "</p>");
-    }
-
-    if (emCodigo) saida.push("</code></pre>");
-    fecharLista();
-    fecharTabela();
-    return saida.join("\n");
-  }
-
-  function montarTabela(linhas) {
-    function celulas(l) {
-      return l.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map(function (c) { return c.trim(); });
-    }
-    var cabecalho = celulas(linhas[0]);
-    var inicio = 1;
-    if (linhas.length > 1 && /^[\s|:-]+$/.test(linhas[1])) inicio = 2;
-
-    var html = '<div class="md-tabela-wrap"><table class="md-tabela"><thead><tr>';
-    cabecalho.forEach(function (c) { html += "<th>" + inlineMarkdown(c) + "</th>"; });
-    html += "</tr></thead><tbody>";
-    for (var i = inicio; i < linhas.length; i++) {
-      html += "<tr>";
-      celulas(linhas[i]).forEach(function (c) { html += "<td>" + inlineMarkdown(c) + "</td>"; });
-      html += "</tr>";
-    }
-    return html + "</tbody></table></div>";
-  }
-
-  /** Formatacao em linha. Escapa primeiro, formata depois: nunca o contrario. */
-  function inlineMarkdown(texto) {
-    var s = esc(texto);
-    s = s.replace(/`([^`]+)`/g, '<code class="md-cod">$1</code>');
-    s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
-    s = s.replace(/__([^_]+)__/g, "<strong>$1</strong>");
-    s = s.replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>");
-    // Links apenas http/https; qualquer outro esquema fica como texto puro.
-    s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
-      '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
-    return s;
-  }
-
-  function gerarRelatorio() {
-    var btn = $("btn-gerar-relatorio");
-    var status = $("relatorio-status");
-    botaoCarregando(btn, true, "Gerando...");
-    setTexto(status, "Reunindo os eventos da sessao...");
-    habilitar($("btn-baixar-relatorio"), false);
-
-    postJSON("/api/relatorio", {}, { timeout: 120000 })
-      .then(function (d) {
-        botaoCarregando(btn, false);
-        if (d && d.erro && !d.markdown) {
-          setTexto(status, d.erro);
-          toast(d.erro, "erro");
-          return;
-        }
-        App.relatorioMarkdown = (d && d.markdown) || "";
-        setHTML($("relatorio-saida"), renderizarMarkdown(App.relatorioMarkdown), "relatorio-saida");
-        var onde = d && d.arquivo ? " Salvo em: " + d.arquivo : "";
-        setTexto(status, "Relatorio gerado." + onde);
-        habilitar($("btn-baixar-relatorio"), !!App.relatorioMarkdown);
-        toast("Relatorio pronto.", "ok");
-      })
-      .catch(function (e) {
-        botaoCarregando(btn, false);
-        setTexto(status, "Falhou: " + e.message);
-        toast("Nao consegui gerar o relatorio: " + e.message, "erro");
-      });
-  }
-
-  function baixarRelatorio() {
-    if (!App.relatorioMarkdown) { toast("Gere o relatorio primeiro.", "aviso"); return; }
-    var blob = new Blob([App.relatorioMarkdown], { type: "text/markdown;charset=utf-8" });
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement("a");
-    var d = new Date();
-    function dois(x) { return x < 10 ? "0" + x : String(x); }
-    a.href = url;
-    a.download = "relatorio_ponto_certo_" + d.getFullYear() + dois(d.getMonth() + 1) + dois(d.getDate()) +
-      "_" + dois(d.getHours()) + dois(d.getMinutes()) + ".md";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
-  }
-
-  /* =======================================================================
    * 13. PAGINA AJUSTES
    * ===================================================================== */
 
   var CAMPOS_AJUSTE = [
-    { id: "aj-limiar-alerta", chaves: ["limiar_alerta"], casas: 2 },
-    { id: "aj-limiar-incerteza", chaves: ["limiar_incerteza"], casas: 2 },
-    { id: "aj-frames", chaves: ["frames_para_confirmar", "frames"], casas: 0 },
-    { id: "aj-ema", chaves: ["ema_alpha", "ema"], casas: 2 }
+    { id: "aj-limiar-alerta", chave: "limiar_alerta", casas: 2 },
+    { id: "aj-limiar-incerteza", chave: "limiar_incerteza", casas: 2 },
+    { id: "aj-frames", chave: "frames_para_confirmar", casas: 0 },
+    { id: "aj-ema", chave: "ema_alpha", casas: 2 }
   ];
 
-  /** Acha o <output> que acompanha o range (por for=, por irmao ou dentro do rotulo). */
-  function saidaDoRange(input) {
-    if (!input) return null;
-    var porFor = document.querySelector('output[for="' + input.id + '"]');
-    if (porFor) return porFor;
-    var irmao = input.nextElementSibling;
-    while (irmao) {
-      if (irmao.tagName === "OUTPUT") return irmao;
-      irmao = irmao.nextElementSibling;
-    }
-    if (input.parentElement) return input.parentElement.querySelector("output");
-    return null;
-  }
+  // Cada nível de rigor é só uma combinação pronta dos controles avançados.
+  var NIVEIS_RIGOR = {
+    baixa: { limiar_alerta: 0.75, limiar_incerteza: 0.6, frames_para_confirmar: 6, ema_alpha: 0.35 },
+    normal: { limiar_alerta: 0.55, limiar_incerteza: 0.7, frames_para_confirmar: 4, ema_alpha: 0.45 },
+    alta: { limiar_alerta: 0.4, limiar_incerteza: 0.8, frames_para_confirmar: 3, ema_alpha: 0.55 }
+  };
 
   function sincronizarSaida(input) {
-    var out = saidaDoRange(input);
+    var out = document.querySelector('output[for="' + input.id + '"]');
     if (!out) return;
     var casas = 2;
     CAMPOS_AJUSTE.forEach(function (c) { if (c.id === input.id) casas = c.casas; });
@@ -1632,76 +1504,79 @@
     out.textContent = isFinite(v) ? v.toFixed(casas).replace(".", ",") : input.value;
   }
 
-  function primeiroValor(fonte, chaves) {
-    if (!fonte) return null;
-    for (var i = 0; i < chaves.length; i++) {
-      if (fonte[chaves[i]] != null) return fonte[chaves[i]];
-    }
-    return null;
+  function valoresAvancados() {
+    var v = {};
+    CAMPOS_AJUSTE.forEach(function (c) {
+      var input = $(c.id);
+      if (input && isFinite(Number(input.value))) v[c.chave] = c.casas === 0 ? Math.round(Number(input.value)) : Number(input.value);
+    });
+    return v;
+  }
+
+  /** Descobre qual nível de rigor bate com os controles avançados. */
+  function marcarNivelRigor() {
+    var sel = $("aj-sensibilidade");
+    if (!sel) return;
+    var atual = valoresAvancados();
+    var achou = "personalizado";
+    Object.keys(NIVEIS_RIGOR).forEach(function (nome) {
+      var n = NIVEIS_RIGOR[nome];
+      var igual = Object.keys(n).every(function (k) { return Math.abs(numero(atual[k], -1) - n[k]) < 0.001; });
+      if (igual) achou = nome;
+    });
+    sel.value = achou;
+    var opt = sel.querySelector('option[value="personalizado"]');
+    if (opt) opt.hidden = achou !== "personalizado";
+  }
+
+  function aplicarNivelRigor(nome) {
+    var n = NIVEIS_RIGOR[nome];
+    if (!n) return;
+    CAMPOS_AJUSTE.forEach(function (c) {
+      var input = $(c.id);
+      if (input && n[c.chave] != null) { input.value = String(n[c.chave]); sincronizarSaida(input); }
+    });
+    marcarNivelRigor();
   }
 
   function carregarAjustes() {
     return fetchJSON("/api/ajustes")
       .then(function (d) {
         d = d || {};
-        // Aceita tanto o objeto plano quanto o aninhado em "inferencia".
-        var inf = d.inferencia || d;
-        CAMPOS_AJUSTE.forEach(function (campo) {
-          var input = $(campo.id);
+        CAMPOS_AJUSTE.forEach(function (c) {
+          var input = $(c.id);
           if (!input) return;
-          var v = primeiroValor(inf, campo.chaves);
-          if (v != null) input.value = String(v);
+          if (d[c.chave] != null) input.value = String(d[c.chave]);
           sincronizarSaida(input);
         });
-        var chk = $("aj-llm");
-        if (chk) {
-          var llm = d.llm || {};
-          var ativo = llm.ativo != null ? llm.ativo : (d.llm_ativo != null ? d.llm_ativo : true);
-          chk.checked = !!ativo;
-        }
-        var modelo = $("aj-modelo");
-        if (modelo) {
-          var m = (d.llm && (d.llm.modelo_visao || d.llm.modelo)) || d.modelo || d.modelo_visao || "";
-          if (m) modelo.value = m;
-        }
+        if ($("aj-meta") && d.meta_pecas != null) $("aj-meta").value = String(d.meta_pecas);
+        marcarNivelRigor();
         setTexto($("ajustes-status"), "");
       })
       .catch(function (e) {
-        setTexto($("ajustes-status"), "Nao consegui ler os ajustes: " + e.message);
+        setTexto($("ajustes-status"), "Não consegui ler os ajustes: " + e.message);
       });
   }
 
   function salvarAjustes() {
     var btn = $("btn-salvar-ajustes");
-    var corpo = {};
-    CAMPOS_AJUSTE.forEach(function (campo) {
-      var input = $(campo.id);
-      if (!input) return;
-      var v = Number(input.value);
-      if (isFinite(v)) corpo[campo.chaves[0]] = campo.casas === 0 ? Math.round(v) : v;
-    });
-    var chk = $("aj-llm");
-    if (chk) corpo.llm_ativo = !!chk.checked;
-    var modelo = $("aj-modelo");
-    if (modelo && modelo.value.trim()) corpo.modelo = modelo.value.trim();
+    var corpo = valoresAvancados();
+    var meta = $("aj-meta") && Number($("aj-meta").value);
+    if (meta && isFinite(meta)) corpo.meta_pecas = Math.round(meta);
 
     botaoCarregando(btn, true, "Salvando...");
     setTexto($("ajustes-status"), "");
     postJSON("/api/ajustes", corpo)
       .then(function (d) {
         botaoCarregando(btn, false);
-        if (d && d.erro) {
-          setTexto($("ajustes-status"), d.erro);
-          toast(d.erro, "erro");
-          return;
-        }
-        setTexto($("ajustes-status"), "Ajustes aplicados nesta sessao.");
-        toast("Ajustes aplicados.", "ok");
+        if (d && d.erro) { setTexto($("ajustes-status"), d.erro); toast(d.erro, "erro"); return; }
+        setTexto($("ajustes-status"), "Ajustes salvos.");
+        toast("Ajustes salvos.", "ok");
       })
       .catch(function (e) {
         botaoCarregando(btn, false);
         setTexto($("ajustes-status"), "Falhou: " + e.message);
-        toast("Nao consegui salvar: " + e.message, "erro");
+        toast("Não consegui salvar: " + e.message, "erro");
       });
   }
 
@@ -1709,36 +1584,21 @@
     var btn = $("btn-testar-llm");
     var caixa = $("llm-status");
     botaoCarregando(btn, true, "Testando...");
-    setHTML(caixa, '<p class="ia-carregando">Falando com o OpenRouter...</p>', "llm-status");
+    setHTML(caixa, '<p class="ia-carregando">Testando a conexão...</p>', "llm-status");
     fetchJSON("/api/llm/status", { timeout: 45000 })
       .then(function (d) {
         botaoCarregando(btn, false);
         d = d || {};
         var ok = !!d.ok;
-        var est = d.estatisticas || {};
-        var html = '<div class="llm-cartao ' + (ok ? "llm-ok" : "llm-erro") + '">' +
+        setHTML(caixa, '<div class="llm-cartao ' + (ok ? "llm-ok" : "llm-erro") + '">' +
           '<span class="selo-fonte ' + (ok ? "selo-ok" : "selo-nao") + '">' +
           '<span class="selo-icone" aria-hidden="true">' + (ok ? ICONES.check : ICONES.erro) + "</span>" +
-          esc(ok ? "Conectado" : "Indisponivel") + "</span>" +
-          '<p class="llm-mensagem">' + esc(d.mensagem || (ok ? "Tudo certo." : "Sem detalhes.")) + "</p>";
-        if (d.modelo_visao) html += '<p class="llm-modelo">Modelo de visao: <strong>' + esc(d.modelo_visao) + "</strong></p>";
-        if (d.creditos) {
-          var c = d.creditos;
-          var resumo = (c.usados != null || c.limite != null)
-            ? "usados " + esc(c.usados) + " de " + esc(c.limite == null ? "sem limite" : c.limite)
-            : esc(JSON.stringify(c).slice(0, 180));
-          html += '<p class="llm-creditos">Creditos: ' + resumo + "</p>";
-        }
-        html += '<p class="llm-uso">Chamadas: ' + esc(numero(est.chamadas, 0)) +
-          " - tokens entrada: " + esc(numero(est.tokens_entrada, 0)) +
-          " - tokens saida: " + esc(numero(est.tokens_saida, 0)) +
-          " - erros: " + esc(numero(est.erros, 0)) + "</p></div>";
-        setHTML(caixa, html, "llm-status");
+          esc(ok ? "Conectado" : "Sem conexão") + "</span>" +
+          '<p class="llm-mensagem">' + esc(ok ? "As explicações usam a IA." : (d.mensagem || "As explicações usam a base técnica local.")) + "</p></div>", "llm-status");
       })
       .catch(function (e) {
         botaoCarregando(btn, false);
-        setHTML(caixa, '<div class="llm-cartao llm-erro"><p class="llm-mensagem">' +
-          esc(e.message) + "</p></div>", "llm-status");
+        setHTML(caixa, '<div class="llm-cartao llm-erro"><p class="llm-mensagem">' + esc(e.message) + "</p></div>", "llm-status");
       });
   }
 
@@ -1982,7 +1842,7 @@
         (l.tecido ? " - " + l.tecido : "")) + "</div>" +
       '</div><div class="lote-chips">' + chips + "</div></div>" +
       '<div class="barra-linha lote-progresso">' +
-      '<span class="barra-nome">' + esc(insp + " de " + qtd + " pecas") + "</span>" +
+      '<span class="barra-nome">' + esc(insp + " de " + qtd + " peças") + "</span>" +
       '<span class="barra-valor">' + esc(Math.round(pct) + "%") + "</span>" +
       '<div class="barra-trilho"><div class="barra-preenche" style="width:' + pct.toFixed(1) + '%"></div></div>' +
       "</div>" +
@@ -2241,70 +2101,59 @@
     ligar($("toggle-gradcam"), "change", function (e) { alternarGradcam(e.target.checked); });
     ligar($("btn-capturar"), "click", capturarQuadro);
     ligar($("btn-diagnostico"), "click", pedirDiagnostico);
-    ligar($("btn-segunda-opiniao"), "click", pedirSegundaOpiniao);
+    ligar($("btn-conferir-ultimo"), "click", function () { abrirModalEvento(App.ultimoEvento); });
+    // A câmera ao vivo começa aberta no computador e recolhida no celular.
+    var blocoCamera = $("bloco-camera");
+    if (blocoCamera) {
+      var salvo = null;
+      try { salvo = localStorage.getItem("blocoCameraAberto"); } catch (e) {}
+      blocoCamera.open = salvo != null ? salvo === "1" : window.matchMedia("(min-width: 900px)").matches;
+      blocoCamera.addEventListener("toggle", function () {
+        try { localStorage.setItem("blocoCameraAberto", blocoCamera.open ? "1" : "0"); } catch (e) {}
+      });
+    }
 
     var video = $("video-ao-vivo");
     ligar(video, "error", function () {
-      if (App.cameraAtiva) toast("O video parou de chegar. Tente religar a camera.", "erro");
+      if (App.cameraAtiva) toast("A imagem da câmera parou de chegar. Tente religar a câmera.", "erro");
     });
 
-    /* --- Testar --------------------------------------------------------- */
-    var input = $("input-arquivo");
-    ligar($("btn-escolher"), "click", function () { if (input) input.click(); });
-    ligar(input, "change", function (e) {
-      var f = e.target.files && e.target.files[0];
-      tratarArquivoEscolhido(f);
-      e.target.value = ""; // permite reescolher o mesmo arquivo
+    /* --- Foto ----------------------------------------------------------- */
+    [["input-arquivo", "upload"], ["foto-camera", "camera_aparelho"]].forEach(function (par) {
+      ligar($(par[0]), "change", function (e) {
+        var f = e.target.files && e.target.files[0];
+        tratarArquivoEscolhido(f, par[1]);
+        e.target.value = ""; // permite reescolher o mesmo arquivo
+      });
     });
-
-    var drop = $("drop-zone");
+    var drop = document.querySelector(".card-captura");
     if (drop) {
       ["dragenter", "dragover"].forEach(function (nome) {
-        drop.addEventListener(nome, function (e) {
-          e.preventDefault();
-          e.stopPropagation();
-          drop.classList.add("arrastando");
-        });
+        drop.addEventListener(nome, function (e) { e.preventDefault(); drop.classList.add("arrastando"); });
       });
       ["dragleave", "drop"].forEach(function (nome) {
         drop.addEventListener(nome, function (e) {
           e.preventDefault();
-          e.stopPropagation();
           if (nome === "dragleave" && drop.contains(e.relatedTarget)) return;
           drop.classList.remove("arrastando");
         });
       });
       drop.addEventListener("drop", function (e) {
-        var dt = e.dataTransfer;
-        var f = dt && dt.files && dt.files[0];
-        tratarArquivoEscolhido(f);
-      });
-      // A zona tambem abre o seletor no clique e no teclado (acessibilidade).
-      drop.addEventListener("click", function (e) {
-        if (e.target.closest && e.target.closest("button")) return;
-        if (input) input.click();
-      });
-      drop.addEventListener("keydown", function (e) {
-        if ((e.key === "Enter" || e.key === " ") && input) { e.preventDefault(); input.click(); }
+        var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+        tratarArquivoEscolhido(f, "upload");
       });
     }
+    ligar($("ver-foto"), "click", function () { mostrarMidiaResultado(false); });
+    ligar($("ver-mapa"), "click", function () { mostrarMidiaResultado(true); });
     ligar($("btn-teste-diagnostico"), "click", diagnosticoDoTeste);
-    ligar($("historico-atualizar"), "click", carregarHistorico);
     ligar($("historico-dia"), "change", carregarHistorico);
-    ligar($("historico-defeitos"), "change", carregarHistorico);
-
+    document.addEventListener("click", function (ev) {
+      var b = ev.target.closest ? ev.target.closest("[data-filtro-historico]") : null;
+      if (b) mudarModoHistorico(b.getAttribute("data-filtro-historico"));
+    });
 
     /* --- Historico e modal ---------------------------------------------- */
     ligar($("btn-modal-fechar"), "click", fecharModal);
-    ligar($("btn-modal-confirmar"), "click", function () {
-      // Confirmar = o operador concorda com a classe prevista pela rede.
-      var ev = App.eventoAberto;
-      if (ev) enviarRotulo(ev.classe_key, $("btn-modal-confirmar"));
-    });
-    ligar($("btn-modal-corrigir"), "click", function () {
-      var sel = $("modal-select-rotulo");
-      enviarRotulo(sel ? sel.value : null, $("btn-modal-corrigir"));
-    });
     ligar($("btn-modal-diagnostico"), "click", diagnosticoDoModal);
     ligar($("btn-modal-apagar-foto"), "click", apagarFotoDoModal);
 
@@ -2321,15 +2170,13 @@
       if (e.key === "Escape") fecharModal();
     });
 
-    /* --- Relatorios ------------------------------------------------------ */
-    ligar($("btn-gerar-relatorio"), "click", gerarRelatorio);
-    ligar($("btn-baixar-relatorio"), "click", baixarRelatorio);
 
     /* --- Ajustes --------------------------------------------------------- */
     CAMPOS_AJUSTE.forEach(function (campo) {
       var el = $(campo.id);
-      ligar(el, "input", function () { sincronizarSaida(el); });
+      ligar(el, "input", function () { sincronizarSaida(el); marcarNivelRigor(); });
     });
+    ligar($("aj-sensibilidade"), "change", function (e) { aplicarNivelRigor(e.target.value); });
     ligar($("btn-salvar-ajustes"), "click", salvarAjustes);
     ligar($("btn-testar-llm"), "click", testarLLM);
 
@@ -2386,9 +2233,11 @@
     registrarListeners();
     prepararAnel();
     habilitar($("btn-diagnostico"), false);
-    habilitar($("btn-segunda-opiniao"), false);
-    habilitar($("btn-baixar-relatorio"), false);
+    habilitar($("btn-conferir-ultimo"), false);
     habilitar($("btn-teste-diagnostico"), false);
+    if ($("historico-dia") && !$("historico-dia").value) $("historico-dia").value = hojeISO();
+    atualizarPendentes();
+    setInterval(atualizarPendentes, 30000);
     atualizarChipCamera({ ativa: false });
     renderVeredito({ estado: "aquecendo" }, null);
     renderChipLote(null);

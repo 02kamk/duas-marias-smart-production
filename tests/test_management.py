@@ -142,8 +142,8 @@ class ManagementTest(unittest.TestCase):
         extended=extend(app,self.root)
         with TestClient(extended) as client:
             response=client.get('/')
-            self.assertIn('camera-original',response.text)
-            self.assertIn('href="/gestao"',response.text)
+            # A gestão não reescreve mais a página da inspeção; o link fica no próprio HTML.
+            self.assertEqual(response.text,'<html><body><button id="camera-original">Camera</button></body></html>')
             self.assertTrue(client.get('/api/camera/original').json()['preserved'])
             self.assertEqual(client.get('/gestao').status_code,200)
             self.assertEqual(client.post('/api/gestao/orders',json={},headers={'origin':'https://other.example'}).status_code,403)

@@ -96,10 +96,9 @@ except Exception as _exc:  # pragma: no cover
     IMPORTS_FALHOS["openrouter"] = f"{type(_exc).__name__}: {_exc}"
 
 try:
-    from pontocerto.llm.diagnosis import diagnosticar, gerar_relatorio  # type: ignore
+    from pontocerto.llm.diagnosis import diagnosticar  # type: ignore
 except Exception as _exc:  # pragma: no cover
     diagnosticar = None  # type: ignore[assignment]
-    gerar_relatorio = None  # type: ignore[assignment]
     IMPORTS_FALHOS["diagnosis"] = f"{type(_exc).__name__}: {_exc}"
 
 try:
@@ -1309,37 +1308,6 @@ def criar_app(cfg: Any = None) -> FastAPI:
         return resultado
 
     # ----------------------------------------------------------- relatorio
-    @app.post("/api/relatorio")
-    def relatorio(corpo: dict = Body(default={})):
-        corpo = corpo or {}
-        estatisticas = app.state.estado.estatisticas()
-        eventos = app.state.estado.eventos(limite=int(corpo.get("limite", 200) or 200))
-        usar_llm = bool(corpo.get("usar_llm", True)) and bool(cfg.llm.get("ativo", True))
-        if gerar_relatorio is None:
-            return {"erro": "modulo de relatorio indisponivel: "
-                            + IMPORTS_FALHOS.get("diagnosis", "")}
-        try:
-            resultado = gerar_relatorio(
-                app.state.cliente, estatisticas, eventos, usar_llm=usar_llm
-            ) or {}
-        except Exception as exc:
-            return {"erro": f"falha ao gerar o relatorio: {exc}"}
-        markdown = str(resultado.get("markdown", ""))
-        arquivo = ""
-        try:
-            pasta = garantir_pasta(cfg.app.pasta_relatorios)
-            destino = pasta / f"relatorio_{datetime.now():%Y%m%d_%H%M%S}.md"
-            destino.write_text(markdown, encoding="utf-8")
-            arquivo = str(destino)
-        except Exception:
-            arquivo = ""
-        return {
-            "markdown": markdown,
-            "arquivo": arquivo,
-            "fonte": resultado.get("fonte"),
-            "modelo": resultado.get("modelo"),
-        }
-
     return app
 
 

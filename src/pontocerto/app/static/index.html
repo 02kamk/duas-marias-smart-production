@@ -1,26 +1,26 @@
 <!doctype html>
 <html lang="pt-BR">
 <head>
-<link rel="manifest" href="/manifest.webmanifest">
-<script src="/static/js/operacao.js" defer></script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Ponto Certo - Inspecao de costura em tempo real</title>
-<meta name="description" content="Ponto Certo: inspecao visual de costura em tempo real com deteccao de 11 tipos de falha.">
+<title>Duas Marias - Inspeção de costura</title>
+<meta name="description" content="Inspeção visual de costura com detecção de 11 tipos de falha.">
 <meta name="theme-color" content="#C1502E">
+<link rel="manifest" href="/manifest.webmanifest">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/css/style.css">
 <script src="/static/js/app.js" defer></script>
+<script src="/static/js/operacao.js" defer></script>
 </head>
 <body>
 
 <noscript>
   <div class="aviso-noscript">
     <strong>JavaScript desativado.</strong>
-    A interface do Ponto Certo precisa de JavaScript para exibir a camera, o veredito da
-    inspecao e o historico. Ative o JavaScript no navegador e recarregue a pagina.
+    A inspeção precisa de JavaScript para mostrar a câmera, o resultado e o histórico.
+    Ative o JavaScript no navegador e recarregue a página.
   </div>
 </noscript>
 
@@ -29,7 +29,7 @@
      ========================================================== -->
 <header id="barra-topo">
   <div class="topo-esquerda">
-    <a class="logo" href="#pagina-ao-vivo" aria-label="Ponto Certo - inicio">
+    <a class="logo" href="#ao-vivo" aria-label="Duas Marias - início">
       <svg class="logo-marca" viewBox="0 0 34 34" width="30" height="30" fill="none"
            stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
         <path d="M28 5.5 13 20.5" stroke="var(--terracota)" stroke-width="3"/>
@@ -38,42 +38,42 @@
               stroke="var(--terracota-claro)" stroke-width="2"/>
         <path d="M2.5 29.5h29" stroke="var(--terracota-claro)" stroke-width="3" stroke-dasharray="5 4"/>
       </svg>
-      <span class="logo-nome">Ponto<span class="logo-destaque">Certo</span></span>
+      <span class="logo-nome">Duas<span class="logo-destaque">Marias</span></span>
     </a>
-    <span class="logo-tag">inspecao de costura</span>
+    <span class="logo-tag">inspeção de costura</span>
   </div>
 
   <div class="topo-direita">
     <button id="chip-banco" class="chip chip-neutro chip-botao" type="button" data-pagina-destino="lotes"
-            title="Situacao do banco de dados (Supabase). Toque para ver os lotes.">
+            title="Onde as inspeções estão sendo gravadas. Toque para ver os lotes.">
       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
            stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
         <ellipse cx="12" cy="5.5" rx="7.5" ry="2.8"/>
         <path d="M4.5 5.5v6.5c0 1.5 3.4 2.8 7.5 2.8s7.5-1.3 7.5-2.8V5.5"/>
         <path d="M4.5 12v6.5c0 1.5 3.4 2.8 7.5 2.8s7.5-1.3 7.5-2.8V12"/>
       </svg>
-      <span class="chip-texto">Processamento local</span>
+      <span class="chip-texto">Neste computador</span>
     </button>
   </div>
 </header>
 
 <!-- ==========================================================
-     SIDEBAR (estilo YouTube)
+     MENU LATERAL (computador)
      ========================================================== -->
-<nav id="sidebar" aria-label="Navegacao principal">
+<nav id="sidebar" aria-label="Navegação principal">
   <div class="nav-grupo">
-    <button class="nav-item ativo" type="button" data-pagina="ao-vivo" aria-current="page" title="Ao vivo">
+    <button class="nav-item ativo" type="button" data-pagina="ao-vivo" aria-current="page" title="Inspeção">
       <span class="nav-icone" aria-hidden="true">
         <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor"
              stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false">
-          <rect x="2.5" y="6" width="13" height="12" rx="2.5"/>
-          <path d="M15.5 11 21 7.8v8.4L15.5 13z"/>
+          <path d="M3.5 7.5h3L8 5h8l1.5 2.5h3A1.5 1.5 0 0 1 22 9v8.5a1.5 1.5 0 0 1-1.5 1.5h-17A1.5 1.5 0 0 1 2 17.5V9a1.5 1.5 0 0 1 1.5-1.5z"/>
+          <circle cx="12" cy="13" r="3.5"/>
         </svg>
       </span>
       <span class="nav-texto">Inspeção</span>
     </button>
 
-<button class="nav-item" type="button" data-pagina="historico" title="Historico">
+    <button class="nav-item" type="button" data-pagina="historico" title="Histórico">
       <span class="nav-icone" aria-hidden="true">
         <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor"
              stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false">
@@ -83,10 +83,11 @@
           <rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.6"/>
         </svg>
       </span>
-      <span class="nav-texto">Historico</span>
+      <span class="nav-texto">Histórico</span>
+      <span class="nav-badge" data-badge-pendentes hidden></span>
     </button>
 
-    <button class="nav-item" type="button" data-pagina="lotes" title="Lotes">
+    <button class="nav-item" type="button" data-pagina="lotes" title="Lote em produção">
       <span class="nav-icone" aria-hidden="true">
         <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor"
              stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false">
@@ -97,18 +98,22 @@
       </span>
       <span class="nav-texto">Lotes</span>
     </button>
-  </div>
 
-  <!-- Preenchido pelas extensoes (gestao, financeiro) quando o servidor completo
-       esta no ar; vazio, o grupo fica escondido pelo CSS. -->
-  <div class="nav-grupo nav-extensoes"><!--nav-extensoes--></div>
+    <a class="nav-item" href="/gestao" title="Gestão da produção">
+      <span class="nav-icone" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false">
+          <path d="M4 20V10"/><path d="M10 20V4"/><path d="M16 20v-7"/><path d="M22 20H2"/>
+        </svg>
+      </span>
+      <span class="nav-texto">Gestão</span>
+    </a>
+  </div>
 
   <div class="nav-divisor" role="presentation"></div>
 
   <div class="nav-grupo">
-
-
-<button class="nav-item" type="button" data-pagina="relatorios" title="Relatorios">
+    <button class="nav-item" type="button" data-pagina="relatorios" title="Relatórios">
       <span class="nav-icone" aria-hidden="true">
         <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor"
              stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false">
@@ -117,74 +122,126 @@
           <path d="M9 13h6"/><path d="M9 17h4"/>
         </svg>
       </span>
-      <span class="nav-texto">Relatorios</span>
+      <span class="nav-texto">Relatórios</span>
     </button>
-  </div>
-
-  <div class="nav-divisor" role="presentation"></div>
-
-  <div class="nav-grupo">
     <button class="nav-item" type="button" data-pagina="ajustes" title="Ajustes">
       <span class="nav-icone" aria-hidden="true">
         <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor"
              stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false">
           <circle cx="12" cy="12" r="3.2"/>
-          <path d="M19.1 14.6a1.5 1.5 0 0 0 .3 1.7l.1.1a1.9 1.9 0 1 1-2.7 2.7l-.1-.1a1.5 1.5 0 0 0-1.7-.3 1.5 1.5 0 0 0-.9 1.4v.2a1.9 1.9 0 1 1-3.8 0v-.1a1.5 1.5 0 0 0-1-1.4 1.5 1.5 0 0 0-1.7.3l-.1.1a1.9 1.9 0 1 1-2.7-2.7l.1-.1a1.5 1.5 0 0 0 .3-1.7 1.5 1.5 0 0 0-1.4-.9h-.2a1.9 1.9 0 1 1 0-3.8h.1a1.5 1.5 0 0 0 1.4-1 1.5 1.5 0 0 0-.3-1.7l-.1-.1a1.9 1.9 0 1 1 2.7-2.7l.1.1a1.5 1.5 0 0 0 1.7.3h.1a1.5 1.5 0 0 0 .9-1.4v-.2a1.9 1.9 0 1 1 3.8 0v.1a1.5 1.5 0 0 0 .9 1.4 1.5 1.5 0 0 0 1.7-.3l.1-.1a1.9 1.9 0 1 1 2.7 2.7l-.1.1a1.5 1.5 0 0 0-.3 1.7v.1a1.5 1.5 0 0 0 1.4.9h.2a1.9 1.9 0 1 1 0 3.8h-.1a1.5 1.5 0 0 0-1.4.9z"/>
+          <path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.6 1.6 0 0 0-1-1.5 1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.5-1 1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"/>
         </svg>
       </span>
       <span class="nav-texto">Ajustes</span>
     </button>
   </div>
 
-  <div class="nav-rodape"><button id="sair-conta" type="button">Sair da conta</button><button id="instalar-app" type="button" hidden>Instalar aplicativo</button>
-    <p class="nav-rodape-titulo">Ponto Certo</p>
-    <p class="nav-rodape-texto">11 tipos de falha de costura. Deteccao em tempo real nesta maquina.</p>
+  <div class="nav-rodape">
+    <button id="instalar-app" class="btn btn-fantasma" type="button" hidden>Instalar aplicativo</button>
+    <button class="btn btn-fantasma" type="button" data-sair>Sair da conta</button>
   </div>
 </nav>
 
 <!-- ==========================================================
-     CONTEUDO
+     CONTEÚDO
      ========================================================== -->
 <main id="conteudo">
 
   <!-- ======================================================
-       PAGINA: AO VIVO
+       PÁGINA: INSPEÇÃO
        ====================================================== -->
-  <section id="pagina-ao-vivo" class="pagina ativa" aria-label="Inspecao ao vivo">
+  <section id="pagina-ao-vivo" class="pagina ativa" aria-label="Inspeção">
     <div class="pagina-cabecalho">
       <div class="pagina-titulos">
-        <h1>Inspeção de qualidade</h1>
-        <p class="pagina-sub">A camera analisa a costura quadro a quadro e aprova ou reprova cada peca.</p>
+        <h1>Inspeção</h1>
+        <p class="pagina-sub">Fotografe a costura: a IA aprova ou aponta o defeito em segundos.</p>
       </div>
       <div class="pagina-acoes">
-        <span id="chip-camera" class="chip chip-neutro">
-          <span class="ponto" aria-hidden="true"></span>
-          <span class="chip-texto">Camera desligada</span>
-        </span>
-        <span id="fps" class="chip chip-neutro" title="Quadros analisados por segundo">-- FPS</span>
         <button id="chip-lote" class="chip chip-neutro chip-botao" type="button" data-pagina-destino="lotes"
-                title="Lote em producao. Toque para escolher outro.">
+                title="Lote em produção. Toque para escolher outro.">
           <span class="ponto" aria-hidden="true"></span>
-          <span class="chip-texto">Sem lote - so local</span>
+          <span class="chip-texto">Sem lote</span>
         </button>
       </div>
     </div>
 
-    <div class="grade-ao-vivo">
+    <!-- Captura: o caminho principal, no topo -->
+    <div class="card card-captura">
+      <div class="captura-botoes">
+        <label class="btn btn-principal btn-grande" for="foto-camera">
+          <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+            <path d="M3.5 7.5h3L8 5h8l1.5 2.5h3A1.5 1.5 0 0 1 22 9v8.5a1.5 1.5 0 0 1-1.5 1.5h-17A1.5 1.5 0 0 1 2 17.5V9a1.5 1.5 0 0 1 1.5-1.5z"/>
+            <circle cx="12" cy="13" r="3.5"/>
+          </svg>
+          <span>Fotografar</span>
+        </label>
+        <input id="foto-camera" class="input-oculto" type="file" accept="image/*" capture="environment">
 
-      <!-- Coluna do video -->
-      <div class="coluna-video">
-        <div class="card card-video">
+        <label class="btn btn-secundario btn-grande" for="input-arquivo">
+          <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+            <path d="M12 16.5V4"/><path d="m7.5 8.5 4.5-4.5 4.5 4.5"/>
+            <path d="M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15"/>
+          </svg>
+          <span>Enviar foto</span>
+        </label>
+        <input id="input-arquivo" class="input-oculto" type="file" accept="image/jpeg,image/png,image/webp">
+      </div>
+      <p id="drop-zone" class="drop-dica">No computador, você também pode arrastar a foto para cá.</p>
+
+      <!-- Resultado da foto -->
+      <div id="resultado-teste" class="resultado-teste" hidden aria-live="polite">
+        <div class="resultado-destaque">
+          <p id="teste-classe" class="resultado-classe">--</p>
+          <p id="teste-confianca" class="resultado-confianca"></p>
+        </div>
+
+        <div class="resultado-midia">
+          <img id="peca-analisada" class="teste-img" alt="Peça analisada">
+          <div class="alternar-midia" role="group" aria-label="O que mostrar na foto">
+            <button id="ver-foto" class="chip chip-botao ativo" type="button" aria-pressed="true">Foto</button>
+            <button id="ver-mapa" class="chip chip-botao" type="button" aria-pressed="false">Onde a IA olhou</button>
+          </div>
+        </div>
+
+        <div id="conferencia-upload" class="conferencia"></div>
+
+        <details class="bloco detalhes">
+          <summary>Outras possibilidades</summary>
+          <ul id="teste-top" class="lista-top"></ul>
+        </details>
+
+        <div class="bloco">
+          <button id="btn-teste-diagnostico" class="btn btn-fantasma" type="button">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+              <circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6"/><path d="M12 17h.01"/>
+            </svg>
+            <span>Por que? Como resolver?</span>
+          </button>
+          <div id="teste-ia" class="ia-conteudo"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Câmera ao vivo do computador (opcional) -->
+    <details id="bloco-camera" class="card bloco-camera">
+      <summary class="card-cabecalho">
+        <h3>Câmera ao vivo deste computador</h3>
+        <span id="chip-camera" class="chip chip-neutro">
+          <span class="ponto" aria-hidden="true"></span>
+          <span class="chip-texto">Câmera desligada</span>
+        </span>
+      </summary>
+
+      <div class="grade-ao-vivo">
+        <div class="coluna-video">
           <div id="video-wrap" class="video-wrap">
-            <img id="video-ao-vivo" class="video-img" alt="Transmissao da camera de inspecao" hidden>
+            <img id="video-ao-vivo" class="video-img" alt="Imagem da câmera de inspeção" hidden>
             <div id="video-vazio" class="video-vazio">
-              <svg viewBox="0 0 24 24" width="56" height="56" fill="none" stroke="currentColor"
-                   stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
-                <rect x="2.5" y="6" width="13" height="12" rx="2.5"/>
-                <path d="M15.5 11 21 7.8v8.4L15.5 13z"/>
-              </svg>
-              <p class="vazio-titulo">Ligue a camera para comecar a inspecao</p>
-              <p class="vazio-texto">Escolha o dispositivo na lista abaixo e toque em <strong>Ligar camera</strong>.</p>
+              <p class="vazio-titulo">Câmera desligada</p>
+              <p class="vazio-texto">Toque em <strong>Ligar câmera</strong>. Cada peça vista é registrada no histórico.</p>
             </div>
             <span id="video-pill" class="video-pill" hidden>
               <span class="pill-ponto" aria-hidden="true"></span>AO VIVO
@@ -200,134 +257,73 @@
               </svg>
               <span class="btn-rotulo">Ligar câmera</span>
             </button>
-
-            <label class="campo campo-inline" for="sel-camera">
-              <span class="campo-rotulo">Dispositivo</span>
-              <select id="sel-camera" class="entrada">
-                <option value="0">Camera padrao (0)</option>
-              </select>
-            </label>
-
+            <button id="btn-capturar" class="btn btn-secundario" type="button">
+              <span>Analisar esta peça</span>
+            </button>
             <label class="interruptor" for="toggle-gradcam">
               <input id="toggle-gradcam" type="checkbox">
               <span class="interruptor-trilho" aria-hidden="true"><span class="interruptor-bolinha"></span></span>
-              <span class="interruptor-texto">Mapa de calor (Grad-CAM)</span>
+              <span class="interruptor-texto">Mostrar onde a IA olhou</span>
             </label>
-
-            <button id="btn-capturar" class="btn btn-secundario" type="button">
-              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
-                   stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
-                <path d="M3.5 7.5h3L8 5h8l1.5 2.5h3A1.5 1.5 0 0 1 22 9v8.5a1.5 1.5 0 0 1-1.5 1.5h-17A1.5 1.5 0 0 1 2 17.5V9a1.5 1.5 0 0 1 1.5-1.5z"/>
-                <circle cx="12" cy="13" r="3.5"/>
-              </svg>
-              <span>Capturar peca</span>
-            </button>
+            <label class="campo campo-inline" for="sel-camera">
+              <span class="campo-rotulo">Câmera</span>
+              <select id="sel-camera" class="entrada">
+                <option value="0">Câmera padrão</option>
+              </select>
+            </label>
           </div>
         </div>
 
-        <!-- Sequencia / meta -->
-        <div class="card card-sequencia">
-          <div class="sequencia-topo">
-            <span id="chama-sequencia" class="chama" aria-hidden="true">
-              <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor"
-                   stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false">
-                <path d="M12 2.6c.7 2.9 2.3 4.2 3.6 5.5A7.2 7.2 0 0 1 18.2 13a6.2 6.2 0 0 1-12.4 0c0-2 .9-3.6 1.9-4.7.3 1.1 1 1.9 1.8 2.3 0-3 .6-5.8 2.5-8z"/>
+        <div class="coluna-lado">
+          <div id="veredito" class="veredito estado-aquecendo">
+            <div class="veredito-corpo">
+              <span id="veredito-icone" class="veredito-icone" aria-hidden="true"></span>
+              <h2 id="veredito-titulo">Câmera desligada</h2>
+              <p id="veredito-sub"></p>
+            </div>
+            <div class="anel">
+              <svg id="anel-svg" viewBox="0 0 120 120" width="120" height="120" aria-hidden="true" focusable="false">
+                <circle class="anel-fundo" cx="60" cy="60" r="52" fill="none" stroke-width="10"/>
+                <circle id="anel-arco" cx="60" cy="60" r="52" fill="none" stroke-width="10"
+                        stroke-linecap="round" stroke-dasharray="0 326.7"
+                        transform="rotate(-90 60 60)"/>
               </svg>
-            </span>
-            <div class="sequencia-textos">
-              <p class="sequencia-titulo">Sequencia de pecas aprovadas</p>
-              <p class="sequencia-sub">Meta do turno: 10 pecas seguidas sem falha.</p>
+              <div id="anel-valor" class="anel-valor">--%</div>
+              <p class="anel-rotulo">certeza</p>
             </div>
           </div>
-          <div id="barra-meta" class="barra-meta" role="img" aria-label="Progresso da meta de pecas aprovadas seguidas">
-            <span class="segmento"></span><span class="segmento"></span><span class="segmento"></span>
-            <span class="segmento"></span><span class="segmento"></span><span class="segmento"></span>
-            <span class="segmento"></span><span class="segmento"></span><span class="segmento"></span>
-            <span class="segmento"></span>
-          </div>
-        </div>
-      </div>
 
-      <!-- Coluna do veredito -->
-      <div class="coluna-lado">
-
-        <div id="veredito" class="card veredito estado-aquecendo">
-          <div class="veredito-corpo">
-            <span id="veredito-icone" class="veredito-icone" aria-hidden="true">
-              <svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor"
-                   stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false">
-                <circle cx="12" cy="12" r="9"/>
-                <path d="M12 7.5v5l3 1.8"/>
-              </svg>
-            </span>
-            <h2 id="veredito-titulo">Aquecendo</h2>
-            <p id="veredito-sub">Ligue a camera para comecar a inspecao</p>
-          </div>
-
-          <div class="anel">
-            <svg id="anel-svg" viewBox="0 0 120 120" width="120" height="120" aria-hidden="true" focusable="false">
-              <circle class="anel-fundo" cx="60" cy="60" r="52" fill="none" stroke-width="10"/>
-              <circle id="anel-arco" cx="60" cy="60" r="52" fill="none" stroke-width="10"
-                      stroke-linecap="round" stroke-dasharray="0 326.7"
-                      transform="rotate(-90 60 60)"/>
-            </svg>
-            <div id="anel-valor" class="anel-valor">--%</div>
-            <p class="anel-rotulo">confianca</p>
-          </div>
-        </div>
-
-        <div class="card card-top">
-          <div class="card-cabecalho">
-            <h3>Leitura do modelo</h3>
-            <span class="card-nota">3 hipoteses mais provaveis</span>
-          </div>
-          <ul id="lista-top" class="lista-top">
-            <li class="lista-vazia">Nenhuma leitura ainda. Ligue a camera.</li>
-          </ul>
-        </div>
-
-        <div class="card card-ia">
-          <div class="card-cabecalho">
-            <h3>Diagnostico assistido</h3>
-          </div>
-          <p class="card-texto">
-            Peca uma explicacao em linguagem simples do que a IA viu na costura, ou uma segunda
-            opiniao quando a confianca estiver baixa.
-          </p>
           <div class="linha-botoes">
-            <button id="btn-diagnostico" class="btn btn-principal" type="button">
-              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
-                   stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
-                <path d="M13.2 2.5 4.6 13.8h6.1L9.9 21.5l8.6-11.3h-6.1z"/>
-              </svg>
-              <span>Explicar com IA</span>
+            <button id="btn-conferir-ultimo" class="btn btn-secundario" type="button" disabled>
+              <span>Conferir última peça</span>
             </button>
-            <button id="btn-segunda-opiniao" class="btn btn-secundario" type="button">
-              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
-                   stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
-                <path d="M21 11.6a8 8 0 0 1-8 8H8.3L3.8 22l1.2-4A8 8 0 1 1 21 11.6z"/>
-              </svg>
-              <span>Segunda opiniao</span>
+            <button id="btn-diagnostico" class="btn btn-fantasma" type="button" disabled>
+              <span>Por que?</span>
             </button>
           </div>
           <div id="painel-ia" class="painel-ia" hidden>
             <div id="ia-conteudo" class="ia-conteudo"></div>
           </div>
+
+          <details class="detalhes">
+            <summary>Outras possibilidades</summary>
+            <ul id="lista-top" class="lista-top">
+              <li class="lista-vazia">Ligue a câmera para ver a leitura.</li>
+            </ul>
+          </details>
         </div>
-
       </div>
-    </div>
+    </details>
 
-    <!-- Estatisticas do turno -->
+    <!-- Resumo do turno -->
     <div class="card card-estatisticas">
       <div class="card-cabecalho">
-        <h3>Resumo do turno</h3>
-        <span class="card-nota">Atualiza a cada peca inspecionada</span>
+        <h3>Hoje</h3>
       </div>
       <div class="grade-estatisticas">
         <div class="estatistica">
           <span id="stat-total" class="estatistica-valor">0</span>
-          <span class="estatistica-rotulo">Pecas inspecionadas</span>
+          <span class="estatistica-rotulo">Peças inspecionadas</span>
         </div>
         <div class="estatistica est-ok">
           <span id="stat-aprovadas" class="estatistica-valor">0</span>
@@ -335,227 +331,49 @@
         </div>
         <div class="estatistica est-falha">
           <span id="stat-reprovadas" class="estatistica-valor">0</span>
-          <span class="estatistica-rotulo">Reprovadas</span>
+          <span class="estatistica-rotulo">Com defeito</span>
         </div>
         <div class="estatistica">
           <span id="stat-taxa" class="estatistica-valor">0%</span>
-          <span class="estatistica-rotulo">Taxa de aprovacao</span>
+          <span class="estatistica-rotulo">Aprovação</span>
         </div>
         <div class="estatistica">
           <span id="stat-sequencia" class="estatistica-valor">0</span>
-          <span class="estatistica-rotulo">Sequencia atual</span>
-        </div>
-        <div class="estatistica">
-          <span id="stat-recorde" class="estatistica-valor">0</span>
-          <span class="estatistica-rotulo">Recorde do dia</span>
+          <span class="estatistica-rotulo">Aprovadas seguidas</span>
         </div>
       </div>
     </div>
-  <div id="pagina-testar" class="inspecao-upload" aria-label="Testar uma imagem">
-    <div class="pagina-cabecalho">
-      <div class="pagina-titulos">
-        <h2>Anexar imagem ou usar a câmera do aparelho</h2>
-        <p class="pagina-sub">Envie uma foto da costura para classificar sem usar a camera.</p>
-      </div>
-    </div>
-
-    <div class="grade-testar">
-      <div class="card">
-        <div class="bloco"><button id="aparelho-ligar" type="button">Abrir câmera deste aparelho</button><button id="aparelho-capturar" type="button" disabled>Fotografar e analisar</button><button id="aparelho-parar" type="button" disabled>Fechar câmera do aparelho</button><video id="aparelho-video" autoplay playsinline muted style="width:100%;max-height:380px" hidden></video><p id="aparelho-erro" role="alert"></p><label>Fotografar pelo celular<input id="aparelho-arquivo" type="file" accept="image/*" capture="environment"></label></div>
-        <div id="drop-zone" class="drop-zone" tabindex="0" role="button"
-             aria-label="Area para soltar a imagem ou escolher um arquivo">
-          <svg viewBox="0 0 24 24" width="44" height="44" fill="none" stroke="currentColor"
-               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
-            <path d="M12 16.5V4"/>
-            <path d="m7.5 8.5 4.5-4.5 4.5 4.5"/>
-            <path d="M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15"/>
-          </svg>
-          <p class="drop-titulo">Arraste a imagem da peca aqui</p>
-          <p class="drop-texto">JPG ou PNG. A imagem e redimensionada para 224x224 antes da analise.</p>
-          <button id="btn-escolher" class="btn btn-principal" type="button">
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
-                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
-              <path d="M3.5 7.5h5.2l1.8 2.2h10A1.5 1.5 0 0 1 22 11.2v7.3A1.5 1.5 0 0 1 20.5 20h-17A1.5 1.5 0 0 1 2 18.5V9a1.5 1.5 0 0 1 1.5-1.5z"/>
-            </svg>
-            <span>Escolher arquivo</span>
-          </button>
-          <input id="input-arquivo" type="file" accept="image/jpeg,image/png,image/webp" hidden>
-        </div>
-
-        <div class="teste-midia">
-          <img id="preview-teste" class="teste-img" alt="Previa da imagem enviada" hidden>
-          <div id="teste-vazio" class="bloco-vazio">
-            <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor"
-                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
-              <circle cx="11" cy="11" r="7"/><path d="m20.5 20.5-4.1-4.1"/>
-            </svg>
-            <p class="vazio-titulo">Nenhuma imagem selecionada</p>
-            <p class="vazio-texto">Escolha um arquivo para ver a previa e o resultado da analise.</p>
-          </div>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="card-cabecalho">
-          <h3>Resultado da analise</h3>
-        </div>
-
-        <div id="resultado-teste" class="resultado-teste" hidden>
-          <div class="resultado-destaque">
-            <p class="resultado-rotulo">Classe detectada</p>
-            <p id="teste-classe" class="resultado-classe">--</p>
-            <p id="teste-confianca" class="resultado-confianca">--%</p>
-          </div>
-
-          <div class="bloco">
-            <h4 class="bloco-titulo">Hipoteses</h4>
-            <ul id="teste-top" class="lista-top"></ul>
-          </div>
-
-          <div class="bloco">
-            <h4 class="bloco-titulo">Mapa de calor</h4>
-            <img id="teste-heatmap" class="teste-heatmap" alt="Mapa de calor da regiao analisada" hidden>
-          </div>
-
-          <div class="linha-botoes">
-            <button id="btn-teste-diagnostico" class="btn btn-principal" type="button">
-              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
-                   stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
-                <path d="M13.2 2.5 4.6 13.8h6.1L9.9 21.5l8.6-11.3h-6.1z"/>
-              </svg>
-              <span>Explicar com IA</span>
-            </button>
-          </div>
-
-          <div id="conferencia-upload" class="bloco"><h4>Conferência humana obrigatória</h4><p>A IA sugere a classe e a possível solução. Confirme ou corrija antes de considerar o diagnóstico validado.</p><select id="upload-classe" aria-label="Classe conferida"></select><label>Observação da conferência<input id="upload-observacao" maxlength="1000"></label><button id="upload-confirmar" type="button">Confirmar sugestão</button><button id="upload-corrigir" type="button">Registrar correção</button><p id="upload-revisao-status" role="status"></p></div><h4>Peça analisada</h4><img id="peca-analisada" class="teste-img" alt="Peça enviada para inspeção"><p>O mapa de calor indica regiões que influenciaram o modelo; não comprova a localização exata da costura.</p>
-          <div id="teste-ia" class="ia-conteudo"></div>
-        </div>
-
-        <div class="bloco-vazio bloco-vazio-alto">
-          <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor"
-               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
-            <path d="M14 3H7.5A2.5 2.5 0 0 0 5 5.5v13A2.5 2.5 0 0 0 7.5 21h9a2.5 2.5 0 0 0 2.5-2.5V8z"/>
-            <path d="M14 3v5h5"/>
-          </svg>
-          <p class="vazio-titulo">O resultado aparece aqui</p>
-          <p class="vazio-texto">Classe, confianca, hipoteses e mapa de calor da imagem enviada.</p>
-        </div>
-      </div>
-    </div>
-  </div>
   </section>
 
   <!-- ======================================================
-       PAGINA: HISTORICO
+       PÁGINA: HISTÓRICO
        ====================================================== -->
-  <section id="pagina-historico" class="pagina" aria-label="Historico de inspecoes">
+  <section id="pagina-historico" class="pagina" aria-label="Histórico de inspeções">
     <div class="pagina-cabecalho">
       <div class="pagina-titulos">
-        <h1>Historico</h1>
-        <p class="pagina-sub">Todas as pecas inspecionadas neste computador. Toque para ver o detalhe.</p>
+        <h1>Histórico</h1>
+        <p class="pagina-sub">Peças inspecionadas por dia. Toque numa peça para ver o detalhe e conferir.</p>
       </div>
     </div>
 
-    <div class="card" style="padding:16px;margin-bottom:16px"><label>Dia das inspeções <input id="historico-dia" type="date"></label><label><input id="historico-defeitos" type="checkbox"> Somente peças com defeito</label><button id="historico-atualizar" type="button">Consultar dia</button></div>
-    <div id="stories" class="stories" role="group" aria-label="Filtrar historico por tipo de falha"></div>
+    <div class="filtros-historico">
+      <label class="campo campo-inline" for="historico-dia">
+        <span class="campo-rotulo">Dia</span>
+        <input id="historico-dia" class="entrada" type="date">
+      </label>
+      <div class="filtro-chips" role="group" aria-label="Quais peças mostrar">
+        <button class="chip chip-botao ativo" type="button" data-filtro-historico="todas" aria-pressed="true">Todas</button>
+        <button class="chip chip-botao" type="button" data-filtro-historico="pendentes" aria-pressed="false">Aguardando conferência <span data-badge-pendentes hidden></span></button>
+        <button class="chip chip-botao" type="button" data-filtro-historico="defeitos" aria-pressed="false">Com defeito</button>
+      </div>
+    </div>
+    <div id="stories" class="stories" role="group" aria-label="Filtrar por tipo de falha"></div>
 
     <div id="grade-historico" class="grade-historico"></div>
 
     <div id="historico-vazio" class="bloco-vazio bloco-vazio-alto">
-      <svg viewBox="0 0 24 24" width="44" height="44" fill="none" stroke="currentColor"
-           stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
-        <path d="M3 12a9 9 0 1 0 2.9-6.6"/>
-        <path d="M3 4.2v4.2h4.2"/>
-        <path d="M12 7.5V12l3.2 1.9"/>
-      </svg>
-      <p class="vazio-titulo">Nenhuma peca inspecionada ainda</p>
-      <p class="vazio-texto">Ligue a camera na aba <strong>Ao vivo</strong> ou envie uma imagem em <strong>Testar imagem</strong>.</p>
-    </div>
-
-    <!-- Modal do evento (estilo post) -->
-    <div id="modal-evento" class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-classe" hidden>
-      <div class="modal-fundo" data-fechar-modal></div>
-      <div class="modal-caixa">
-        <button id="btn-modal-fechar" class="btn btn-icone modal-fechar" type="button" aria-label="Fechar detalhe da peca">
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
-               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
-            <path d="M6 6 18 18"/><path d="M18 6 6 18"/>
-          </svg>
-        </button>
-
-        <div class="modal-midia">
-          <img id="modal-img" class="modal-img" alt="Foto da peca inspecionada">
-          <img id="modal-heatmap" class="modal-heatmap" alt="Mapa de calor da peca inspecionada" hidden>
-        </div>
-
-        <div class="modal-detalhes">
-          <div class="modal-topo">
-            <p class="modal-rotulo">Classe detectada</p>
-            <h2 id="modal-classe" class="modal-classe">--</h2>
-            <div class="modal-linha-meta">
-              <span id="modal-confianca" class="chip chip-terracota">--%</span>
-              <span id="modal-hora" class="chip chip-neutro">--:--</span>
-              <span id="modal-tecido" class="chip chip-neutro">Tecido --</span>
-              <span id="modal-lote" class="chip chip-neutro">Sem lote</span>
-            </div>
-          </div>
-
-          <div class="bloco">
-            <h4 class="bloco-titulo">Diagnostico da IA</h4>
-            <div id="modal-diagnostico" class="ia-conteudo">
-              <p class="card-texto">Peca uma explicacao para entender o que o modelo observou nesta peca.</p>
-            </div>
-            <button id="btn-modal-diagnostico" class="btn btn-fantasma" type="button">
-              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
-                   stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
-                <path d="M13.2 2.5 4.6 13.8h6.1L9.9 21.5l8.6-11.3h-6.1z"/>
-              </svg>
-              <span>Explicar com IA</span>
-            </button>
-          </div>
-
-          <div class="bloco">
-            <h4 class="bloco-titulo">Revisao do operador</h4>
-            <label class="campo" for="modal-select-rotulo">
-              <span class="campo-rotulo">Rotulo correto</span>
-              <select id="modal-select-rotulo" class="entrada">
-                <option value="">Selecione a classe correta</option>
-              </select>
-            </label>
-            <div class="linha-botoes">
-              <button id="btn-modal-confirmar" class="btn btn-principal btn-ok" type="button">
-                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
-                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
-                  <path d="m4.5 12.5 5 5 10-11"/>
-                </svg>
-                <span>Confirmar</span>
-              </button>
-              <button id="btn-modal-corrigir" class="btn btn-secundario" type="button">
-                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
-                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
-                  <path d="M12 3.6 2.9 19a1.2 1.2 0 0 0 1 1.8h16.2a1.2 1.2 0 0 0 1-1.8z"/>
-                  <path d="M12 9.5v4.2"/><path d="M12 17.3h.01"/>
-                </svg>
-                <span>Corrigir rotulo</span>
-              </button>
-            </div>
-          </div>
-
-          <div class="bloco">
-            <h4 class="bloco-titulo">Foto</h4>
-            <p id="modal-foto-texto" class="card-texto">A peca continua no historico; so a imagem e apagada deste computador e do banco.</p>
-            <button id="btn-modal-apagar-foto" class="btn btn-perigo" type="button">
-              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
-                   stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
-                <path d="M4 7h16"/><path d="M10 11v6"/><path d="M14 11v6"/>
-                <path d="M5.5 7l1 12.2A1.9 1.9 0 0 0 8.4 21h7.2a1.9 1.9 0 0 0 1.9-1.8L18.5 7"/>
-                <path d="M9 7V4.8A1.3 1.3 0 0 1 10.3 3.5h3.4A1.3 1.3 0 0 1 15 4.8V7"/>
-              </svg>
-              <span>Apagar foto</span>
-            </button>
-          </div>
-        </div>
-      </div>
+      <p class="vazio-titulo">Nenhuma peça neste dia</p>
+      <p class="vazio-texto">Inspecione uma peça na aba <strong>Inspeção</strong> ou escolha outro dia.</p>
     </div>
   </section>
 
@@ -747,170 +565,188 @@
   </section>
 
   <!-- ======================================================
-       PAGINA: RELATORIOS
+       PÁGINA: RELATÓRIOS
        ====================================================== -->
-  <section id="pagina-relatorios" class="pagina" aria-label="Relatorios">
-    <div class="card relatorio-visual"><h2>Resumo visual das inspeções</h2><label>Dia do relatório<input id="relatorio-dia" type="date"></label><button id="relatorio-atualizar" class="btn btn-principal" type="button">Atualizar indicadores</button><a id="relatorio-pdf" class="btn btn-principal" href="/api/relatorios/pdf" download>Exportar inspeções em PDF</a><a class="btn btn-fantasma" href="/api/gestao/report.pdf" download>Exportar produção em PDF</a><div id="relatorio-indicadores" class="relatorio-indicadores" aria-live="polite"></div><div id="relatorio-classes"></div></div>
+  <section id="pagina-relatorios" class="pagina" aria-label="Relatórios">
     <div class="pagina-cabecalho">
       <div class="pagina-titulos">
-        <h1>Relatorios</h1>
-        <p class="pagina-sub">Gere um resumo do turno com as falhas encontradas e recomendacoes.</p>
+        <h1>Relatórios</h1>
+        <p class="pagina-sub">Resumo das inspeções por dia, pronto para exportar.</p>
       </div>
       <div class="pagina-acoes">
-        <button id="btn-gerar-relatorio" class="btn btn-principal" type="button">
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
-               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
-            <path d="M14 3H7.5A2.5 2.5 0 0 0 5 5.5v13A2.5 2.5 0 0 0 7.5 21h9a2.5 2.5 0 0 0 2.5-2.5V8z"/>
-            <path d="M14 3v5h5"/><path d="M9 13h6"/><path d="M9 17h4"/>
-          </svg>
-          <span>Gerar relatorio</span>
-        </button>
-        <button id="btn-baixar-relatorio" class="btn btn-secundario" type="button" disabled>
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
-               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
-            <path d="M12 3.5v12"/><path d="m7.5 11 4.5 4.5 4.5-4.5"/><path d="M4 20h16"/>
-          </svg>
-          <span>Baixar</span>
-        </button>
+        <label class="campo campo-inline" for="relatorio-dia">
+          <span class="campo-rotulo">Dia</span>
+          <input id="relatorio-dia" class="entrada" type="date">
+        </label>
       </div>
     </div>
 
-    <div class="card">
-      <div class="card-cabecalho">
-        <h3>Resumo gerado</h3>
-        <span id="relatorio-status" class="card-nota">Nenhum relatorio gerado ainda.</span>
-      </div>
-      <div id="relatorio-saida" class="relatorio-saida">
-        <div class="bloco-vazio">
-          <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor"
-               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
-            <path d="M14 3H7.5A2.5 2.5 0 0 0 5 5.5v13A2.5 2.5 0 0 0 7.5 21h9a2.5 2.5 0 0 0 2.5-2.5V8z"/>
-            <path d="M14 3v5h5"/><path d="M9 13h6"/><path d="M9 17h4"/>
-          </svg>
-          <p class="vazio-titulo">O relatorio aparece aqui</p>
-          <p class="vazio-texto">Toque em <strong>Gerar relatorio</strong> para montar o resumo do turno.</p>
-        </div>
+    <div class="card relatorio-visual">
+      <div id="relatorio-indicadores" class="relatorio-indicadores" aria-live="polite"></div>
+      <div id="relatorio-classes"></div>
+      <div class="linha-botoes">
+        <a id="relatorio-pdf" class="btn btn-principal" href="/api/relatorios/pdf" download>Exportar inspeções (PDF)</a>
+        <a class="btn btn-secundario" href="/api/gestao/report.pdf" download>Exportar produção (PDF)</a>
       </div>
     </div>
   </section>
 
   <!-- ======================================================
-       PAGINA: AJUSTES
+       PÁGINA: AJUSTES
        ====================================================== -->
   <section id="pagina-ajustes" class="pagina" aria-label="Ajustes">
     <div class="pagina-cabecalho">
       <div class="pagina-titulos">
         <h1>Ajustes</h1>
-        <p class="pagina-sub">Calibre a sensibilidade da inspecao e o assistente de diagnostico.</p>
+        <p class="pagina-sub">Valem para todos e continuam depois que o sistema reinicia.</p>
       </div>
     </div>
 
     <div class="grade-ajustes">
       <div class="card">
         <div class="card-cabecalho">
-          <h3>Sensibilidade da inspecao</h3>
+          <h3>Inspeção</h3>
         </div>
 
-        <div class="campo campo-range">
-          <label for="aj-limiar-alerta">Limiar de alerta</label>
-          <div class="range-linha">
-            <input id="aj-limiar-alerta" type="range" min="0.3" max="0.99" step="0.01" value="0.70">
-            <output id="aj-limiar-alerta-out" for="aj-limiar-alerta">0.70</output>
-          </div>
-          <p class="campo-ajuda">Confianca minima para reprovar a peca e disparar o alerta.</p>
+        <div class="campo">
+          <label for="aj-sensibilidade">Rigor da inspeção</label>
+          <select id="aj-sensibilidade" class="entrada">
+            <option value="baixa">Tolerante: reprova só defeitos evidentes</option>
+            <option value="normal">Normal</option>
+            <option value="alta">Rigoroso: reprova na dúvida</option>
+            <option value="personalizado" hidden>Personalizado</option>
+          </select>
         </div>
 
-        <div class="campo campo-range">
-          <label for="aj-limiar-incerteza">Limiar de incerteza</label>
-          <div class="range-linha">
-            <input id="aj-limiar-incerteza" type="range" min="0.1" max="0.9" step="0.01" value="0.45">
-            <output id="aj-limiar-incerteza-out" for="aj-limiar-incerteza">0.45</output>
-          </div>
-          <p class="campo-ajuda">Abaixo desse valor o veredito fica marcado como incerto.</p>
+        <div class="campo">
+          <label for="aj-meta">Meta de peças por turno</label>
+          <input id="aj-meta" class="entrada" type="number" min="1" max="100000" step="1">
         </div>
 
-        <div class="campo campo-range">
-          <label for="aj-frames">Quadros por decisao</label>
-          <div class="range-linha">
-            <input id="aj-frames" type="range" min="1" max="15" step="1" value="5">
-            <output id="aj-frames-out" for="aj-frames">5</output>
+        <details class="detalhes">
+          <summary>Avançado</summary>
+          <div class="campo campo-range">
+            <label for="aj-limiar-alerta">Certeza mínima para reprovar</label>
+            <div class="range-linha">
+              <input id="aj-limiar-alerta" type="range" min="0.3" max="0.99" step="0.01" value="0.55">
+              <output id="aj-limiar-alerta-out" for="aj-limiar-alerta">0,55</output>
+            </div>
           </div>
-          <p class="campo-ajuda">Quantos quadros seguidos entram na votacao antes de decidir.</p>
-        </div>
-
-        <div class="campo campo-range">
-          <label for="aj-ema">Suavizacao (EMA)</label>
-          <div class="range-linha">
-            <input id="aj-ema" type="range" min="0" max="0.95" step="0.05" value="0.60">
-            <output id="aj-ema-out" for="aj-ema">0.60</output>
+          <div class="campo campo-range">
+            <label for="aj-limiar-incerteza">Abaixo disto, a leitura vai para conferência</label>
+            <div class="range-linha">
+              <input id="aj-limiar-incerteza" type="range" min="0.1" max="0.95" step="0.01" value="0.70">
+              <output id="aj-limiar-incerteza-out" for="aj-limiar-incerteza">0,70</output>
+            </div>
           </div>
-          <p class="campo-ajuda">Quanto maior, mais estavel o veredito e mais lenta a reacao.</p>
-        </div>
+          <div class="campo campo-range">
+            <label for="aj-frames">Imagens seguidas antes de decidir (câmera ao vivo)</label>
+            <div class="range-linha">
+              <input id="aj-frames" type="range" min="1" max="15" step="1" value="4">
+              <output id="aj-frames-out" for="aj-frames">4</output>
+            </div>
+          </div>
+          <div class="campo campo-range">
+            <label for="aj-ema">Estabilidade da leitura ao vivo</label>
+            <div class="range-linha">
+              <input id="aj-ema" type="range" min="0.05" max="0.95" step="0.05" value="0.45">
+              <output id="aj-ema-out" for="aj-ema">0,45</output>
+            </div>
+          </div>
+        </details>
       </div>
 
       <div class="card">
         <div class="card-cabecalho">
-          <h3>Assistente de diagnostico</h3>
+          <h3>Explicações por IA</h3>
         </div>
-
-        <label class="interruptor" for="aj-llm">
-          <input id="aj-llm" type="checkbox">
-          <span class="interruptor-trilho" aria-hidden="true"><span class="interruptor-bolinha"></span></span>
-          <span class="interruptor-texto">Usar modelo de linguagem para explicar as falhas</span>
-        </label>
-
-        <div class="campo">
-          <label for="aj-modelo">Modelo</label>
-          <input id="aj-modelo" class="entrada" type="text" placeholder="ex.: llama3.1:8b" autocomplete="off">
-          <p class="campo-ajuda">Nome do modelo servido localmente. Deixe em branco para usar o padrao.</p>
-        </div>
-
+        <p class="card-texto">Sem conexão, as explicações usam a base técnica local.</p>
         <div class="linha-botoes">
           <button id="btn-testar-llm" class="btn btn-secundario" type="button">
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
-                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
-              <path d="M13.2 2.5 4.6 13.8h6.1L9.9 21.5l8.6-11.3h-6.1z"/>
-            </svg>
-            <span>Testar conexao</span>
+            <span>Testar conexão</span>
           </button>
         </div>
-
-        <div id="llm-status" class="llm-status">
-          <p class="card-texto">Conexao ainda nao testada.</p>
-        </div>
+        <div id="llm-status" class="llm-status"></div>
       </div>
     </div>
 
     <div class="barra-salvar">
-      <span id="ajustes-status" class="ajustes-status">Nenhuma alteracao pendente.</span>
+      <span id="ajustes-status" class="ajustes-status" role="status"></span>
       <button id="btn-salvar-ajustes" class="btn btn-principal" type="button">
-        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
-             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
-          <path d="m4.5 12.5 5 5 10-11"/>
-        </svg>
         <span>Salvar ajustes</span>
       </button>
+    </div>
+
+    <div class="conta-acoes">
+      <button class="btn btn-fantasma" type="button" data-sair>Sair da conta</button>
     </div>
   </section>
 
 </main>
 
 <!-- ==========================================================
-     TAB BAR (celular)
+     DETALHE DA PEÇA (serve ao histórico e à câmera ao vivo)
      ========================================================== -->
-<nav id="tabbar" aria-label="Navegacao inferior">
-  <button class="nav-item ativo" type="button" data-pagina="ao-vivo" aria-label="Ao vivo" aria-current="page">
+<div id="modal-evento" class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-classe" hidden>
+  <div class="modal-fundo" data-fechar-modal></div>
+  <div class="modal-caixa">
+    <button id="btn-modal-fechar" class="btn btn-icone modal-fechar" type="button" aria-label="Fechar">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+        <path d="M6 6 18 18"/><path d="M18 6 6 18"/>
+      </svg>
+    </button>
+
+    <div class="modal-midia">
+      <img id="modal-img" class="modal-img" alt="Foto da peça inspecionada">
+    </div>
+
+    <div class="modal-detalhes">
+      <div class="modal-topo">
+        <h2 id="modal-classe" class="modal-classe">--</h2>
+        <div class="modal-linha-meta">
+          <span id="modal-confianca" class="chip chip-terracota">--%</span>
+          <span id="modal-hora" class="chip chip-neutro">--:--</span>
+          <span id="modal-lote" class="chip chip-neutro">Sem lote</span>
+        </div>
+      </div>
+
+      <div id="modal-conferencia" class="conferencia"></div>
+
+      <details class="bloco detalhes">
+        <summary>Por que? Como resolver?</summary>
+        <div id="modal-diagnostico" class="ia-conteudo"></div>
+        <button id="btn-modal-diagnostico" class="btn btn-fantasma" type="button">
+          <span>Explicar</span>
+        </button>
+      </details>
+
+      <details class="bloco detalhes">
+        <summary>Apagar foto</summary>
+        <p id="modal-foto-texto" class="card-texto">A peça continua no histórico; só a imagem é apagada deste computador e do banco.</p>
+        <button id="btn-modal-apagar-foto" class="btn btn-perigo" type="button">
+          <span>Apagar foto</span>
+        </button>
+      </details>
+    </div>
+  </div>
+</div>
+
+<!-- ==========================================================
+     BARRA INFERIOR (celular)
+     ========================================================== -->
+<nav id="tabbar" aria-label="Navegação inferior">
+  <button class="nav-item ativo" type="button" data-pagina="ao-vivo" aria-current="page">
     <span class="nav-icone" aria-hidden="true">
       <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor"
            stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false">
-        <rect x="2.5" y="6" width="13" height="12" rx="2.5"/>
-        <path d="M15.5 11 21 7.8v8.4L15.5 13z"/>
+        <path d="M3.5 7.5h3L8 5h8l1.5 2.5h3A1.5 1.5 0 0 1 22 9v8.5a1.5 1.5 0 0 1-1.5 1.5h-17A1.5 1.5 0 0 1 2 17.5V9a1.5 1.5 0 0 1 1.5-1.5z"/>
+        <circle cx="12" cy="13" r="3.5"/>
       </svg>
     </span>
     <span class="tab-texto">Inspeção</span>
   </button>
-
-<button class="nav-item" type="button" data-pagina="historico" aria-label="Historico">
+  <button class="nav-item" type="button" data-pagina="historico">
     <span class="nav-icone" aria-hidden="true">
       <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor"
            stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false">
@@ -919,37 +755,47 @@
         <rect x="3" y="13.5" width="7.5" height="7.5" rx="1.6"/>
         <rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.6"/>
       </svg>
+      <span class="nav-badge" data-badge-pendentes hidden></span>
     </span>
-    <span class="tab-texto">Historico</span>
+    <span class="tab-texto">Histórico</span>
   </button>
-
-  <button class="nav-item" type="button" data-pagina="lotes" aria-label="Lotes">
-    <span class="nav-icone" aria-hidden="true">
-      <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor"
-             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false">
-          <path d="M3.5 7.5 12 3l8.5 4.5L12 12z"/>
-          <path d="m3.5 12 8.5 4.5 8.5-4.5"/>
-          <path d="m3.5 16.5 8.5 4.5 8.5-4.5"/>
-        </svg>
-    </span>
-    <span class="tab-texto">Lotes</span>
-  </button>
-
-<button class="nav-item" type="button" data-pagina="ajustes" aria-label="Ajustes">
+  <button class="nav-item" type="button" data-pagina="lotes">
     <span class="nav-icone" aria-hidden="true">
       <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor"
            stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false">
-        <circle cx="12" cy="12" r="3.2"/>
-        <path d="M19.1 14.6a1.5 1.5 0 0 0 .3 1.7l.1.1a1.9 1.9 0 1 1-2.7 2.7l-.1-.1a1.5 1.5 0 0 0-1.7-.3 1.5 1.5 0 0 0-.9 1.4v.2a1.9 1.9 0 1 1-3.8 0v-.1a1.5 1.5 0 0 0-1-1.4 1.5 1.5 0 0 0-1.7.3l-.1.1a1.9 1.9 0 1 1-2.7-2.7l.1-.1a1.5 1.5 0 0 0 .3-1.7 1.5 1.5 0 0 0-1.4-.9h-.2a1.9 1.9 0 1 1 0-3.8h.1a1.5 1.5 0 0 0 1.4-1 1.5 1.5 0 0 0-.3-1.7l-.1-.1a1.9 1.9 0 1 1 2.7-2.7l.1.1a1.5 1.5 0 0 0 1.7.3h.1a1.5 1.5 0 0 0 .9-1.4v-.2a1.9 1.9 0 1 1 3.8 0v.1a1.5 1.5 0 0 0 .9 1.4 1.5 1.5 0 0 0 1.7-.3l.1-.1a1.9 1.9 0 1 1 2.7 2.7l-.1.1a1.5 1.5 0 0 0-.3 1.7v.1a1.5 1.5 0 0 0 1.4.9h.2a1.9 1.9 0 1 1 0 3.8h-.1a1.5 1.5 0 0 0-1.4.9z"/>
+        <path d="M3.5 7.5 12 3l8.5 4.5L12 12z"/>
+        <path d="m3.5 12 8.5 4.5 8.5-4.5"/>
+        <path d="m3.5 16.5 8.5 4.5 8.5-4.5"/>
       </svg>
     </span>
-    <span class="tab-texto">Ajustes</span>
+    <span class="tab-texto">Lotes</span>
+  </button>
+  <a class="nav-item" href="/gestao">
+    <span class="nav-icone" aria-hidden="true">
+      <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false">
+        <path d="M4 20V10"/><path d="M10 20V4"/><path d="M16 20v-7"/><path d="M22 20H2"/>
+      </svg>
+    </span>
+    <span class="tab-texto">Gestão</span>
+  </a>
+  <button id="tab-mais" class="nav-item" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="menu-mais">
+    <span class="nav-icone" aria-hidden="true">
+      <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false">
+        <path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h16"/>
+      </svg>
+    </span>
+    <span class="tab-texto">Mais</span>
   </button>
 </nav>
+<div id="menu-mais" class="menu-mais" hidden>
+  <button class="nav-item" type="button" data-pagina="relatorios">Relatórios</button>
+  <button class="nav-item" type="button" data-pagina="ajustes">Ajustes</button>
+  <button class="nav-item" type="button" data-instalar hidden>Instalar aplicativo</button>
+  <button class="nav-item" type="button" data-sair>Sair da conta</button>
+</div>
 
-<!-- ==========================================================
-     TOASTS
-     ========================================================== -->
 <div id="toasts" class="toasts" role="status" aria-live="polite"></div>
 
 </body>

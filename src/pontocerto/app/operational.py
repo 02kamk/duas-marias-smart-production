@@ -18,6 +18,7 @@ def extend(app,root=ROOT):
         events=inspection_rows(dia)
         return {'total':len(events),'defeitos':sum(e['e_falha'] for e in events),
                 'revisadas':sum(bool(e['revisao_humana']) for e in events),
+                'pendentes':sum(bool(e.get('precisa_revisao')) for e in events),
                 'classes':dict(Counter(e['nome_final'] for e in events)),
                 'scope':'Até 500 inspeções mais recentes no período selecionado.'}
 
@@ -33,7 +34,7 @@ def extend(app,root=ROOT):
              summary['scope'],'As sugestões do modelo permanecem distintas das classes conferidas.'],
             ['Data / hora','Sugestão original','Classe atual','Conferência'],
             [[e['data']+' '+e['hora'],e['nome'],e['nome_final'],
-              'Conferida' if e['revisao_humana'] else 'Pendente'] for e in events])
+              'Conferida' if e['revisao_humana'] else ('Aguardando' if e.get('precisa_revisao') else 'Automática')] for e in events])
         return Response(data,media_type='application/pdf',headers={'Content-Disposition':'attachment; filename="relatorio-inspecoes.pdf"'})
 
     @app.get('/manifest.webmanifest',include_in_schema=False)
