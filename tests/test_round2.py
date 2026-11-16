@@ -1,3 +1,4 @@
+import importlib.util
 import io
 import tempfile
 import unittest
@@ -26,6 +27,7 @@ class RoundTwo(unittest.TestCase):
         self.assertEqual(sum(r['expected'] for r in grade),100)
         self.assertEqual(suggestions('texto não estruturado'),({},[]))
 
+    @unittest.skipUnless(importlib.util.find_spec('rapidocr_onnxruntime'),'OCR opcional não instalado (requirements-ocr.txt)')
     def test_ocr_is_preview_only_and_requires_review(self):
         img=io.BytesIO();Image.new('RGB',(100,100),'white').save(img,format='PNG')
         before=self.store.read()
