@@ -12,13 +12,13 @@ Faca isto **sempre**, mesmo que tenha funcionado ontem.
 ```powershell
 cd caminho\ate\duas-marias-smart-production
 .venv\Scripts\activate
-python scripts\00_verificar_ambiente.py
+python scripts\verificar_ambiente.py
 ```
 
 Voce quer ver `[ok]` em: pacotes, dataset, manifesto, **checkpoint** e
 **camera**. Depois:
 
-- [ ] `python scripts\05_rodar_app.py` e deixe rodando em uma janela minimizada.
+- [ ] `.\Iniciar.ps1` (ou `python scripts\rodar.py`) e deixe rodando em uma janela minimizada.
 - [ ] Abra `http://127.0.0.1:8000` e clique em **Ligar camera**. Confirme que o
       video aparece e que o FPS no canto e maior que 5.
 - [ ] Ajuste a luz e a distancia **agora**, nao na hora (veja "Como apontar a
@@ -266,7 +266,7 @@ palavras (roteiro dos 3:30) e apontar os parametros na aba **Ajustes**.
 
 | Falhou | O que fazer |
 |---|---|
-| A porta 8000 esta ocupada | `python scripts\05_rodar_app.py --porta 8080` |
+| A porta 8000 esta ocupada | `.\Iniciar.ps1 -Porta 8080` |
 | O modelo nao carrega | Abra `/api/saude` e mostre o campo `modelo.erro` — vire isso a seu favor: "o sistema sobe mesmo sem modelo e diz exatamente o que falta, em vez de dar tela branca" |
 | Sem internet / LLM fora do ar | Diga: "sem chave o sistema perde a segunda opiniao e o texto gerado, mas a inspecao continua — e exatamente por isso a CNN decide e o LLM so apoia" |
 | O notebook travou | Mostre a matriz de confusao e os graficos de `artifacts/avaliacao/` direto do Explorer e conduza pela arquitetura em `docs/ARQUITETURA.md` |

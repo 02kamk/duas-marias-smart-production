@@ -33,7 +33,7 @@
    * 00. CONSTANTES E ESTADO INTERNO
    * ===================================================================== */
 
-  var PAGINAS = ["ao-vivo", "testar", "historico", "lotes", "treinamento", "relatorios", "ajustes"];
+  var PAGINAS = ["ao-vivo", "historico", "lotes", "relatorios", "ajustes"];
 
   // Situacao do banco (chip da barra superior): consulta lenta, o servidor ja
   // guarda o teste de conexao em cache.
@@ -50,22 +50,6 @@
   var PIXEL_VAZIO =
     "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
 
-  // Paleta usada apenas pelo Canvas do grafico de treino (o CSS nao alcanca o canvas).
-  var COR = {
-    terracota: "#C1502E",
-    terracotaClaro: "#E08258",
-    terracotaEscuro: "#9A3D21",
-    barro: "#7C3A1F",
-    grafite: "#6B625C",
-    grafiteClaro: "#9A918A",
-    linha: "#E4DAD1",
-    areia: "#F2EAE3",
-    osso: "#FAF7F3",
-    branco: "#FFFFFF",
-    tinta: "#1C1917",
-    sage: "#4F7A56"
-  };
-
   // Estado unico da aplicacao. Nada fora daqui.
   var App = {
     pagina: null,
@@ -78,7 +62,6 @@
     ultimoEventoId: null,
     eventoAberto: null,
     analiseAtual: null,   // resultado da pagina Testar
-    treino: { dados: null, historico: [], metricas: null },
     relatorioMarkdown: "",
     banco: null,          // ultimo /api/db/status
     lotes: { lista: [], porId: {}, clientes: [], ativo: null, detalheId: null, carregado: false },
@@ -182,15 +165,6 @@
     if (isNaN(d.getTime())) return "--:--";
     function dois(x) { return x < 10 ? "0" + x : String(x); }
     return dois(d.getHours()) + ":" + dois(d.getMinutes()) + ":" + dois(d.getSeconds());
-  }
-
-  function formatarDuracao(segundos) {
-    var s = Math.max(0, Math.round(numero(segundos, 0)));
-    var h = Math.floor(s / 3600);
-    var m = Math.floor((s % 3600) / 60);
-    var r = s % 60;
-    function dois(x) { return x < 10 ? "0" + x : String(x); }
-    return (h > 0 ? h + "h " : "") + dois(m) + "min " + dois(r) + "s";
   }
 
   /**
@@ -386,6 +360,7 @@
   }
 
   function irPara(pagina, atualizarHash) {
+    // Endereços antigos (#testar, #treinamento) caem na inspeção.
     if (pagina === "testar" || pagina === "treinamento") pagina = "ao-vivo";
     if (PAGINAS.indexOf(pagina) < 0) pagina = PAGINA_PADRAO;
     var anterior = App.pagina;
@@ -429,12 +404,10 @@
     } else if (pagina === "lotes") {
       carregarLotes();
       atualizarBanco(false);
-    } else if (pagina === "treinamento") {
-      carregarTreinamento();
     } else if (pagina === "ajustes") {
       carregarAjustes();
     }
-    // A pagina "testar" e a "relatorios" nao precisam buscar nada ao entrar.
+    // A pagina "relatorios" nao precisa buscar nada ao entrar.
   }
 
   /* =======================================================================
@@ -1154,7 +1127,7 @@
   /**
    * Diagnostico da classe prevista na aba Testar.
    * A rota oficial e por evento; quando a analise avulsa nao gera evento,
-   * tentamos a rota generica /api/diagnostico. Se nenhuma existir, avisamos
+   * avisamos
    * sem quebrar a interface.
    */
   function diagnosticoDoTeste() {
@@ -1167,9 +1140,8 @@
     botaoCarregando(btn, true, "Diagnosticando...");
     setHTML($("teste-ia"), '<p class="ia-carregando">Consultando a base tecnica...</p>', "teste-ia");
 
-    var pedido = eventoId
-      ? postJSON("/api/eventos/" + encodeURIComponent(eventoId) + "/diagnostico", {}, { timeout: 60000 })
-      : postJSON("/api/diagnostico", { classe_key: p.classe_key, confianca: p.confianca }, { timeout: 60000 });
+    if (!eventoId) { toast("Analise uma imagem primeiro.", "aviso"); return; }
+    var pedido = postJSON("/api/eventos/" + encodeURIComponent(eventoId) + "/diagnostico", {}, { timeout: 60000 });
 
     pedido
       .then(function (r) {
@@ -1184,9 +1156,7 @@
       })
       .catch(function (e) {
         botaoCarregando(btn, false);
-        var aviso = e.status === 404
-          ? "Esta versao do servidor so diagnostica eventos registrados ao vivo."
-          : e.message;
+        var aviso = e.message;
         setHTML($("teste-ia"), '<p class="ia-erro">' + esc(aviso) + "</p>", "teste-ia");
         toast(aviso, "aviso");
       });
@@ -1468,245 +1438,6 @@
         botaoCarregando(btn, false);
         setHTML($("modal-diagnostico"), '<p class="ia-erro">' + esc(e.message) + "</p>", "modal-diagnostico");
       });
-  }
-
-  /* =======================================================================
-   * 11. PAGINA TREINAMENTO
-   * ===================================================================== */
-
-  function carregarTreinamento() {
-    return fetchJSON("/api/treino/historico")
-      .then(function (d) {
-        d = d || {};
-        // O servidor pode devolver a lista pura ou um envelope; aceitamos os dois.
-        var hist = Array.isArray(d) ? d : (d.historico || d.epocas || d.treino || []);
-        if (!Array.isArray(hist)) hist = [];
-        var metricas = d.metricas || d.avaliacao || null;
-
-        App.treino.dados = d;
-        App.treino.historico = hist;
-        App.treino.metricas = metricas;
-
-        var temAlgo = hist.length > 0 || !!metricas;
-        mostrar($("treino-vazio"), !temAlgo);
-        mostrar($("treino-resumo"), temAlgo);
-        if (!temAlgo) return;
-
-        preencherResumoTreino(hist, metricas, d);
-        preencherTabelaClasses(metricas);
-        desenharGraficoTreino();
-        carregarMatrizConfusao(d, metricas);
-      })
-      .catch(function (e) {
-        mostrar($("treino-vazio"), true);
-        mostrar($("treino-resumo"), false);
-        toast("Sem dados de treino: " + e.message, "aviso");
-      });
-  }
-
-  function preencherResumoTreino(hist, metricas, bruto) {
-    var ultima = hist.length ? hist[hist.length - 1] : {};
-    var melhorF1 = 0;
-    hist.forEach(function (h) { melhorF1 = Math.max(melhorF1, numero(h.f1_val, 0)); });
-
-    var acc = metricas && metricas.acuracia != null ? metricas.acuracia : ultima.acc_val;
-    var f1 = metricas && metricas.macro_f1 != null ? metricas.macro_f1 : (melhorF1 || ultima.f1_val);
-
-    setTexto($("treino-acuracia"), formatarPercentual(acc, 1));
-    setTexto($("treino-f1"), formatarPercentual(f1, 1));
-    setTexto($("treino-epocas"), hist.length ? hist.length : "--");
-
-    var backbone = (bruto && (bruto.backbone || (bruto.meta && bruto.meta.backbone))) ||
-      (App.saude && App.saude.modelo && App.saude.modelo.backbone) || "--";
-    setTexto($("treino-backbone"), backbone);
-  }
-
-  /** Aceita chaves em portugues (do nosso relatorio) ou em ingles (sklearn). */
-  function valorMetrica(obj, nomes) {
-    if (!obj) return null;
-    for (var i = 0; i < nomes.length; i++) {
-      if (obj[nomes[i]] != null) return obj[nomes[i]];
-    }
-    return null;
-  }
-
-  function preencherTabelaClasses(metricas) {
-    var tbody = $("tabela-classes");
-    if (!tbody) return;
-    var porClasse = metricas && (metricas.por_classe || metricas.classes);
-    if (!porClasse) {
-      setHTML(tbody, '<tr><td colspan="5">Avalie o modelo para ver as metricas por classe.</td></tr>', "tabela-classes");
-      return;
-    }
-    var linhas = [];
-    App.classes.forEach(function (c) {
-      var m = porClasse[c.key] || porClasse[String(c.index)] || porClasse[c.nome];
-      if (!m) return;
-      var p = valorMetrica(m, ["precisao", "precision"]);
-      var r = valorMetrica(m, ["recall", "revocacao"]);
-      var f = valorMetrica(m, ["f1", "f1_score", "f1-score"]);
-      var s = valorMetrica(m, ["suporte", "support", "n"]);
-      linhas.push(
-        "<tr data-classe=\"" + esc(c.key) + "\">" +
-        '<th scope="row">' + esc(c.nome) + "</th>" +
-        "<td>" + esc(formatarPercentual(p, 1)) + "</td>" +
-        "<td>" + esc(formatarPercentual(r, 1)) + "</td>" +
-        "<td>" + esc(formatarPercentual(f, 1)) + "</td>" +
-        "<td>" + esc(s == null ? "--" : s) + "</td>" +
-        "</tr>"
-      );
-    });
-    if (!linhas.length) linhas.push('<tr><td colspan="5">Sem metricas por classe.</td></tr>');
-    setHTML(tbody, linhas.join(""), "tabela-classes");
-  }
-
-  function carregarMatrizConfusao(bruto, metricas) {
-    var img = $("matriz-img");
-    if (!img) return;
-    var url = (bruto && (bruto.matriz_confusao || bruto.matriz || bruto.matriz_url)) ||
-      (metricas && (metricas.matriz_confusao || metricas.matriz_url)) || null;
-    if (!url) { img.hidden = true; img.removeAttribute("src"); return; }
-    img.onerror = function () { img.hidden = true; };
-    img.onload = function () { img.hidden = false; };
-    img.src = url;
-  }
-
-  /* --- Grafico de treino em Canvas 2D puro ------------------------------ */
-
-  function desenharGraficoTreino() {
-    var canvas = $("grafico-treino");
-    var hist = App.treino.historico;
-    if (!canvas || !canvas.getContext || !hist || !hist.length) return;
-
-    var ctx = canvas.getContext("2d");
-    var dpr = window.devicePixelRatio || 1;
-    var caixa = canvas.getBoundingClientRect();
-    var larguraCss = Math.max(280, Math.round(caixa.width || canvas.clientWidth || 640));
-    var alturaCss = Math.max(180, Math.round(caixa.height || canvas.clientHeight || 280));
-
-    // devicePixelRatio correto: buffer em pixels fisicos, desenho em pixels CSS.
-    canvas.width = Math.round(larguraCss * dpr);
-    canvas.height = Math.round(alturaCss * dpr);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, larguraCss, alturaCss);
-
-    var padE = 48, padD = 48, padT = 28, padB = 42;
-    var larg = larguraCss - padE - padD;
-    var alt = alturaCss - padT - padB;
-    if (larg < 40 || alt < 40) return;
-
-    var n = hist.length;
-    var perdas = [];
-    hist.forEach(function (h) {
-      if (h.perda_treino != null) perdas.push(numero(h.perda_treino, 0));
-      if (h.perda_val != null) perdas.push(numero(h.perda_val, 0));
-    });
-    var perdaMax = perdas.length ? Math.max.apply(null, perdas) : 1;
-    perdaMax = perdaMax <= 0 ? 1 : perdaMax * 1.12;
-
-    function x(i) { return padE + (n === 1 ? larg / 2 : (i / (n - 1)) * larg); }
-    function yPerda(v) { return padT + alt - (limitar(numero(v, 0) / perdaMax, 0, 1) * alt); }
-    function yTaxa(v) {
-      var f = numero(v, 0);
-      if (f > 1.0001) f = f / 100;
-      return padT + alt - (limitar(f, 0, 1) * alt);
-    }
-
-    // Fundo e grade suave
-    ctx.fillStyle = COR.branco;
-    ctx.fillRect(0, 0, larguraCss, alturaCss);
-    ctx.strokeStyle = COR.linha;
-    ctx.lineWidth = 1;
-    ctx.font = "11px 'Roboto', 'Segoe UI', Arial, sans-serif";
-    ctx.textBaseline = "middle";
-
-    for (var g = 0; g <= 4; g++) {
-      var yy = padT + (g / 4) * alt;
-      ctx.beginPath();
-      ctx.moveTo(padE, Math.round(yy) + 0.5);
-      ctx.lineTo(padE + larg, Math.round(yy) + 0.5);
-      ctx.stroke();
-
-      // Eixo esquerdo: perda. Eixo direito: acuracia/F1 em porcentagem.
-      ctx.fillStyle = COR.grafiteClaro;
-      ctx.textAlign = "right";
-      ctx.fillText((perdaMax * (1 - g / 4)).toFixed(2).replace(".", ","), padE - 8, yy);
-      ctx.textAlign = "left";
-      ctx.fillStyle = COR.terracotaClaro;
-      ctx.fillText(Math.round((1 - g / 4) * 100) + "%", padE + larg + 8, yy);
-    }
-
-    // Eixo X: rotulos de epoca (com passo para nao amontoar)
-    var passo = Math.max(1, Math.ceil(n / 10));
-    ctx.textAlign = "center";
-    ctx.fillStyle = COR.grafite;
-    for (var i = 0; i < n; i++) {
-      if (i % passo !== 0 && i !== n - 1) continue;
-      var ep = hist[i].epoca != null ? hist[i].epoca : (i + 1);
-      ctx.fillText(String(ep), x(i), padT + alt + 16);
-    }
-    ctx.fillStyle = COR.grafiteClaro;
-    ctx.fillText("epoca", padE + larg / 2, padT + alt + 32);
-
-    function linhaSerie(campo, fnY, cor, tracejada, raioPonto) {
-      var pontos = [];
-      for (var i2 = 0; i2 < n; i2++) {
-        var v = hist[i2][campo];
-        if (v == null) continue;
-        pontos.push([x(i2), fnY(v)]);
-      }
-      if (!pontos.length) return false;
-      ctx.save();
-      ctx.strokeStyle = cor;
-      ctx.lineWidth = 2;
-      ctx.lineJoin = "round";
-      ctx.lineCap = "round";
-      if (tracejada) ctx.setLineDash([5, 4]);
-      ctx.beginPath();
-      pontos.forEach(function (p, k) { if (k === 0) ctx.moveTo(p[0], p[1]); else ctx.lineTo(p[0], p[1]); });
-      ctx.stroke();
-      ctx.setLineDash([]);
-      if (raioPonto) {
-        ctx.fillStyle = COR.branco;
-        pontos.forEach(function (p) {
-          ctx.beginPath();
-          ctx.arc(p[0], p[1], raioPonto, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.stroke();
-        });
-      }
-      ctx.restore();
-      return true;
-    }
-
-    var series = [];
-    if (linhaSerie("perda_treino", yPerda, COR.grafiteClaro, true, 0)) series.push(["Perda treino", COR.grafiteClaro, true]);
-    if (linhaSerie("perda_val", yPerda, COR.grafite, false, 2.5)) series.push(["Perda validacao", COR.grafite, false]);
-    if (linhaSerie("f1_val", yTaxa, COR.terracotaClaro, true, 0)) series.push(["F1 validacao", COR.terracotaClaro, true]);
-    if (linhaSerie("acc_val", yTaxa, COR.terracota, false, 2.5)) series.push(["Acuracia validacao", COR.terracota, false]);
-
-    // Moldura do grafico
-    ctx.strokeStyle = COR.linha;
-    ctx.strokeRect(padE + 0.5, padT + 0.5, larg, alt);
-
-    // Legenda
-    ctx.font = "12px 'Roboto', 'Segoe UI', Arial, sans-serif";
-    ctx.textAlign = "left";
-    var lx = padE + 6, ly = padT - 14;
-    if (ly < 10) ly = 10;
-    series.forEach(function (s) {
-      ctx.strokeStyle = s[1];
-      ctx.lineWidth = 2.5;
-      if (s[2]) ctx.setLineDash([5, 4]);
-      ctx.beginPath();
-      ctx.moveTo(lx, ly);
-      ctx.lineTo(lx + 16, ly);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.fillStyle = COR.tinta;
-      ctx.fillText(s[0], lx + 22, ly);
-      lx += 22 + ctx.measureText(s[0]).width + 18;
-    });
   }
 
   /* =======================================================================
@@ -2635,13 +2366,6 @@
     });
 
     /* --- Janela ---------------------------------------------------------- */
-    var tempoResize = null;
-    window.addEventListener("resize", function () {
-      if (tempoResize) clearTimeout(tempoResize);
-      tempoResize = setTimeout(function () {
-        if (App.pagina === "treinamento") desenharGraficoTreino();
-      }, 150);
-    });
 
     document.addEventListener("visibilitychange", function () {
       // Voltar para a aba deve retomar o ritmo de 5 Hz imediatamente.
@@ -2692,7 +2416,6 @@
     estado: App,
     irPara: irPara,
     toast: toast,
-    recarregarHistorico: carregarHistorico,
-    recarregarTreinamento: carregarTreinamento
+    recarregarHistorico: carregarHistorico
   };
 })();

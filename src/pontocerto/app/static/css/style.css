@@ -1591,11 +1591,7 @@ input[type="range"]::-moz-range-thumb {
   padding: var(--e3);
 }
 
-#grafico-treino {
-  width: 100%;
-  max-width: 100%;
-  height: auto;
-}
+
 
 .legenda {
   display: flex;
@@ -1619,15 +1615,8 @@ input[type="range"]::-moz-range-thumb {
 .cor-ambar { background: var(--ambar); }
 .cor-sage { background: var(--sage); }
 
-.grade-treino-baixo {
-  display: grid;
-  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
-  gap: var(--e4);
-  margin-top: var(--e4);
-  align-items: start;
-}
 
-.grade-treino-baixo .card + .card { margin-top: 0; }
+
 
 .tabela-rolagem { width: 100%; overflow-x: auto; }
 
@@ -1656,15 +1645,8 @@ input[type="range"]::-moz-range-thumb {
 
 .tabela tbody tr:last-child td { border-bottom: 0; }
 
-.matriz-img {
-  width: 100%;
-  border: 1px solid var(--linha);
-  border-radius: var(--raio);
-  background: var(--branco);
-}
 
-/* Se o resumo aparecer, o estado vazio some */
-.pagina:has(#treino-resumo:not([hidden])) #treino-vazio { display: none; }
+
 
 /* ==========================================================================
    14. PAGINA RELATORIOS
@@ -1990,7 +1972,6 @@ input[type="range"]::-moz-range-thumb {
 /* --- Ate 1280px: veredito e colunas mais estreitas ---------------------- */
 @media (max-width: 1280px) {
   .grade-ao-vivo { grid-template-columns: minmax(0, 1.15fr) minmax(300px, .85fr); }
-  .grade-treino-baixo { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* --- Ate 1100px: sidebar vira trilho de 72px --------------------------- */

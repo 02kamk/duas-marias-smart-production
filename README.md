@@ -1,55 +1,64 @@
 # Duas Marias Smart Production
 
-## Execução operacional atual
+Sistema da Duas Marias para a produção de costura, num servidor só e com login:
 
-No Windows, execute `.\Iniciar-Completo.ps1` e abra **http://127.0.0.1:8000/login**. No primeiro acesso, crie a conta local com senha forte; não existe senha padrão. A entrada da porta 5173 redireciona para esse servidor. O financeiro fica reservado à segunda fase.
-
-O fluxo atual inclui inspeção real com câmera e upload, histórico persistente por dia, revisão humana, colaboradores, recebimento de grade/aviamentos e redistribuição. A versão mobile é uma PWA instalável; a inferência depende do servidor. Supabase e Outlook exigem configuração externa descrita em [Configuração local](docs/testes/CONFIGURACAO_LOCAL.md). Os registros antigos abaixo são mantidos como referência do desenvolvimento.
-
-Sistema da Duas Marias para a produção de costura. Tem três partes:
-
-| Parte | O que é | Onde fica |
+| Parte | O que faz | Endereço |
 |---|---|---|
-| **Ponto Certo** (inspeção) | Câmera + rede neural que aprova ou reprova cada costura; histórico, diagnóstico com IA e lotes gravados no Supabase. | `src/pontocerto/` (app em `src/pontocerto/app/`) |
-| **Gestão, financeiro e produtividade** | Extensões do mesmo servidor: `/gestao` (lotes e atrasos), `/financeiro` (lançamentos locais) e `/produtividade` (experimento com dados públicos UCI). | `src/pontocerto/management/` e `src/pontocerto/business/` |
-| **Protótipo F0 (frontend)** | Protótipo React de gestão da produção, com dados fictícios. | `frontend/` |
+| **Inspeção** | Câmera ou foto + rede neural que aprova ou reprova cada costura. Mostra onde a IA olhou, guarda o histórico por dia e pede conferência humana só de defeitos e leituras incertas. | `/` |
+| **Gestão** | Recebimento da OP com grade e aviamentos, lotes, apontamento de produção, distribuição de tarefas, equipe e previsão de entrega. | `/gestao` |
+
+No celular, o sistema pode ser instalado como aplicativo (PWA). A análise das fotos roda no servidor.
 
 O contexto do projeto está em [docs/CONTEXTO_PROJETO.md](docs/CONTEXTO_PROJETO.md) e a arquitetura da inspeção em [docs/ARQUITETURA.md](docs/ARQUITETURA.md).
 
 ## Instalar (uma vez)
 
-Python 3.11 ou mais novo. No PowerShell, na raiz do repositório (a pasta deste README):
+Python 3.11 ou mais novo. No PowerShell, na raiz do repositório:
 
 ```powershell
 python -m venv .venv
 .venv\Scripts\activate
 python -m pip install --upgrade pip
 pip install -r requirements.txt      # ~1 GB por causa do torch
-python scripts\00_verificar_ambiente.py
+python scripts\verificar_ambiente.py
 ```
 
-O verificador lista o que falta (dataset, modelo, câmera, chaves) e diz qual é o próximo comando.
+O verificador lista o que falta e diz qual é o próximo comando. O modelo treinado já vem no repositório (`artifacts/modelo.pt`), então o dataset só é necessário para treinar de novo.
 
-## Rodar
+Se o `pip install` falhar por caminho longo demais (comum dentro do OneDrive), crie o ambiente fora da pasta: `python -m venv "$env:TEMP\duas-marias-venv"`. O atalho abaixo encontra esse ambiente sozinho.
 
-Todos os comandos partem da raiz do repositório, com o `.venv` ativo.
+Para ler a foto da OP no recebimento (opcional): `pip install -r requirements-ocr.txt`.
 
-| Comando | O que sobe |
-|---|---|
-| `python scripts\11_rodar_completo.py` | **Tudo**: inspeção em `/`, `/gestao`, `/financeiro` e `/produtividade` |
-| `python scripts\05_rodar_app.py` | Só a inspeção (câmera, histórico, lotes) |
-| `python scripts\07_rodar_com_gestao.py` | Inspeção + `/gestao` |
+## Usar
 
-Atalhos no Windows: `.\Iniciar-Completo.ps1` (tudo) e `.\Iniciar-Gestao.ps1` (inspeção + gestão). Abra http://127.0.0.1:8000. A câmera não liga sozinha: na aba **Ao vivo**, clique em **Ligar câmera**.
+```powershell
+.\Iniciar.ps1           # abre o sistema neste computador
+.\Iniciar.ps1 -Rede     # também pelo celular, na mesma rede Wi-Fi
+```
+
+O navegador abre em **http://127.0.0.1:8000/login**. No primeiro acesso, crie a conta com senha forte; não existe senha padrão. Com `-Rede`, a janela mostra o endereço para abrir no celular. Pelo celular, use **Fotografar**: a câmera ao vivo do navegador exige HTTPS.
+
+Sem o atalho: `python scripts\rodar.py` (aceita `--rede`, `--porta 8080` e `--abrir`).
 
 ### Configuração opcional (`.env`)
 
-Copie `.env.example` para `.env`. Sem ele tudo funciona, com estas limitações:
+Copie `.env.example` para `.env`. Sem ele tudo funciona e fica guardado neste computador:
 
-- **`OPENROUTER_API_KEY`**: sem ela, os diagnósticos usam a base técnica local e não há segunda opinião da IA.
-- **`SUPABASE_*`**: sem elas, os lotes não são gravados no banco e tudo fica só neste computador. Para ativar, rode [supabase/schema.sql](supabase/schema.sql) no SQL Editor do Supabase, crie um bucket **privado** `Capturas` e preencha as 4 variáveis. Com um lote em produção (página **Lotes**), cada peça inspecionada é gravada nele; as fotos sobem só para peças com defeito. Sem internet, as gravações ficam em `artifacts/pendentes.jsonl` e são reenviadas depois.
+- **`OPENROUTER_API_KEY`**: sem ela, as explicações usam a base técnica local, sem segunda opinião da IA.
+- **`SUPABASE_*`**: grava lotes, inspeções e fotos de defeito no banco. Rode [supabase/schema.sql](supabase/schema.sql) e [supabase/gestao.sql](supabase/gestao.sql) no SQL Editor, crie um bucket **privado** `Capturas`, preencha as variáveis e use `GESTAO_STORAGE=supabase`. Sem internet, as gravações esperam em `artifacts/pendentes.jsonl` e são reenviadas depois.
+- **`OUTLOOK_*`**: avisos de recebimento por e-mail, sempre conferidos antes de enviar.
 
-## Treinar e testar
+O passo a passo completo está em [docs/testes/CONFIGURACAO_LOCAL.md](docs/testes/CONFIGURACAO_LOCAL.md).
+
+## Testar
+
+```powershell
+python scripts\testar.py              # testes Python
+python scripts\testar.py management   # só um arquivo (tests/test_management.py)
+cd frontend; npm ci; npm test          # testes da tela de Gestão
+```
+
+## Treinar o modelo (opcional)
 
 | Comando | O que faz |
 |---|---|
@@ -57,50 +66,41 @@ Copie `.env.example` para `.env`. Sem ele tudo funciona, com estas limitações:
 | `python scripts\02_treinar.py` | Treina a CNN (`artifacts/modelo.pt`; horas em CPU) |
 | `python scripts\03_avaliar.py` | Métricas e matriz de confusão no split de teste |
 | `python scripts\04_auditar_rotulos.py --dry-run` | Plano da auditoria de rótulos com LLM (sem gastar) |
-| `python scripts\06_treinar_gestao.py` | Treina o modelo sintético de atraso de lotes |
-| `python scripts\10_treinar_produtividade_publica.py` | Treina o modelo de produtividade (dados UCI) |
-| `python scripts\08_testar_gestao.py` | Testes da gestão |
-| `python scripts\12_testar_financeiro_produtividade.py` | Testes do financeiro e da produtividade |
-| `python scripts\09_verificar_integracao_gestao.py` | Sobe o app completo em memória e confere as rotas |
+| `python scripts\06_treinar_gestao.py` | Treina o modelo experimental de atraso de lotes |
 
-Detalhes e limites de cada extensão: [docs/GESTAO_ADITIVA.md](docs/GESTAO_ADITIVA.md) e [docs/FINANCEIRO_E_PRODUTIVIDADE_PUBLICA.md](docs/FINANCEIRO_E_PRODUTIVIDADE_PUBLICA.md). Os modelos de gestão e produtividade são experimentos, sem validação na Duas Marias, e não automatizam decisões.
+Cada correção feita na conferência humana entra em `artifacts/correcoes_operador.csv`, que serve de base para o próximo treino.
 
-## Protótipo F0 (frontend)
+## Tela de Gestão (React)
 
-Node.js 22.12+ ou 24 LTS e npm:
+As fontes ficam em `frontend/src/management`. Com Node.js 22.12+:
 
 ```powershell
 cd frontend
 npm ci
-npm run dev
+npm run dev      # com o servidor Python rodando na porta 8000
+npm run build    # grava direto em src/pontocerto/management/static
 ```
-
-Abra http://127.0.0.1:5173 e entre com email e senha **fictícios**. Para compilar: `npm run build`; para testar: `npm test`. Os builds das telas `/gestao` e `/financeiro` usam `vite.gestao.config.ts` e `vite.business.config.ts` e gravam direto em `src/pontocerto/management/static` e `src/pontocerto/business/static`.
-
-O protótipo usa dados fictícios em memória: cadastros reiniciam ao recarregar, o upload de imagem não faz análise real e os scores de risco são fixos. Indicadores, regras e próximas etapas estão em [docs/ENTREGA_ATUAL.md](docs/ENTREGA_ATUAL.md), [docs/VERIFICACAO_F0.md](docs/VERIFICACAO_F0.md) e [docs/CONTINUIDADE_E_DATASETS.md](docs/CONTINUIDADE_E_DATASETS.md).
-
-## Registros de teste
-
-Os relatos, critérios de aceite e roteiros de reteste ficam em [docs/testes](docs/testes/README.md), com [orientações de configuração local](docs/testes/CONFIGURACAO_LOCAL.md). O relatório de 14/11/2026 tem fonte Markdown e PDF de leitura. Para regenerar o PDF, instale `reportlab` no ambiente de documentação e execute `python scripts/13_gerar_relatorio_testes.py`.
 
 ## Estrutura do repositório
 
 ```
 .
+├── Iniciar.ps1                 # atalho do Windows
 ├── config.yaml, requirements.txt, .env.example
-├── Iniciar-Completo.ps1, Iniciar-Gestao.ps1   # atalhos do Windows
 ├── src/pontocerto/
-│   ├── app/          # servidor FastAPI da inspeção, interface, Supabase
+│   ├── principal.py  # monta inspeção + gestão + login
+│   ├── app/          # servidor da inspeção, interface, login, Supabase
+│   ├── management/   # gestão (/gestao)
 │   ├── data/         # dataset e transformações de imagem
 │   ├── inference/    # preditor, suavização, Grad-CAM
 │   ├── llm/          # OpenRouter: diagnóstico, segunda opinião, relatório
-│   ├── training/     # treino da CNN
-│   ├── management/   # extensão /gestao
-│   └── business/     # extensões /financeiro e /produtividade
-├── scripts/          # 00 a 12: verificar, treinar, avaliar, rodar, testar
-├── tests/            # testes da gestão e do financeiro
+│   └── training/     # treino da CNN
+├── scripts/          # rodar, testar, verificar_ambiente e etapas de treino
+├── tests/
 ├── artifacts/        # modelos treinados, métricas e dados locais
-├── supabase/         # schema.sql do banco
-├── frontend/         # protótipo React F0 e fontes das telas /gestao e /financeiro
-└── docs/
+├── supabase/         # schema.sql (inspeção) e gestao.sql
+├── frontend/         # fontes React da tela de Gestão
+└── docs/             # contexto, arquitetura, testes e histórico
 ```
+
+Registros de testes ficam em [docs/testes](docs/testes/README.md) e as etapas anteriores do desenvolvimento em [docs/historico](docs/historico/README.md).

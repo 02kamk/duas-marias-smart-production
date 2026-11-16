@@ -95,7 +95,7 @@ class DelayModel:
 
     def status(self):
         if not (self.directory/'metadata.json').exists() or not (self.directory/'model.joblib').exists():
-            return {'available': False, 'error': 'Execute scripts/06_treinar_gestao.py.', 'notice': NOTICE}
+            return {'available': False, 'error': 'Execute python scripts/06_treinar_gestao.py.', 'notice': NOTICE}
         if self.metadata is None:
             try:
                 self.metadata = json.loads((self.directory/'metadata.json').read_text(encoding='utf-8'))

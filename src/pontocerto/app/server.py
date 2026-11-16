@@ -1071,15 +1071,6 @@ def criar_app(cfg: Any = None) -> FastAPI:
                 nuvem["erro"] = banco.mascarar(str(exc))
         return {"ok": True, "removida_local": bool(resultado), "nuvem": nuvem}
 
-    @app.post("/api/eventos/{evento_id}/rotulo")
-    def rotular(evento_id: str, corpo: dict = Body(default={})):
-        corpo = corpo or {}
-        classe_key = str(corpo.get("classe_key", "")).strip()
-        if classe_key not in CLASS_KEYS:
-            return {"ok": False, "erro": f"classe_key invalida: '{classe_key}'"}
-        ok = app.state.estado.corrigir_rotulo(evento_id, classe_key)
-        return {"ok": bool(ok)} if ok else {"ok": False, "erro": "evento nao encontrado"}
-
     @app.post("/api/eventos/{evento_id}/diagnostico")
     def diagnostico_evento(evento_id: str, corpo: dict = Body(default={})):
         corpo = corpo or {}
@@ -1101,38 +1092,6 @@ def criar_app(cfg: Any = None) -> FastAPI:
         except Exception as exc:
             return {"erro": f"falha ao diagnosticar: {exc}"}
         app.state.estado.anexar_diagnostico(evento_id, resultado)
-        return {"diagnostico": resultado}
-
-    @app.post("/api/diagnostico")
-    def diagnostico_avulso(corpo: dict = Body(default={})):
-        """Diagnostico por classe, sem evento associado.
-
-        A aba "Testar" analisa uma imagem enviada pelo operador: nao existe
-        evento na sessao para pendurar o diagnostico, entao o pedido vem so com
-        a classe prevista. Mesma logica de /api/eventos/{id}/diagnostico, sem o
-        passo de anexar ao historico.
-        """
-        corpo = corpo or {}
-        classe_key = str(corpo.get("classe_key", "")).strip()
-        if classe_key not in CLASS_KEYS:
-            return {"erro": f"classe_key invalida: '{classe_key}'"}
-        if diagnosticar is None:
-            return {"erro": "modulo de diagnostico indisponivel: "
-                            + IMPORTS_FALHOS.get("diagnosis", "")}
-        confianca = corpo.get("confianca")
-        try:
-            confianca = float(confianca) if confianca is not None else None
-        except (TypeError, ValueError):
-            confianca = None
-        tecido = corpo.get("tecido") or app.state.motor.tecido
-        usar_llm = bool(corpo.get("usar_llm", True)) and bool(cfg.llm.get("ativo", True))
-        try:
-            resultado = diagnosticar(
-                app.state.cliente, classe_key,
-                tecido=tecido, confianca=confianca, usar_llm=usar_llm,
-            )
-        except Exception as exc:
-            return {"erro": f"falha ao diagnosticar: {exc}"}
         return {"diagnostico": resultado}
 
     @app.post("/api/eventos/{evento_id}/revisao")
@@ -1379,18 +1338,6 @@ def criar_app(cfg: Any = None) -> FastAPI:
             "arquivo": arquivo,
             "fonte": resultado.get("fonte"),
             "modelo": resultado.get("modelo"),
-        }
-
-    # ------------------------------------------------------------- treino
-    @app.get("/api/treino/historico")
-    def treino_historico():
-        historico = _ler_json(cfg.treino.historico)
-        metricas = _ler_json(Path(cfg.avaliacao.saida_dir) / "metricas.json")
-        if historico is None and metricas is None:
-            return {}
-        return {
-            "historico": historico or [],
-            "metricas": metricas or {},
         }
 
     return app

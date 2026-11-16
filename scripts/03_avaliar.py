@@ -48,7 +48,7 @@ Possiveis causas e solucoes:
   4. Voce esta fora da pasta do projeto. Entre na raiz do repositorio
      (a que contem o config.yaml) e rode de novo.
 
-Rode 'python scripts/00_verificar_ambiente.py' para um diagnostico completo.
+Rode 'python scripts/verificar_ambiente.py' para um diagnostico completo.
 """
 
 

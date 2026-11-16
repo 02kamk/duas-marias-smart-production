@@ -446,11 +446,6 @@
   </section>
 
   <!-- ======================================================
-       PAGINA: TESTAR
-       ====================================================== -->
-
-
-  <!-- ======================================================
        PAGINA: HISTORICO
        ====================================================== -->
   <section id="pagina-historico" class="pagina" aria-label="Historico de inspecoes">
@@ -746,100 +741,6 @@
             <div id="detalhe-fotos" class="grade-historico grade-fotos-lote"></div>
             <p id="detalhe-fotos-vazio" class="card-texto">Nenhuma foto de defeito neste lote ainda.</p>
           </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ======================================================
-       PAGINA: TREINAMENTO
-       ====================================================== -->
-  <section id="pagina-treinamento" class="pagina" aria-label="Treinamento do modelo">
-    <div class="pagina-cabecalho">
-      <div class="pagina-titulos">
-        <h1>Treinamento</h1>
-        <p class="pagina-sub">Resultado do ultimo treino: acuracia, F1 por classe e matriz de confusao.</p>
-      </div>
-    </div>
-
-    <div id="treino-vazio" class="bloco-vazio bloco-vazio-alto">
-      <svg viewBox="0 0 24 24" width="44" height="44" fill="none" stroke="currentColor"
-           stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
-        <path d="M4 3.5v17h16.5"/>
-        <path d="m7.5 15.5 3.5-4.5 3 2.5 5-6.5"/>
-      </svg>
-      <p class="vazio-titulo">Nenhum modelo treinado encontrado - rode o treinamento</p>
-      <p class="vazio-texto">
-        Execute <code>python -m pontocerto.train</code> na pasta do projeto. Ao terminar,
-        recarregue esta pagina para ver as metricas.
-      </p>
-    </div>
-
-    <div id="treino-resumo" class="treino-resumo" hidden>
-      <div class="grade-metricas">
-        <div class="card metrica">
-          <span class="metrica-rotulo">Acuracia (validacao)</span>
-          <span id="treino-acuracia" class="metrica-valor">--</span>
-        </div>
-        <div class="card metrica">
-          <span class="metrica-rotulo">F1 macro</span>
-          <span id="treino-f1" class="metrica-valor">--</span>
-        </div>
-        <div class="card metrica">
-          <span class="metrica-rotulo">Epocas</span>
-          <span id="treino-epocas" class="metrica-valor">--</span>
-        </div>
-        <div class="card metrica">
-          <span class="metrica-rotulo">Backbone</span>
-          <span id="treino-backbone" class="metrica-valor metrica-valor-texto">--</span>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="card-cabecalho">
-          <h3>Curva de treino</h3>
-          <span class="card-nota">Perda e acuracia por epoca</span>
-        </div>
-        <div class="grafico-caixa">
-          <canvas id="grafico-treino" width="960" height="320"
-                  aria-label="Grafico de perda e acuracia por epoca"></canvas>
-        </div>
-        <ul class="legenda">
-          <li><span class="legenda-cor cor-terracota" aria-hidden="true"></span>Perda de treino</li>
-          <li><span class="legenda-cor cor-ambar" aria-hidden="true"></span>Perda de validacao</li>
-          <li><span class="legenda-cor cor-sage" aria-hidden="true"></span>Acuracia de validacao</li>
-        </ul>
-      </div>
-
-      <div class="grade-treino-baixo">
-        <div class="card">
-          <div class="card-cabecalho">
-            <h3>Desempenho por classe</h3>
-          </div>
-          <div class="tabela-rolagem">
-            <table class="tabela">
-              <thead>
-                <tr>
-                  <th scope="col">Classe</th>
-                  <th scope="col">Precisao</th>
-                  <th scope="col">Revocacao</th>
-                  <th scope="col">F1</th>
-                  <th scope="col">Amostras</th>
-                </tr>
-              </thead>
-              <tbody id="tabela-classes"></tbody>
-            </table>
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="card-cabecalho">
-            <h3>Matriz de confusao</h3>
-          </div>
-          <img id="matriz-img" class="matriz-img" alt="Matriz de confusao do modelo treinado" hidden>
-          <p class="card-texto card-texto-nota">
-            Linhas: classe verdadeira. Colunas: classe prevista pelo modelo.
-          </p>
         </div>
       </div>
     </div>

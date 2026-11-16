@@ -64,7 +64,3 @@ def extend(app: FastAPI, root=ROOT):
         return response
     return app
 
-
-def create_app():
-    from pontocerto.app.server import criar_app
-    return extend(criar_app())

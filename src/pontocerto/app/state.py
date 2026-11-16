@@ -319,6 +319,19 @@ class EstadoSessao:
             ev.diagnostico = None
             ev.revisao_humana = {'decisao': decisao, 'classe': classe, 'observacao': observacao,
                                 'autor': autor, 'timestamp': time.time()}
+            linha = {
+                "timestamp": f"{ev.timestamp:.3f}",
+                "hora": datetime.fromtimestamp(ev.timestamp).strftime("%Y-%m-%d %H:%M:%S"),
+                "evento_id": ev.id,
+                "imagem": Path(ev.imagem).name if ev.imagem else "",
+                "classe_predita": ev.classe_key,
+                "classe_corrigida": classe,
+                "confianca": f"{ev.confianca:.4f}",
+                "tecido": ev.tecido or "",
+            }
+        # Correções alimentam o próximo retreino (artifacts/correcoes_operador.csv).
+        if decisao == 'corrigida':
+            self._gravar_correcao(linha)
         self._avisar(ev)
         return True
 
@@ -343,32 +356,6 @@ class EstadoSessao:
         return True
 
     # --------------------------------------------------------- correcao humana
-
-    def corrigir_rotulo(self, evento_id: str, classe_key: str) -> bool:
-        """Registra a correcao do operador e grava uma linha no CSV de correcoes."""
-        classe_key = str(classe_key).strip()
-        try:
-            info = class_by_key(classe_key)
-        except KeyError:
-            return False
-        with self._lock:
-            ev = self._indice.get(str(evento_id))
-            if ev is None:
-                return False
-            ev.rotulo_operador = info.key
-            linha = {
-                "timestamp": f"{ev.timestamp:.3f}",
-                "hora": datetime.fromtimestamp(ev.timestamp).strftime("%Y-%m-%d %H:%M:%S"),
-                "evento_id": ev.id,
-                "imagem": Path(ev.imagem).name if ev.imagem else "",
-                "classe_predita": ev.classe_key,
-                "classe_corrigida": info.key,
-                "confianca": f"{ev.confianca:.4f}",
-                "tecido": ev.tecido or "",
-            }
-        self._gravar_correcao(linha)
-        self._avisar(ev)
-        return True
 
     def _gravar_correcao(self, linha: dict) -> None:
         try:

@@ -17,9 +17,9 @@ Nada aqui altera o projeto. O script apenas olha e relata:
 No fim imprime o proximo comando recomendado.
 
 Uso:
-    python scripts/00_verificar_ambiente.py
-    python scripts/00_verificar_ambiente.py --sem-camera     # pula o teste de webcam
-    python scripts/00_verificar_ambiente.py --camera 1       # testa outro indice
+    python scripts/verificar_ambiente.py
+    python scripts/verificar_ambiente.py --sem-camera     # pula o teste de webcam
+    python scripts/verificar_ambiente.py --camera 1       # testa outro indice
 """
 
 from __future__ import annotations
@@ -604,7 +604,7 @@ def proximo_comando(
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        prog="00_verificar_ambiente",
+        prog="verificar_ambiente",
         description="Confere se esta maquina esta pronta para rodar o Ponto Certo.",
     )
     parser.add_argument("--sem-camera", action="store_true",
