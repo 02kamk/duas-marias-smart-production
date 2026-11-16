@@ -45,6 +45,31 @@ document.addEventListener('DOMContentLoaded', () => {
     menu.addEventListener('click', e => { if (e.target.closest('[data-pagina]')) fecharMenu(); });
   }
 
+  // Contas: lista quem tem acesso e cria o acesso de outra pessoa.
+  async function listarContas() {
+    const host = $('contas-lista');
+    if (!host) return;
+    try {
+      const d = await api('/api/auth/users');
+      host.textContent = 'Com acesso: ' + d.users.join(', ') + '.';
+    } catch (e) { host.textContent = e.message; }
+  }
+  if ($('form-conta')) $('form-conta').addEventListener('submit', async e => {
+    e.preventDefault();
+    const botao = e.target.querySelector('button');
+    botao.disabled = true;
+    try {
+      await api('/api/auth/register', { email: $('conta-email').value, password: $('conta-senha').value });
+      e.target.reset();
+      listarContas();
+      if (window.PontoCerto) window.PontoCerto.toast('Conta criada. Passe o e-mail e a senha inicial para a pessoa.', 'ok');
+    } catch (err) {
+      if (window.PontoCerto) window.PontoCerto.toast(err.message, 'erro');
+    } finally { botao.disabled = false; }
+  });
+  window.addEventListener('hashchange', () => { if (location.hash === '#ajustes') listarContas(); });
+  if (location.hash === '#ajustes') listarContas();
+
   // Relatórios: atualiza sozinho ao abrir a página ou trocar o dia.
   async function reportSummary() {
     const dia = $('relatorio-dia');

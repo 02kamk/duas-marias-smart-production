@@ -66,3 +66,21 @@ class ReviewRule(unittest.TestCase):
         self.assertTrue(Evento(classe_key='crooked_seam',confianca=.95,**base).precisa_revisao)
         self.assertFalse(Evento(classe_key='crooked_seam',confianca=.95,revisao_humana={'decisao':'confirmada'},**base).precisa_revisao)
 
+
+
+class AccountsTest(unittest.TestCase):
+    def test_reset_password_ends_sessions_and_keeps_policy(self):
+        from fastapi import HTTPException
+        from pontocerto.app.auth import Accounts, Credentials
+        with tempfile.TemporaryDirectory() as tmp:
+            contas = Accounts(Path(tmp) / 'a.sqlite3')
+            contas.register(Credentials(email='ana@example.com', password='Senha@123'))
+            token = contas.login(Credentials(email='ana@example.com', password='Senha@123'), '1.1.1.1')
+            contas.redefinir(Credentials(email='ana@example.com', password='Nova@4567'))
+            self.assertIsNone(contas.user(token))
+            self.assertTrue(contas.login(Credentials(email='ana@example.com', password='Nova@4567'), '1.1.1.1'))
+            with self.assertRaises(HTTPException):
+                contas.redefinir(Credentials(email='ana@example.com', password='fraca'))
+            with self.assertRaises(HTTPException):
+                contas.redefinir(Credentials(email='ninguem@example.com', password='Nova@4567'))
+            self.assertEqual(contas.emails(), ['ana@example.com'])

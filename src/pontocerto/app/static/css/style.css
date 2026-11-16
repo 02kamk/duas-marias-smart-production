@@ -2282,3 +2282,6 @@ a.nav-item { text-decoration: none; color: inherit; }
 .lote-card-sub, .lote-card-numeros { margin: 0; color: var(--grafite); font-size: var(--t-md); }
 .lote-card-numeros { color: var(--tinta); font-weight: 500; }
 .lote-card .btn { margin-top: var(--e2); justify-content: center; }
+.card-contas { margin-top: var(--e4); }
+.form-conta { display: grid; grid-template-columns: 1fr 1fr auto; gap: var(--e3); align-items: end; }
+@media (max-width: 760px) { .form-conta { grid-template-columns: 1fr; } }

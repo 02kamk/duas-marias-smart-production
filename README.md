@@ -36,7 +36,7 @@ Para ler a foto da OP no recebimento (opcional): `pip install -r requirements-oc
 .\Iniciar.ps1 -Rede     # também pelo celular, na mesma rede Wi-Fi
 ```
 
-O navegador abre em **http://127.0.0.1:8000/login**. No primeiro acesso, crie a conta com senha forte; não existe senha padrão. Com `-Rede`, a janela mostra o endereço para abrir no celular. Pelo celular, use **Fotografar**: a câmera ao vivo do navegador exige HTTPS.
+O navegador abre em **http://127.0.0.1:8000/login**. No primeiro acesso, crie a conta com senha forte; não existe senha padrão. As contas das outras pessoas são criadas em **Ajustes › Contas**; para redefinir uma senha esquecida, use `python scriptsedefinir_senha.py email`. Com `-Rede`, a janela mostra o endereço para abrir no celular. Pelo celular, use **Fotografar**: a câmera ao vivo do navegador exige HTTPS.
 
 Sem o atalho: `python scripts\rodar.py` (aceita `--rede`, `--porta 8080` e `--abrir`).
 

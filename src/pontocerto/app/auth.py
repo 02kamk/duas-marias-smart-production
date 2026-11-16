@@ -48,13 +48,33 @@ class Accounts:
     def derive(password, salt):
         return hashlib.pbkdf2_hmac('sha256', password.encode(), bytes.fromhex(salt), 600000).hex()
 
-    def register(self, credentials, allowed=False):
+    @staticmethod
+    def validar(credentials):
         email = credentials.email.strip().casefold()
         if not re.fullmatch(r'[^\s@]+@[^\s@]+\.[^\s@]+', email):
             raise HTTPException(422, 'Email inválido.')
         password = credentials.password
         if len(password)<8 or not all(re.search(p, password) for p in (r'[A-Z]', r'[a-z]', r'\d', r'[^\w\s]')):
             raise HTTPException(422, 'Use ao menos 8 caracteres, com maiúscula, minúscula, número e caractere especial.')
+        return email, password
+
+    def emails(self):
+        with self.db() as db:
+            return [r[0] for r in db.execute('SELECT email FROM users ORDER BY email').fetchall()]
+
+    def redefinir(self, credentials):
+        """Troca a senha de uma conta existente e encerra as sessões abertas dela."""
+        email, password = self.validar(credentials)
+        salt = secrets.token_hex(16)
+        derived = self.derive(password, salt)
+        with self.lock, self.db() as db:
+            if not db.execute('UPDATE users SET salt=?, hash=? WHERE email=?', (salt, derived, email)).rowcount:
+                raise HTTPException(404, 'Conta não encontrada.')
+            db.execute('DELETE FROM sessions WHERE email=?', (email,))
+        return email
+
+    def register(self, credentials, allowed=False):
+        email, password = self.validar(credentials)
         salt = secrets.token_hex(16)
         derived = self.derive(password, salt)
         with self.lock, self.db() as db:
@@ -131,6 +151,10 @@ def secure(app, root):
     @app.get('/api/auth/status')
     def auth_status(request: Request):
         return {'setupRequired':not accounts.exists(),'user':request.state.user}
+
+    @app.get('/api/auth/users')
+    def users(request: Request):
+        return {'users': accounts.emails(), 'atual': request.state.user}
 
     @app.post('/api/auth/register',status_code=201)
     def register(body: Credentials,request: Request):

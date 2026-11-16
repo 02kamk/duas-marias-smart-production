@@ -527,6 +527,21 @@
       </button>
     </div>
 
+    <div class="card card-contas">
+      <div class="card-cabecalho">
+        <h3>Contas</h3>
+      </div>
+      <p id="contas-lista" class="card-texto"></p>
+      <form id="form-conta" class="form-conta">
+        <label class="campo"><span class="campo-rotulo">E-mail da nova pessoa</span>
+          <input id="conta-email" class="entrada" type="email" autocomplete="off" required maxlength="254"></label>
+        <label class="campo"><span class="campo-rotulo">Senha inicial</span>
+          <input id="conta-senha" class="entrada" type="password" autocomplete="new-password" required maxlength="128"></label>
+        <button class="btn btn-secundario" type="submit">Criar conta</button>
+      </form>
+      <p class="card-texto">Senha com 8 caracteres ou mais, maiúscula, minúscula, número e símbolo. Para redefinir uma senha esquecida: <code>python scripts/redefinir_senha.py e-mail</code>.</p>
+    </div>
+
     <div class="conta-acoes">
       <button class="btn btn-fantasma" type="button" data-sair>Sair da conta</button>
     </div>

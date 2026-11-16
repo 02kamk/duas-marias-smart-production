@@ -41,7 +41,7 @@ def extend(app,root=ROOT):
     def manifest():
         return JSONResponse({'name':'Duas Marias Smart Production','short_name':'Duas Marias',
             'id':'/','start_url':'/','scope':'/','display':'standalone','lang':'pt-BR',
-            'background_color':'#ffffff','theme_color':'#81334f',
+            'background_color':'#ffffff','theme_color':'#C1502E',
             'icons':[{'src':f'/static/icon-{size}.png','sizes':f'{size}x{size}','type':'image/png','purpose':'any'} for size in (192,512)]},
             media_type='application/manifest+json')
 
