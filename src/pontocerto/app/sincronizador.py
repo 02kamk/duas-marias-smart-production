@@ -126,7 +126,7 @@ class Sincronizador:
         return {
             "evento_id": str(evento.id),
             "lote_id": int(evento.lote_id),
-            "origem": "ao_vivo",
+            "origem": getattr(evento, 'origem', 'ao_vivo'),
             "classe_predita": evento.classe_key,
             "confianca": float(evento.confianca),
             "classe_confirmada": evento.rotulo_operador,

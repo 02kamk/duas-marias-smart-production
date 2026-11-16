@@ -15,3 +15,6 @@ pontocerto/scripts/1[0-2]_*.py text eol=lf
 pontocerto/src/pontocerto/business/** text eol=lf
 pontocerto/src/pontocerto/management/** text eol=lf
 pontocerto/tests/** text eol=lf
+
+# Documentos devem preservar os bytes, inclusive dentro de docs/**.
+*.pdf binary

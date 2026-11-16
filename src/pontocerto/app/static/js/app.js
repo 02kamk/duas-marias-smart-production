@@ -379,6 +379,7 @@
   }
 
   function irPara(pagina, atualizarHash) {
+    if (pagina === "testar" || pagina === "treinamento") pagina = "ao-vivo";
     if (PAGINAS.indexOf(pagina) < 0) pagina = PAGINA_PADRAO;
     var anterior = App.pagina;
     if (anterior === pagina) {
@@ -1035,6 +1036,10 @@
    * 09. PAGINA TESTAR
    * ===================================================================== */
 
+  window.addEventListener('inspecao-conferida',function(e){
+    if(App.analiseAtual){App.analiseAtual.evento=e.detail;}
+  });
+  window.analisarArquivoInspecao = tratarArquivoEscolhido;
   function tratarArquivoEscolhido(arquivo) {
     if (!arquivo) return;
     if (!/^image\//.test(arquivo.type)) {
@@ -1072,6 +1077,7 @@
           throw new Error(d.erro);
         }
         App.analiseAtual = d || {};
+        window.dispatchEvent(new CustomEvent("inspecao-analisada",{detail:d}));
         renderResultadoTeste(App.analiseAtual);
         return App.analiseAtual;
       })
@@ -1084,6 +1090,7 @@
 
   function renderResultadoTeste(d) {
     var p = d.predicao || {};
+    if ($("peca-analisada")) $("peca-analisada").src = d.imagem || "";
     mostrar($("resultado-teste"), true);
 
     setTexto($("teste-classe"), p.nome || nomeDaClasse(p.classe_key));
@@ -1179,7 +1186,9 @@
   var historico = { eventos: [], filtro: null, porId: {} };
 
   function carregarHistorico() {
-    var params = "?limite=200";
+    var params = "?limite=500";
+    if ($("historico-dia") && $("historico-dia").value) params += "&dia="+encodeURIComponent($("historico-dia").value);
+    if ($("historico-defeitos") && $("historico-defeitos").checked) params += "&defeitos=true";
     if (historico.filtro) params += "&classe=" + encodeURIComponent(historico.filtro);
     return fetchJSON("/api/eventos" + params)
       .then(function (d) {
@@ -1204,11 +1213,12 @@
     var capa = {};
     eventos.forEach(function (ev) {
       if (!ev || !ev.classe_key) return;
-      contagem[ev.classe_key] = (contagem[ev.classe_key] || 0) + 1;
-      if (!capa[ev.classe_key] && ev.imagem) capa[ev.classe_key] = ev.imagem;
+      var key=ev.classe_final||ev.classe_key;
+      contagem[key] = (contagem[key] || 0) + 1;
+      if (!capa[key] && ev.imagem) capa[key] = ev.imagem;
     });
     var porClasse = (stats && stats.por_classe) || null;
-    if (porClasse && !historico.filtro) contagem = porClasse;
+    // O contador acompanha exatamente a data e os filtros da lista visível.
 
     var total = 0;
     Object.keys(contagem).forEach(function (k) { total += numero(contagem[k], 0); });
@@ -1247,14 +1257,14 @@
     mostrar($("historico-vazio"), false);
 
     var html = eventos.map(function (ev) {
-      var nome = ev.nome || nomeDaClasse(ev.classe_key);
+      var nome = ev.nome_final || ev.nome || nomeDaClasse(ev.classe_key);
       var corrigido = ev.rotulo_operador ? " corrigido" : "";
       var semFoto = ev.imagem ? "" : " sem-foto";
       return '<button type="button" class="celula' + corrigido + semFoto + '" data-id="' + esc(ev.id) +
         '" data-gravidade="' + esc(ev.gravidade || "") + '" aria-label="' +
-        esc(nome + " as " + (ev.hora || formatarHora(ev.timestamp))) + '">' +
+        esc(nome + " às " + (ev.hora || formatarHora(ev.timestamp))) + '">' +
         '<img src="' + esc(ev.imagem || PIXEL_VAZIO) + '" alt="" loading="lazy">' +
-        '<span class="selo">' + esc(nome) + "</span>" +
+        '<span class="selo">' + esc(nome) + "</span>" + '<span class="historico-meta">'+esc((ev.data||'')+' · '+(ev.hora||'')+' · '+(ev.origem==='upload'?'Arquivo':'Câmera'))+'</span><span class="historico-revisao">'+(ev.revisao_humana?'Conferência salva':'Aguardando revisão')+'</span>' +
         "</button>";
     }).join("");
     setHTML(grade, html, "grade-historico");
@@ -1292,7 +1302,7 @@
       else { heat.src = PIXEL_VAZIO; heat.hidden = true; }
     }
 
-    setTexto($("modal-classe"), ev.nome || nomeDaClasse(ev.classe_key));
+    setTexto($("modal-classe"), ev.nome_final || ev.nome || nomeDaClasse(ev.classe_key));
     setTexto($("modal-confianca"), formatarPercentual(ev.confianca, 1));
     setTexto($("modal-hora"), ev.hora || formatarHora(ev.timestamp));
     setTexto($("modal-tecido"), ev.tecido || "Tecido nao informado");
@@ -1337,13 +1347,14 @@
     if (!ev) return;
     if (!chave) { toast("Escolha uma classe.", "aviso"); return; }
     botaoCarregando(botao, true, "Salvando...");
-    postJSON("/api/eventos/" + encodeURIComponent(ev.id) + "/rotulo", { classe_key: chave })
+    postJSON("/api/eventos/" + encodeURIComponent(ev.id) + "/conferencia", { classe: chave, decisao: botao.id === "btn-modal-confirmar" ? "confirmada" : "corrigida", observacao: "Revisão humana no histórico" })
       .then(function (d) {
         botaoCarregando(botao, false);
         if (d && d.erro) { toast(d.erro, "erro"); return; }
         ev.rotulo_operador = chave;
-        toast("Rotulo registrado para o proximo re-treino.", "ok");
-        renderGrade(historico.eventos);
+        if(d.evento){Object.assign(ev,d.evento);}
+        toast("Conferência salva. A sugestão original permanece registrada.", "ok");
+        carregarHistorico();
         fecharModal();
       })
       .catch(function (e) {
@@ -2534,6 +2545,10 @@
       });
     }
     ligar($("btn-teste-diagnostico"), "click", diagnosticoDoTeste);
+    ligar($("historico-atualizar"), "click", carregarHistorico);
+    ligar($("historico-dia"), "change", carregarHistorico);
+    ligar($("historico-defeitos"), "change", carregarHistorico);
+
 
     /* --- Historico e modal ---------------------------------------------- */
     ligar($("btn-modal-fechar"), "click", fecharModal);

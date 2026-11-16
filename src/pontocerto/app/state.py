@@ -11,6 +11,9 @@ import csv
 import threading
 import time
 import uuid
+import json
+import sqlite3
+from contextlib import contextmanager
 from collections import deque
 from dataclasses import dataclass
 from datetime import datetime
@@ -46,6 +49,8 @@ class Evento:
     rotulo_operador: str | None = None
     lote_id: int | None = None       # lote em producao quando a peca foi inspecionada
     lote_codigo: str | None = None   # None: evento so local, nao vai para o banco
+    origem: str = 'ao_vivo'
+    revisao_humana: dict | None = None
 
     @property
     def classe_final(self) -> str:
@@ -60,6 +65,8 @@ class Evento:
             "classe_idx": int(self.classe_idx),
             "classe_key": self.classe_key,
             "nome": self.nome,
+            "classe_final": self.classe_final,
+            "nome_final": class_by_key(self.classe_final).pt,
             "confianca": float(self.confianca),
             "gravidade": self.gravidade,
             "tecido": self.tecido,
@@ -67,7 +74,10 @@ class Evento:
             "diagnostico": self.diagnostico,
             "revisao_llm": self.revisao_llm,
             "rotulo_operador": self.rotulo_operador,
-            "e_falha": int(self.classe_idx) != OK_INDEX,
+            "e_falha": self.classe_final != 'normal',
+            "data": datetime.fromtimestamp(self.timestamp).date().isoformat(),
+            "origem": self.origem,
+            "revisao_humana": self.revisao_humana,
             "lote_id": self.lote_id,
             "lote_codigo": self.lote_codigo,
         }
@@ -98,18 +108,46 @@ class EstadoSessao:
         # Chamado (fora do lock) sempre que um evento nasce ou muda. O servidor
         # liga aqui o sincronizador do banco; deve ser rapido e nunca estourar.
         self.observador: Callable[[Evento], None] | None = None
+        self._db = self._pasta_capturas.parent / 'inspecoes.sqlite3'
         try:
             garantir_pasta(self._pasta_capturas)
+            with self._connect() as db:
+                db.execute('CREATE TABLE IF NOT EXISTS eventos (id TEXT PRIMARY KEY, timestamp REAL NOT NULL, data TEXT NOT NULL, payload TEXT NOT NULL)')
+                rows = db.execute('SELECT payload FROM eventos ORDER BY timestamp DESC LIMIT ?', (self._max_eventos,)).fetchall()
+            for row in reversed(rows):
+                ev = Evento(**json.loads(row[0]))
+                self._eventos.append(ev)
+                self._indice[ev.id] = ev
+            with self._connect() as db:
+                all_rows=db.execute('SELECT payload FROM eventos').fetchall()
+            for row in all_rows:
+                ev=Evento(**json.loads(row[0]))
+                self._total+=1
+                self._por_classe[ev.classe_key]=self._por_classe.get(ev.classe_key,0)+1
+                if ev.classe_idx==OK_INDEX:
+                    self._aprovadas+=1
+                else:
+                    self._reprovadas+=1
         except Exception:
             pass
 
     # ------------------------------------------------------------- registrar
+
+    @contextmanager
+    def _connect(self):
+        db=sqlite3.connect(self._db,timeout=30)
+        try:
+            with db:
+                yield db
+        finally:
+            db.close()
 
     def registrar_evento(
         self,
         predicao_dict: dict,
         frame_bgr: np.ndarray | None = None,
         tecido: str | None = None,
+        origem: str = 'ao_vivo',
     ) -> Evento:
         """Cria o evento, salva o JPG da captura e atualiza as estatisticas."""
         agora = time.time()
@@ -138,6 +176,7 @@ class EstadoSessao:
             confianca=float(predicao_dict.get("confianca", 0.0) or 0.0),
             gravidade=gravidade,
             tecido=tecido,
+            origem=origem,
             imagem=imagem_url,
             lote_id=int(lote["id"]) if lote else None,
             lote_codigo=str(lote.get("codigo") or "") if lote else None,
@@ -162,7 +201,14 @@ class EstadoSessao:
         return evento
 
     def _avisar(self, evento: Evento | None) -> None:
-        if evento is None or self.observador is None:
+        if evento is None:
+            return
+        from dataclasses import asdict
+        with self._connect() as db:
+            db.execute('INSERT OR REPLACE INTO eventos VALUES (?,?,?,?)',
+                       (evento.id, evento.timestamp, datetime.fromtimestamp(evento.timestamp).date().isoformat(),
+                        json.dumps(asdict(evento), ensure_ascii=False)))
+        if self.observador is None:
             return
         try:
             self.observador(evento)
@@ -210,24 +256,53 @@ class EstadoSessao:
             destino = self._pasta_capturas / Path(ev.imagem).name
             destino.unlink(missing_ok=True)
             ev.imagem = None
+        self._avisar(ev)
         return True
 
     # ----------------------------------------------------------------- leitura
 
-    def eventos(self, limite: int = 60, classe: str | None = None) -> list[dict]:
+    def eventos(self, limite: int = 60, classe: str | None = None, dia: str | None = None, defeitos: bool = False) -> list[dict]:
         """Eventos mais recentes primeiro, opcionalmente filtrados por classe."""
         limite = max(1, int(limite))
-        with self._lock:
-            itens = list(self._eventos)
-        itens.reverse()
+        with self._connect() as db:
+            if dia:
+                rows = db.execute('SELECT payload FROM eventos WHERE data=? ORDER BY timestamp DESC', (dia,)).fetchall()
+            else:
+                rows = db.execute('SELECT payload FROM eventos ORDER BY timestamp DESC').fetchall()
+        itens = [Evento(**json.loads(row[0])) for row in rows]
         if classe:
             classe = str(classe).strip()
-            itens = [e for e in itens if e.classe_key == classe]
+            itens = [e for e in itens if e.classe_final == classe]
+        if defeitos:
+            itens = [e for e in itens if e.classe_final != 'normal']
         return [e.to_dict() for e in itens[:limite]]
 
     def evento(self, evento_id: str) -> Evento | None:
         with self._lock:
-            return self._indice.get(str(evento_id))
+            ev = self._indice.get(str(evento_id))
+            if ev is None:
+                with self._connect() as db:
+                    row = db.execute('SELECT payload FROM eventos WHERE id=?', (str(evento_id),)).fetchone()
+                if row:
+                    ev = Evento(**json.loads(row[0]))
+                    self._indice[ev.id] = ev
+            return ev
+
+    def revisar_humano(self, evento_id: str, classe: str, decisao: str, observacao: str, autor: str):
+        ev = self.evento(evento_id)
+        if ev is None:
+            return False
+        class_by_key(classe)
+        if decisao not in ('confirmada', 'corrigida'):
+            raise ValueError('Decisão inválida.')
+        with self._lock:
+            ev.rotulo_operador = classe
+            # Um diagnóstico da classe antiga não vale para uma classe corrigida.
+            ev.diagnostico = None
+            ev.revisao_humana = {'decisao': decisao, 'classe': classe, 'observacao': observacao,
+                                'autor': autor, 'timestamp': time.time()}
+        self._avisar(ev)
+        return True
 
     # ------------------------------------------------------------- anexos LLM
 

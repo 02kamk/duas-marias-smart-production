@@ -57,4 +57,6 @@ def extend_business(app,root=ROOT):
 
 def create_app():
     from pontocerto.management.app import create_app as management
-    return extend_business(management())
+    from pontocerto.app.operational import extend
+    # Financeiro e produtividade financeira ficam para a segunda fase.
+    return extend(management())

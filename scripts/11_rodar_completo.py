@@ -9,6 +9,6 @@ if __name__=='__main__':
     import uvicorn
     print(f'Inspecao: http://127.0.0.1:{args.porta}/',flush=True)
     print(f'Gestao: http://127.0.0.1:{args.porta}/gestao',flush=True)
-    print(f'Financeiro: http://127.0.0.1:{args.porta}/financeiro',flush=True)
-    print(f'Produtividade UCI: http://127.0.0.1:{args.porta}/produtividade',flush=True)
+    print(f'Primeiro acesso/login: http://127.0.0.1:{args.porta}/login',flush=True)
+    print('Financeiro reservado para a segunda fase. Nenhuma camera e aberta automaticamente.',flush=True)
     uvicorn.run('pontocerto.business.app:create_app',factory=True,host='127.0.0.1',port=args.porta)

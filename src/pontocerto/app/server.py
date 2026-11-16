@@ -38,7 +38,7 @@ import numpy as np
 if __package__ in (None, ""):  # permite "python src/pontocerto/app/server.py"
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from fastapi import Body, FastAPI, File, Query, UploadFile
+from fastapi import Body, FastAPI, File, Query, UploadFile, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import (
     FileResponse,
@@ -955,19 +955,42 @@ def criar_app(cfg: Any = None) -> FastAPI:
         else:
             heat = frame
 
+        evento = app.state.estado.registrar_evento(predicao_dict, frame, origem='upload')
         return {
             "predicao": predicao_dict,
             "heatmap": _data_uri(heat),
             "imagem": _data_uri(frame),
+            "evento_id": evento.id,
+            "evento": evento.to_dict(),
         }
 
     # ------------------------------------------------------------ eventos
     @app.get("/api/eventos")
-    def listar_eventos(limite: int = Query(60, ge=1, le=500), classe: str | None = None):
+    def listar_eventos(limite: int = Query(60, ge=1, le=500), classe: str | None = None, dia: str | None = None, defeitos: bool = False):
+        if dia:
+            try:
+                datetime.strptime(dia, '%Y-%m-%d')
+            except ValueError:
+                return JSONResponse(status_code=422, content={'erro': 'Data inválida.'})
         return {
-            "eventos": app.state.estado.eventos(limite=limite, classe=classe),
+            "eventos": app.state.estado.eventos(limite=limite, classe=classe, dia=dia, defeitos=defeitos),
             "estatisticas": app.state.estado.estatisticas(),
         }
+
+    @app.post('/api/eventos/{evento_id}/conferencia')
+    def conferencia(evento_id: str, request: Request, corpo: dict = Body(...)):
+        ev = app.state.estado.evento(evento_id)
+        if ev is None:
+            return JSONResponse(status_code=404, content={'erro': 'Evento não encontrado.'})
+        classe = str(corpo.get('classe', ''))
+        decisao = str(corpo.get('decisao', ''))
+        observacao = str(corpo.get('observacao', '')).strip()
+        if classe not in CLASS_KEYS or decisao not in ('confirmada', 'corrigida') or len(observacao)>1000:
+            return JSONResponse(status_code=422, content={'erro': 'Classe, decisão ou observação inválida.'})
+        if decisao == 'confirmada' and classe != ev.classe_key:
+            return JSONResponse(status_code=422, content={'erro': 'Para trocar a classe, selecione Corrigir.'})
+        app.state.estado.revisar_humano(evento_id, classe, decisao, observacao, getattr(request.state, 'user', 'operador-local'))
+        return {'ok': True, 'evento': ev.to_dict()}
 
     @app.get("/api/inspecoes/{evento_id}/foto", include_in_schema=False)
     def foto_inspecao(evento_id: str):
@@ -1046,9 +1069,9 @@ def criar_app(cfg: Any = None) -> FastAPI:
         try:
             resultado = diagnosticar(
                 app.state.cliente,
-                evento.classe_key,
+                evento.classe_final,
                 tecido=evento.tecido or app.state.motor.tecido,
-                confianca=evento.confianca,
+                confianca=evento.confianca if evento.classe_final == evento.classe_key else None,
                 usar_llm=usar_llm,
             )
         except Exception as exc:

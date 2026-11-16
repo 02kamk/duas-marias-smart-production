@@ -77,16 +77,17 @@ def recommendations(state, operation, minutes, period):
             reason = 'Sem habilitação'
         elif available < minutes:
             reason = 'Disponibilidade insuficiente no período'
-        elif any(skill.get(k) is None for k in ['rate', 'quality', 'experience']):
-            reason = 'Histórico incompleto; revisão humana necessária'
         if reason:
             excluded.append({'employeeId': employee['id'], 'name': employee['name'], 'reason': reason})
         else:
             eligible.append({'employeeId': employee['id'], 'name': employee['name'],
                              'availableMinutes': available, 'skill': skill})
-    maximum = max((e['skill']['rate'] for e in eligible), default=1)
+    maximum = max((e['skill']['rate'] or 0 for e in eligible), default=1) or 1
     for e in eligible:
         skill = e.pop('skill')
+        if any(skill.get(k) is None for k in ['rate', 'quality', 'experience']):
+            e.update(score=None, components={}, manualReview=True)
+            continue
         components = {'productivity': skill['rate']/maximum, 'quality': skill['quality'],
                       'experience': skill['experience']/5, 'availability': min(1, e['availableMinutes']/480)}
         e['components'] = components
@@ -94,5 +95,5 @@ def recommendations(state, operation, minutes, period):
                                  {'productivity': .35, 'quality': .3, 'experience': .2, 'availability': .15}.items()), 2)
     return {'executionMode': 'heuristic', 'dataOrigin': 'mock', 'weightsVersion': 'demo-v1',
             'weights': {'productivity': .35, 'quality': .3, 'experience': .2, 'availability': .15},
-            'eligible': sorted(eligible, key=lambda e: (-e['score'], e['employeeId'])),
+            'eligible': sorted(eligible, key=lambda e: (e['score'] is None, -(e['score'] or 0), e['employeeId'])),
             'excluded': excluded, 'notice': 'Score demonstrativo por operação; não é ML nem otimização global.'}

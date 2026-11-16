@@ -16,8 +16,17 @@ NAV_GESTAO=('<a class="nav-item" href="/gestao" title="Gestao de producao e atra
 
 
 def extend(app: FastAPI, root=ROOT):
-    store=Store(root/'artifacts'/'gestao_demo'/'state.json')
+    from pontocerto.config import variavel_env
+    if variavel_env('GESTAO_STORAGE') == 'supabase':
+        from .postgres import PostgresStore
+        store=PostgresStore()
+    else:
+        store=Store(root/'artifacts'/'gestao_demo'/'state.json')
     model=DelayModel(root/'artifacts'/'gestao_ml')
+    from .receiving import router as receiving_router
+    app.include_router(receiving_router(store))
+    from .documents import router as documents_router
+    app.include_router(documents_router(store))
     app.include_router(create_router(store,model))
     app.mount('/gestao-assets',StaticFiles(directory=str(STATIC),check_dir=False),name='gestao-assets')
 
