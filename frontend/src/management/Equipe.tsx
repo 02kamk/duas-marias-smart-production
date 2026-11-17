@@ -56,7 +56,7 @@ function Pessoa({ e, state, agir, busy }: Props & { e: Employee }) {
   );
   return (
     <tr>
-      <td><strong>{e.name}</strong></td>
+      <td style={{ whiteSpace: 'nowrap' }}><strong>{e.name}</strong></td>
       <td className="num" data-rotulo="Por dia:">{horas(e.availableMinutes)}</td>
       <td className="larga"><div className="etiquetas">{ops.map(op => <span className="etiqueta" key={op}>{op}</span>)}</div></td>
       <td><span className={`estado ${e.active ? 'estado-ok' : 'estado-neutro'}`}>{e.active ? 'Ativa' : 'Inativa'}</span></td>
@@ -68,13 +68,47 @@ function Pessoa({ e, state, agir, busy }: Props & { e: Employee }) {
   );
 }
 
+/** Quantas pessoas ativas fazem cada operação. Operação com uma pessoa ou nenhuma pede atenção. */
+function Cobertura({ state }: { state: State }) {
+  const ativas = state.employees.filter(e => e.active);
+  const maximo = Math.max(1, ...state.operations.map(op => ativas.filter(e => e.skills[op]).length));
+  return (
+    <section className="bloco" aria-label="Quem faz cada operação">
+      <div>
+        <h2>Quem faz cada operação</h2>
+        <p className="texto-apoio">Só pessoas ativas. Com uma pessoa ou nenhuma, a operação para se alguém faltar.</p>
+      </div>
+      <div className="cobertura">
+        {state.operations.map(op => {
+          const n = ativas.filter(e => e.skills[op]).length;
+          return (
+            <div key={op} className={`cobertura-linha ${n <= 1 ? 'falta' : ''}`}>
+              <span>{op}</span>
+              <span className={`estado ${n === 0 ? 'estado-defeito' : n === 1 ? 'estado-atencao' : 'estado-neutro'}`}>{n === 0 ? 'ninguém' : n === 1 ? '1 pessoa' : `${n} pessoas`}</span>
+              <div className="progresso" aria-hidden="true"><i style={{ width: `${100 * n / maximo}%` }} /></div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 export default function Equipe({ state, agir, busy }: Props) {
   const [nova, setNova] = useState(false);
+  const ativas = state.employees.filter(e => e.active);
+  const descobertas = state.operations.filter(op => ativas.filter(e => e.skills[op]).length <= 1).length;
   return (
     <>
-      {!nova
-        ? <div className="linha-botoes"><button type="button" className="btn btn-principal" onClick={() => setNova(true)}>Nova colaboradora</button></div>
-        : (
+      <dl className="resumo">
+        <div><dt>Pessoas ativas</dt><dd>{ativas.length}</dd></div>
+        <div><dt>Horas disponíveis por dia</dt><dd>{horas(ativas.reduce((s, e) => s + e.availableMinutes, 0))}</dd></div>
+        <div><dt>Operações</dt><dd>{state.operations.length}</dd></div>
+        <div className={descobertas ? 'alerta' : ''}><dt>Com uma pessoa ou nenhuma</dt><dd>{descobertas}</dd></div>
+      </dl>
+      <div className="grade-lateral">
+      <div className="coluna-principal">
+      {nova && (
           <section className="bloco">
             <h2>Nova colaboradora</h2>
             <form className="formulario" onSubmit={ev => {
@@ -98,7 +132,11 @@ export default function Equipe({ state, agir, busy }: Props) {
             </form>
           </section>
         )}
-      <section className="bloco" style={{ padding: 0 }}>
+      <section className="bloco" style={{ padding: 0, gap: 0 }}>
+        <div className="bloco-cabecalho" style={{ padding: '14px 16px', borderBottom: '1px solid var(--linha)' }}>
+          <h2>Colaboradoras</h2>
+          {!nova && <button type="button" className="btn btn-principal btn-pequeno" onClick={() => setNova(true)}>Nova colaboradora</button>}
+        </div>
         <div className="tabela-rolagem">
           <table className="tabela tabela-fichas">
             <thead><tr><th>Nome</th><th className="num">Por dia</th><th>Operações</th><th>Situação</th><th><span className="so-leitor">Ações</span></th></tr></thead>
@@ -107,6 +145,9 @@ export default function Equipe({ state, agir, busy }: Props) {
         </div>
         {!state.employees.length && <p className="vazio" style={{ border: 0 }}>Ninguém cadastrado ainda.</p>}
       </section>
+      </div>
+      <aside className="coluna-lateral"><Cobertura state={state} /></aside>
+      </div>
     </>
   );
 }

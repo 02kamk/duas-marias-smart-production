@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import {
-  Camera, ClipboardCheck, ClipboardList, FileText, History, Layers, LogOut, Menu, PackageCheck, SlidersHorizontal, Users,
+  Camera, ClipboardCheck, FileText, History, Layers, LogOut, Menu, SlidersHorizontal, Users,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -12,9 +12,8 @@ const CHAO: Item[] = [
   { href: '/#historico', nome: 'Histórico', Icone: History },
   { href: '#lotes', nome: 'Lotes', Icone: Layers, id: 'lotes' },
 ];
+// Receber OP e Produção saíram do menu; as telas seguem em ReceberOP.tsx e Producao.tsx.
 const GESTAO: Item[] = [
-  { href: '#receber', nome: 'Receber OP', Icone: PackageCheck, id: 'receber' },
-  { href: '#producao', nome: 'Produção', Icone: ClipboardList, id: 'producao' },
   { href: '#equipe', nome: 'Equipe', Icone: Users, id: 'equipe' },
   { href: '/#relatorios', nome: 'Relatórios', Icone: FileText },
 ];
@@ -65,14 +64,14 @@ export default function Casca({ ativa, local, children }: { ativa: string; local
       <header className="topo-movel">{marca}</header>
       <main className="conteudo">{children}</main>
       <nav className="tabbar" aria-label="Navegação inferior">
-        {['Inspecionar', 'Conferir', 'Lotes', 'Produção'].map(n => link(porNome(n)))}
+        {['Inspecionar', 'Conferir', 'Lotes', 'Equipe'].map(n => link(porNome(n)))}
         <button type="button" className="nav-item" aria-haspopup="true" aria-expanded={mais} onClick={() => setMais(!mais)}>
           <Menu aria-hidden="true" /><span className="nav-texto">Mais</span>
         </button>
       </nav>
       {mais && (
         <div className="menu-mais">
-          {['Histórico', 'Receber OP', 'Equipe', 'Relatórios', 'Ajustes'].map(n => link(porNome(n)))}
+          {['Histórico', 'Relatórios', 'Ajustes'].map(n => link(porNome(n)))}
           <button type="button" className="nav-item" onClick={sair}><LogOut aria-hidden="true" /><span className="nav-texto">Sair</span></button>
         </div>
       )}

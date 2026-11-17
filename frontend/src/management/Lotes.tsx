@@ -119,7 +119,8 @@ export default function Lotes({ state, agir, busy }: { state: State; agir: Agir;
 
   const ref = state.referenceDate;
   const abertos = state.orders.filter(o => o.status !== 'Concluído');
-  const hoje = state.records.filter(r => r.day === ref && r.operation === 'Revisão final');
+  const pecasAbertas = abertos.reduce((s, o) => s + o.quantity, 0);
+  const prontasAbertas = abertos.reduce((s, o) => s + Math.min(o.produced, o.quantity), 0);
   const emRisco = abertos.filter(o => situacao(o, ref).ordem === 1).length;
   const atrasados = abertos.filter(o => situacao(o, ref).ordem === 0).length;
   const lista = state.orders
@@ -136,8 +137,8 @@ export default function Lotes({ state, agir, busy }: { state: State; agir: Agir;
         <div><dt>Lotes em aberto</dt><dd>{abertos.length}</dd></div>
         <div className={emRisco ? 'alerta' : ''}><dt>Em risco</dt><dd>{emRisco}</dd></div>
         <div className={atrasados ? 'alerta' : ''}><dt>Atrasados</dt><dd>{atrasados}</dd></div>
-        <div><dt>Peças prontas hoje</dt><dd>{num(hoje.reduce((s, r) => s + r.goodQuantity, 0))}</dd></div>
-        <div><dt>Retrabalho hoje</dt><dd>{num(hoje.reduce((s, r) => s + r.reworkQuantity, 0))}</dd></div>
+        <div><dt>Peças a entregar</dt><dd>{num(pecasAbertas - prontasAbertas)}</dd></div>
+        <div><dt>Progresso dos lotes abertos</dt><dd>{pecasAbertas ? Math.round(100 * prontasAbertas / pecasAbertas) : 0}%</dd></div>
       </dl>
       <div className="filtros">
         <label className="campo" style={{ flex: 1 }}><span className="campo-rotulo">Buscar</span><input className="entrada" value={busca} onChange={e => setBusca(e.target.value)} placeholder="Código, cliente ou peça" /></label>
@@ -168,7 +169,7 @@ export default function Lotes({ state, agir, busy }: { state: State; agir: Agir;
               </div>
             ))}
           </div>
-          {!lista.length && <p className="vazio" style={{ border: 0 }}><strong>Nenhum lote encontrado</strong><a href="#receber">Receber uma OP</a></p>}
+          {!lista.length && <p className="vazio" style={{ border: 0 }}><strong>Nenhum lote encontrado</strong>{busca ? 'Tente outra busca.' : 'Os lotes cadastrados aparecem aqui.'}</p>}
         </section>
         {order
           ? <DetalheLote order={order} inspecao={inspecao.porLote[order.id]} agir={agir} busy={busy} />

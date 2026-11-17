@@ -41,6 +41,9 @@ it('mostra o risco de atraso já na lista e abre o lote com previsão de entrega
   // O mesmo menu da Inspeção, nos dois sentidos.
   expect(screen.getAllByRole('link', { name: /Inspecionar/ })[0].getAttribute('href')).toBe('/#ao-vivo');
   expect(screen.getAllByRole('link', { name: /Relatórios/ })[0].getAttribute('href')).toBe('/#relatorios');
+  // Receber OP e Produção saíram do menu.
+  expect(screen.queryByRole('link', { name: /Receber OP/ })).toBeNull();
+  expect(screen.queryByRole('link', { name: /^Produção$/ })).toBeNull();
   // Antes do clique a lista já diz que o lote está em risco e para quando fica.
   expect(screen.getByText('Em risco', { selector: '.estado' })).toBeTruthy();
   expect(screen.getByText('prevista 25/10')).toBeTruthy();

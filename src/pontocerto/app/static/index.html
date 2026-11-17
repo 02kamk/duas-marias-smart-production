@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Duas Marias - Inspeção de costura</title>
-<meta name="description" content="Inspeção visual de costura com detecção de 11 tipos de falha.">
+<meta name="description" content="Inspeção visual de costura e tecido com detecção de 11 tipos de falha.">
 <meta name="theme-color" content="#C1502E">
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="stylesheet" href="/static/css/style.css">
@@ -39,8 +39,6 @@
 
   <div class="menu-grupo">
     <p class="menu-titulo">Gestão</p>
-    <a class="nav-item" href="/gestao#receber"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M21 8.5 12 3 3 8.5v7L12 21l9-5.5z"/><path d="M3 8.5l9 5.5 9-5.5"/><path d="M12 14v7"/></svg><span class="nav-texto">Receber OP</span></a>
-    <a class="nav-item" href="/gestao#producao"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V3h6v1"/><path d="M9 10h6"/><path d="M9 14h6"/><path d="M9 18h3"/></svg><span class="nav-texto">Produção</span></a>
     <a class="nav-item" href="/gestao#equipe"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.5-3.5 3-5.5 6.5-5.5s6 2 6.5 5.5"/><path d="M16 4.8a3.5 3.5 0 0 1 0 6.4"/><path d="M18.5 14.8c1.700.8 2.700 2.5 3 5.2"/></svg><span class="nav-texto">Equipe</span></a>
     <a class="nav-item" href="/#relatorios" data-pagina="relatorios"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M14 3H7.5A2.5 2.5 0 0 0 5 5.5v13A2.5 2.5 0 0 0 7.5 21h9a2.5 2.5 0 0 0 2.5-2.5V8z"/><path d="M14 3v5h5"/><path d="M9 13h6"/><path d="M9 17h4"/></svg><span class="nav-texto">Relatórios</span></a>
   </div>
@@ -80,11 +78,14 @@
     <p id="aviso-sem-lote" class="aviso aviso-atencao" hidden>Nenhum lote escolhido. As peças inspecionadas ficam no histórico sem OP.</p>
 
     <dl class="resumo" aria-label="Inspeções de hoje">
-      <div><dt>Hoje</dt><dd id="stat-total">0</dd></div>
+      <div><dt>Inspecionadas hoje</dt><dd id="stat-total">0</dd></div>
       <div><dt>Aprovadas</dt><dd id="stat-aprovadas">0</dd></div>
       <div><dt>Com defeito</dt><dd id="stat-reprovadas">0</dd></div>
       <div><dt>Aprovação</dt><dd id="stat-taxa">0%</dd></div>
     </dl>
+
+    <div class="grade-lateral">
+    <div class="coluna-principal">
 
     <!-- Captura -->
     <div class="bloco bloco-captura">
@@ -181,6 +182,27 @@
         </div>
       </div>
     </details>
+    </div>
+
+    <!-- Lateral: meta do turno e últimas peças -->
+    <aside class="coluna-lateral" aria-label="Resumo do turno">
+      <div class="bloco">
+        <div class="bloco-cabecalho">
+          <h2>Meta do turno</h2>
+          <span id="meta-texto" class="texto-apoio num"></span>
+        </div>
+        <div id="barra-meta" class="barra-meta"></div>
+      </div>
+      <div class="bloco recentes-bloco">
+        <div class="bloco-cabecalho">
+          <h2>Últimas peças</h2>
+          <a class="btn btn-quieto btn-pequeno" href="/#historico">Ver histórico</a>
+        </div>
+        <div id="recentes" class="recentes"></div>
+        <p id="recentes-vazio" class="texto-apoio">Nenhuma peça inspecionada hoje.</p>
+      </div>
+    </aside>
+    </div>
   </section>
 
   <!-- ======================================================
@@ -192,6 +214,8 @@
       <p id="fila-contagem" class="fila-contagem" aria-live="polite"></p>
     </div>
 
+    <div class="grade-lateral">
+    <div class="coluna-principal">
     <article id="fila-peca" class="resultado" hidden>
       <div class="resultado-topo">
         <span id="fila-lote">Sem lote</span>
@@ -220,6 +244,15 @@
     <div id="fila-vazia" class="vazio" hidden>
       <strong>Nada para conferir</strong>
       Defeitos e leituras incertas aparecem aqui assim que forem inspecionados.
+    </div>
+    </div>
+
+    <aside id="fila-lateral" class="coluna-lateral" aria-label="Peças na fila" hidden>
+      <div class="bloco">
+        <h2>Na fila</h2>
+        <div id="fila-lista" class="recentes"></div>
+      </div>
+    </aside>
     </div>
   </section>
 
@@ -279,6 +312,7 @@
       </div>
     </div>
 
+    <div class="grade-lateral">
     <div class="bloco">
       <h2>Inspeções do dia</h2>
       <div id="relatorio-indicadores" class="relatorio-indicadores" aria-live="polite"></div>
@@ -288,12 +322,15 @@
       </div>
     </div>
 
-    <div class="bloco">
-      <h2>Produção</h2>
-      <p class="texto-apoio">Lotes, peças prontas e prazos, como estão agora.</p>
-      <div class="linha-botoes">
-        <a class="btn btn-secundario" href="/api/gestao/report.pdf" download>Baixar produção (PDF)</a>
+    <aside class="coluna-lateral">
+      <div class="bloco">
+        <h2>Lotes</h2>
+        <p class="texto-apoio">Lotes, prazos e situação de cada um, como estão agora.</p>
+        <div class="linha-botoes">
+          <a class="btn btn-secundario" href="/api/gestao/report.pdf" download>Baixar lotes (PDF)</a>
+        </div>
       </div>
+    </aside>
     </div>
   </section>
 
@@ -305,6 +342,7 @@
       <h1>Ajustes</h1>
     </div>
 
+    <div class="grade-duas">
     <div class="bloco">
       <h2>Inspeção</h2>
       <div class="campos dois">
@@ -378,6 +416,7 @@
         <p class="campo-ajuda">A senha precisa de 8 caracteres ou mais, com maiúscula, minúscula, número e símbolo.</p>
       </details>
     </div>
+    </div>
 
     <details class="bloco">
       <summary>Sistema</summary>
@@ -410,13 +449,11 @@
   <a class="nav-item" href="/#ao-vivo" data-pagina="ao-vivo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3.5 7.5h3L8 5h8l1.5 2.5h3A1.5 1.5 0 0 1 22 9v8.5a1.5 1.5 0 0 1-1.5 1.5h-17A1.5 1.5 0 0 1 2 17.5V9a1.5 1.5 0 0 1 1.5-1.5z"/><circle cx="12" cy="13" r="3.5"/></svg><span class="nav-texto">Inspecionar</span></a>
   <a class="nav-item" href="/#conferir" data-pagina="conferir"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9 11.5l2.5 2.5L20 5.5"/><path d="M20 12v6.5a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18.5v-13A1.5 1.5 0 0 1 5.5 4H15"/></svg><span class="nav-texto">Conferir</span><span class="nav-badge" data-badge-pendentes hidden></span></a>
   <a class="nav-item" href="/gestao#lotes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3.5 7.5 12 3l8.5 4.5L12 12z"/><path d="m3.5 12 8.5 4.5 8.5-4.5"/><path d="m3.5 16.5 8.5 4.5 8.5-4.5"/></svg><span class="nav-texto">Lotes</span></a>
-  <a class="nav-item" href="/gestao#producao"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V3h6v1"/><path d="M9 10h6"/><path d="M9 14h6"/><path d="M9 18h3"/></svg><span class="nav-texto">Produção</span></a>
+  <a class="nav-item" href="/gestao#equipe"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.5-3.5 3-5.5 6.5-5.5s6 2 6.5 5.5"/><path d="M16 4.8a3.5 3.5 0 0 1 0 6.4"/><path d="M18.5 14.8c1.700.8 2.700 2.5 3 5.2"/></svg><span class="nav-texto">Equipe</span></a>
   <button id="tab-mais" class="nav-item" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="menu-mais"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h16"/></svg><span class="nav-texto">Mais</span></button>
 </nav>
 <div id="menu-mais" class="menu-mais" hidden>
   <a class="nav-item" href="/#historico" data-pagina="historico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1L3.5 8.5"/><path d="M3.5 4v4.5H8"/><path d="M12 7.5V12l3 2"/></svg><span class="nav-texto">Histórico</span></a>
-  <a class="nav-item" href="/gestao#receber"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M21 8.5 12 3 3 8.5v7L12 21l9-5.5z"/><path d="M3 8.5l9 5.5 9-5.5"/><path d="M12 14v7"/></svg><span class="nav-texto">Receber OP</span></a>
-  <a class="nav-item" href="/gestao#equipe"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.5-3.5 3-5.5 6.5-5.5s6 2 6.5 5.5"/><path d="M16 4.8a3.5 3.5 0 0 1 0 6.4"/><path d="M18.5 14.8c1.700.8 2.700 2.5 3 5.2"/></svg><span class="nav-texto">Equipe</span></a>
   <a class="nav-item" href="/#relatorios" data-pagina="relatorios"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M14 3H7.5A2.5 2.5 0 0 0 5 5.5v13A2.5 2.5 0 0 0 7.5 21h9a2.5 2.5 0 0 0 2.5-2.5V8z"/><path d="M14 3v5h5"/><path d="M9 13h6"/><path d="M9 17h4"/></svg><span class="nav-texto">Relatórios</span></a>
   <a class="nav-item" href="/#ajustes" data-pagina="ajustes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 6h10"/><path d="M18 6h2"/><circle cx="16" cy="6" r="2"/><path d="M4 12h2"/><path d="M10 12h10"/><circle cx="8" cy="12" r="2"/><path d="M4 18h10"/><path d="M18 18h2"/><circle cx="16" cy="18" r="2"/></svg><span class="nav-texto">Ajustes</span></a>
   <button class="nav-item" type="button" data-instalar hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 16.5V4"/><path d="m7.5 8.5 4.5-4.5 4.5 4.5"/><path d="M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15"/></svg><span class="nav-texto">Instalar aplicativo</span></button>

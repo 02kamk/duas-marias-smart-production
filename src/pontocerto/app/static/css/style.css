@@ -129,19 +129,27 @@ pre { white-space: pre-wrap; font: 13px/1.5 Consolas, 'Courier New', monospace; 
 
 .topo-movel, .tabbar, .menu-mais { display: none; }
 
-.conteudo { min-width: 0; width: 100%; max-width: 1180px; padding: 28px 32px 56px; display: flex; flex-direction: column; gap: 20px; }
+/* O conteúdo ocupa a tela toda até 1600px; acima disso fica centralizado. */
+.conteudo { min-width: 0; width: 100%; max-width: 1600px; margin-inline: auto; padding: 28px 40px 56px; display: flex; flex-direction: column; gap: 20px; }
 .pagina { display: none; flex-direction: column; gap: 20px; }
 .pagina.ativa { display: flex; }
 
-.pagina-cabecalho { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 20px; }
+.pagina-cabecalho { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 20px; min-height: 44px; }
 .pagina-acoes { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; }
 
-/* Linha de resumo: substitui as grades de cartões de número */
-.resumo { display: flex; flex-wrap: wrap; gap: 4px 24px; padding: 12px 0; border-block: 1px solid var(--linha); }
-.resumo > div { display: flex; align-items: baseline; gap: 6px; }
-.resumo dt { font-size: 14px; color: var(--grafite); }
-.resumo dd { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
-.resumo .alerta dd { color: var(--atencao); }
+/* Números do topo da página: cartões que dividem a largura toda */
+.resumo { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+.resumo > div { display: flex; flex-direction: column; gap: 2px; padding: 14px 16px; background: var(--branco); border: 1px solid var(--linha); border-radius: var(--raio); }
+.resumo dt { font-size: 13px; color: var(--grafite); }
+.resumo dd { font-size: 26px; font-weight: 600; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.resumo .alerta { border-color: var(--atencao); background: var(--atencao-tinta); }
+.resumo .alerta dt, .resumo .alerta dd { color: var(--atencao); }
+
+/* Conteúdo principal + coluna lateral (Inspecionar, Conferir, Relatórios, Equipe) */
+.grade-lateral { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 360px); gap: 20px; align-items: start; }
+.coluna-principal { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.coluna-lateral { display: flex; flex-direction: column; gap: 20px; min-width: 0; position: sticky; top: 20px; }
+.grade-duas { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; align-items: start; }
 
 .abas { display: flex; gap: 4px; border-bottom: 1px solid var(--linha); }
 .aba { padding: 10px 14px; font-weight: 500; color: var(--grafite); text-decoration: none; border-bottom: 2px solid transparent; margin-bottom: -1px; }
@@ -285,9 +293,9 @@ progress::-moz-progress-bar { background: var(--tinta); }
 @media (hover: none) { .captura-dica { display: none; } }
 .bloco-captura.arrastando { border-color: var(--terracota); background: var(--terracota-tinta); }
 
-.resultado { background: var(--branco); border: 1px solid var(--linha); border-radius: var(--raio); max-width: 760px; }
+.resultado { background: var(--branco); border: 1px solid var(--linha); border-radius: var(--raio); }
 .resultado-topo { display: flex; justify-content: space-between; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--linha); font-size: 14px; color: var(--grafite); }
-.resultado-corpo { display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr); gap: 20px; padding: 16px; }
+.resultado-corpo { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: 24px; padding: 20px; }
 .resultado-midia { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
 .resultado-foto { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: var(--raio); background: var(--areia); }
 .resultado-lado { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
@@ -344,6 +352,21 @@ progress::-moz-progress-bar { background: var(--tinta); }
 .veredito.estado-incerto .veredito-icone { color: var(--atencao); }
 .veredito.estado-aquecendo .veredito-icone { color: var(--grafite); }
 
+/* Lateral: meta do turno e últimas peças */
+.barra-meta { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 4px; }
+.barra-meta .segmento { height: 10px; border-radius: 2px; background: var(--areia); }
+.barra-meta .segmento.cheio { background: var(--terracota); }
+.recentes { display: flex; flex-direction: column; margin-inline: -8px; }
+.recente { display: grid; grid-template-columns: 48px minmax(0, 1fr) auto; align-items: center; gap: 12px; width: 100%; padding: 8px; border-radius: var(--raio); text-align: left; }
+.recente:hover { background: var(--osso); }
+.recente + .recente { border-top: 1px solid var(--linha); border-radius: 0; }
+.recente .miniatura { width: 48px; height: 36px; }
+.recente.sem-foto .miniatura { visibility: hidden; }
+.recente-texto { min-width: 0; }
+.recente-texto strong { display: block; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.recente-texto small { display: block; font-size: 12px; }
+.recente .estado { gap: 0; }
+
 /* ==========================================================================
    09. CONFERIR E HISTÓRICO
    ========================================================================== */
@@ -384,7 +407,6 @@ body.modal-aberto { overflow: hidden; }
 /* ==========================================================================
    12. AJUSTES E CONTAS
    ========================================================================== */
-.ajustes { max-width: 760px; }
 .range-linha { display: flex; align-items: center; gap: 12px; }
 .range-linha input { flex: 1; accent-color: var(--terracota); }
 .range-linha output { min-width: 44px; text-align: right; font-variant-numeric: tabular-nums; }
@@ -400,8 +422,12 @@ body.modal-aberto { overflow: hidden; }
 .conta-form .campo { flex: 1; min-width: 180px; }
 
 /* ==========================================================================
-   13. GESTÃO (lotes, receber OP, produção, equipe)
+   13. GESTÃO (lotes e equipe; receber OP e produção estão fora do menu)
    ========================================================================== */
+.cobertura { display: flex; flex-direction: column; gap: 10px; }
+.cobertura-linha { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; align-items: center; font-size: 14px; }
+.cobertura-linha .progresso { grid-column: 1 / -1; }
+.cobertura-linha.falta .progresso > i { background: var(--atencao); }
 .lotes-grade { display: grid; grid-template-columns: minmax(0, 3fr) minmax(300px, 2fr); gap: 20px; align-items: start; }
 .lotes-grade > .detalhe-lote { position: sticky; top: 20px; }
 .lotes .linha-cabecalho, .lotes .linha { grid-template-columns: minmax(0, 1.7fr) 56px minmax(84px, 1fr) minmax(96px, 1fr) 112px; }
@@ -444,6 +470,8 @@ body.modal-aberto { overflow: hidden; }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 
 @media (max-width: 1100px) {
+  .grade-lateral, .grade-duas { grid-template-columns: minmax(0, 1fr); }
+  .coluna-lateral { position: static; }
   .lotes-grade { grid-template-columns: minmax(0, 1fr); }
   .lotes-grade > .detalhe-lote { position: static; }
   .campos { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -477,8 +505,11 @@ body.modal-aberto { overflow: hidden; }
   }
   .toasts { left: 16px; right: 16px; bottom: calc(var(--altura-tabbar) + 12px); max-width: none; }
 
+  .resumo { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .resumo > div { padding: 10px 12px; }
+  .resumo dd { font-size: 22px; }
   .captura { grid-template-columns: minmax(0, 1fr); }
-  .resultado-corpo { grid-template-columns: minmax(0, 1fr); }
+  .resultado-corpo { grid-template-columns: minmax(0, 1fr); padding: 16px; }
   .bloco-camera { display: none; }
   .campos, .campos.dois { grid-template-columns: minmax(0, 1fr); }
   .bloco { padding: 16px; }

@@ -409,6 +409,7 @@
     if (pagina === "ao-vivo") {
       iniciarPolling();
       carregarLotes();
+      carregarRecentes();
     } else if (pagina === "conferir") {
       carregarFila();
     } else if (pagina === "historico") {
@@ -856,12 +857,19 @@
     setTexto($("stat-recorde"), numero(s.melhor_sequencia, 0));
     renderBarraMeta(s);
     renderChama(numero(s.sequencia_ok, 0));
+    // Peça nova (foto ou câmera ao vivo): atualiza a lista lateral.
+    var total = numero(s.total, 0);
+    if (App.cache.totalRecentes !== total) {
+      App.cache.totalRecentes = total;
+      carregarRecentes();
+    }
   }
 
   function renderBarraMeta(s) {
     var barra = $("barra-meta");
     if (!barra) return;
     var meta = Math.max(1, Math.round(numero(s.meta_pecas, 10)));
+    setTexto($("meta-texto"), numero(s.total, 0) + " de " + meta + " peças");
     // Muitos segmentos viram serrilhado visual; 12 e o teto confortavel.
     var qtd = Math.min(12, meta);
     if (App.cache.metaSegmentos !== qtd) {
@@ -1058,6 +1066,7 @@
         App.analiseAtual = d || {};
         renderResultadoTeste(App.analiseAtual);
         atualizarPendentes();
+        carregarRecentes();
         // Leva a pessoa direto ao resultado.
         if (resultado && resultado.scrollIntoView) resultado.scrollIntoView({ behavior: "smooth", block: "start" });
         return App.analiseAtual;
@@ -1341,6 +1350,34 @@
     setHTML(grade, html, "grade-historico");
   }
 
+  /** Linha compacta de peça (lateral do Inspecionar e da fila). Abre o detalhe ao tocar. */
+  function linhaCompacta(ev, atributo) {
+    var nome = ev.nome_final || ev.nome || nomeDaClasse(ev.classe_key);
+    // "celula" + data-id reaproveita o clique do histórico, que abre o detalhe da peça.
+    var classe = "recente" + (atributo === "data-id" ? " celula" : "") + (ev.imagem ? "" : " sem-foto");
+    return '<button type="button" class="' + classe + '" ' + atributo + '="' + esc(ev.id) +
+      '" aria-label="' + esc(nome + " às " + horaCurta(ev)) + '">' +
+      '<img class="miniatura" src="' + esc(ev.imagem || PIXEL_VAZIO) + '" alt="" loading="lazy">' +
+      '<span class="recente-texto"><strong>' + esc(nome) + "</strong>" +
+      '<small class="num">' + esc(horaCurta(ev)) + " · " + esc(ev.lote_codigo || "Sem lote") + "</small></span>" +
+      '<span class="estado ' + classeDoEstado(ev) + '"><span class="so-leitor">' + esc(situacaoConferencia(ev)) + "</span></span>" +
+      "</button>";
+  }
+
+  /** Últimas peças de hoje, na lateral do Inspecionar. */
+  function carregarRecentes() {
+    var host = $("recentes");
+    if (!host) return Promise.resolve();
+    return fetchJSON("/api/eventos?limite=8&dia=" + encodeURIComponent(hojeISO()))
+      .then(function (d) {
+        var eventos = ((d && d.eventos) || []).filter(function (ev) { return ev && ev.id; });
+        eventos.forEach(function (ev) { historico.porId[ev.id] = ev; });
+        setHTML(host, eventos.map(function (ev) { return linhaCompacta(ev, "data-id"); }).join(""), "recentes");
+        mostrar($("recentes-vazio"), !eventos.length);
+      })
+      .catch(function () {});
+  }
+
   function filtrarHistorico(chave) {
     historico.filtro = (chave === "tudo" || !chave) ? null : chave;
     carregarHistorico();
@@ -1367,9 +1404,16 @@
   function mostrarProximaDaFila() {
     var restantes = fila.eventos.filter(function (ev) { return ev.precisa_revisao && !ev.revisao_humana; });
     // As puladas voltam para o fim: só some da fila o que foi conferido.
-    var ev = restantes.filter(function (x) { return !fila.puladas[x.id]; })[0] || restantes[0];
-    if (ev && fila.puladas[ev.id]) fila.puladas = {};
+    var escolhida = restantes.filter(function (x) { return x.id === fila.escolhida; })[0];
+    var ev = escolhida || restantes.filter(function (x) { return !fila.puladas[x.id]; })[0] || restantes[0];
+    if (ev && !escolhida && fila.puladas[ev.id]) fila.puladas = {};
+    fila.escolhida = null;
     var n = restantes.length;
+    // Lateral: as outras peças da fila, para escolher qual conferir.
+    var outras = restantes.filter(function (x) { return !ev || x.id !== ev.id; });
+    mostrar($("fila-lateral"), outras.length > 0);
+    setHTML($("fila-lista"), outras.slice(0, 12).map(function (x) { return linhaCompacta(x, "data-fila-id"); }).join("") +
+      (outras.length > 12 ? '<p class="texto-apoio">e mais ' + (outras.length - 12) + "</p>" : ""), "fila-lista");
     setTexto($("fila-contagem"), n ? (n === 1 ? "1 peça aguardando" : n + " peças aguardando") : "");
     mostrar($("fila-peca"), !!ev);
     mostrar($("fila-vazia"), !ev);
@@ -1808,6 +1852,14 @@
       if (celula) {
         abrirModal(celula.getAttribute("data-id"));
         return;
+      }
+      // Peça escolhida na lateral da fila: passa a ser a conferida agora
+      var naFila = ev.target.closest ? ev.target.closest("[data-fila-id]") : null;
+      if (naFila) {
+        fila.escolhida = naFila.getAttribute("data-fila-id");
+        mostrarProximaDaFila();
+        var peca = $("fila-peca");
+        if (peca && peca.scrollIntoView) peca.scrollIntoView({ behavior: "smooth", block: "nearest" });
       }
     });
 

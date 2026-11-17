@@ -11,6 +11,8 @@ import Equipe from './Equipe';
 const ABAS = ['lotes', 'receber', 'producao', 'distribuir', 'equipe'] as const;
 type Aba = typeof ABAS[number];
 const TITULOS: Record<Aba, string> = { lotes: 'Lotes', receber: 'Receber OP', producao: 'Produção', distribuir: 'Produção', equipe: 'Equipe' };
+// Receber OP e Produção não aparecem mais no menu, mas seguem abrindo pelo endereço
+// (#receber, #producao, #distribuir) para dar para trazer de volta sem reescrever.
 // Endereços antigos continuam funcionando.
 const APELIDOS: Record<string, Aba> = { painel: 'lotes', recebimento: 'receber', colaboradores: 'equipe' };
 
