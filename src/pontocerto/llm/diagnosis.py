@@ -379,6 +379,36 @@ BASE_CONHECIMENTO: dict[str, dict[str, Any]] = {
             "Marcar o ponto de fechamento em costuras circulares.",
         ],
     },
+    "fabric_defect": {
+        "resumo": (
+            "Defeito no tecido: a falha está no próprio pano, fora da costura "
+            "(fio puxado, furo, nó, mancha ou falha de trama)."
+        ),
+        "causas": [
+            "Falha de tecelagem ou malharia que veio do fornecedor (trama falhada, "
+            "fio grosso, nó, barramento).",
+            "Fio puxado por rebarba na mesa, na chapa da agulha ou em grampos e "
+            "anéis no manuseio.",
+            "Furo por agulha ou tesoura no corte, ou por peça presa ao puxar o enfesto.",
+            "Mancha de óleo da máquina, de marcador ou de sujeira no transporte.",
+            "Tecido guardado dobrado, úmido ou exposto à luz, marcando ou desbotando.",
+        ],
+        "acoes": [
+            "Separe a peça e marque a área: se o defeito estiver em parte visível, "
+            "a peça vai para segunda qualidade ou para troca da parte.",
+            "Confira se o mesmo defeito aparece no rolo de origem antes de seguir "
+            "cortando dele.",
+            "Passe a mão na mesa, na chapa e no calcador procurando rebarba que "
+            "possa estar puxando fio.",
+            "Para mancha de óleo, limpe a máquina e use papel absorvente na primeira "
+            "costura depois da lubrificação.",
+        ],
+        "prevencao": [
+            "Fazer a revisão do tecido (enfesto contra a luz) antes do corte.",
+            "Registrar o defeito por rolo e fornecedor para cobrar a reposição.",
+            "Manter mesas, carrinhos e máquinas sem rebarbas e limpos de óleo.",
+        ],
+    },
 }
 
 # Trava de coerência: a base precisa cobrir exatamente a taxonomia do projeto.

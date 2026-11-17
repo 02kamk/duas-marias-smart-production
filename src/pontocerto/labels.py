@@ -12,7 +12,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class ClassInfo:
-    index: int          # indice usado pelo modelo (0..10)
+    index: int          # indice usado pelo modelo (0..11)
     key: str            # identificador estavel em snake_case
     folder: str         # nome exato da pasta no dataset
     pt: str             # nome curto em portugues (UI)
@@ -43,6 +43,9 @@ CLASSES: tuple[ClassInfo, ...] = (
               "A linha da bobina aparece na face superior por desequilíbrio de tensão.", "media"),
     ClassInfo(10, "overlapped_stitch", "10. Overlapped stitch", "Ponto sobreposto",
               "Duas carreiras de pontos se sobrepõem no mesmo trecho.", "leve"),
+    # Vem do ZJU-Leaper (defeitos no tecido, fora da costura). Ver scripts/05_preparar_zju.py.
+    ClassInfo(11, "fabric_defect", "11. Fabric defect", "Defeito no tecido",
+              "Falha no próprio tecido, fora da costura: fio puxado, furo, nó, mancha ou falha de trama.", "alta"),
 )
 
 NUM_CLASSES: int = len(CLASSES)
@@ -77,7 +80,22 @@ FABRICS: tuple[FabricInfo, ...] = (
     FabricInfo("I", "I. Jacquard-Poly", "Jacquard", "Poly"),
     FabricInfo("J", "J. Oxford-Core", "Oxford", "Core"),
     FabricInfo("K", "K. Polyester (coated)-Core", "Poliester revestido", "Core"),
+    # Recortes do ZJU-Leaper: 19 padrões de tecido (lisos, listrados, xadrez, estampados).
+    # So tem "0. Normal" e "11. Fabric defect".
+    FabricInfo("Z", "Z. ZJU-Leaper", "Tecidos estampados (ZJU-Leaper)", "Tecido"),
 )
+
+
+
+def classes_do_tecido(letter: str) -> tuple[int, ...]:
+    """Classes que existem em cada tecido do dataset de treino.
+
+    StitchingNet (A..K) tem as 11 de costura; o ZJU-Leaper (Z) so tem Normal e
+    Defeito no tecido. A varredura so reclama de pasta faltando nesses pares.
+    """
+    if letter.upper() == "Z":
+        return (0, 11)
+    return tuple(range(11))
 
 NUM_FABRICS: int = len(FABRICS)
 FABRIC_LETTERS: tuple[str, ...] = tuple(f.letter for f in FABRICS)

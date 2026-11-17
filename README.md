@@ -25,6 +25,10 @@ python scripts\verificar_ambiente.py
 
 O verificador lista o que falta e diz qual é o próximo comando. O modelo treinado já vem no repositório (`artifacts/modelo.pt`), então o dataset só é necessário para treinar de novo.
 
+Para treinar, os dados ficam em `dados/` (fora do git):
+- **StitchingNet** (costura, 11 tecidos, normal + 10 falhas; [Mendeley](https://data.mendeley.com/datasets/6tdthsjgfc/1), uso não comercial): as pastas `A. Cotton-Poly` … `K. Polyester (coated)-Core` vão em `dados/treino/`.
+- **ZJU-Leaper** (defeitos de tecido, 19 padrões; [página](https://nico-zck.github.io/zju-leaper), CC BY-NC-SA 4.0, uso acadêmico): o `.7z` vai em `dados/zju-leaper/zju-leaper.zip` e o `05_preparar_zju.py` gera os recortes da classe **Defeito no tecido**. Precisa do 7-Zip instalado.
+
 Se o `pip install` falhar por caminho longo demais (comum dentro do OneDrive), crie o ambiente fora da pasta: `python -m venv "$env:TEMP\duas-marias-venv"`. O atalho abaixo encontra esse ambiente sozinho.
 
 Para ler a foto da OP no recebimento (opcional): `pip install -r requirements-ocr.txt`.
@@ -73,7 +77,8 @@ cd frontend; npm ci; npm test          # testes da tela de Gestão
 
 | Comando | O que faz |
 |---|---|
-| `python scripts\01_preparar_dados.py` | Gera os splits do dataset de costura (`artifacts/splits.csv`) |
+| `python scripts\05_preparar_zju.py` | Gera recortes 224×224 do ZJU-Leaper (defeitos de tecido) em `dados/treino/Z. ZJU-Leaper` |
+| `python scripts\01_preparar_dados.py` | Gera os splits do dataset (`artifacts/splits.csv`) a partir de `dados/treino` |
 | `python scripts\02_treinar.py` | Treina a CNN (`artifacts/modelo.pt`; horas em CPU) |
 | `python scripts\03_avaliar.py` | Métricas e matriz de confusão no split de teste |
 | `python scripts\04_auditar_rotulos.py --dry-run` | Plano da auditoria de rótulos com LLM (sem gastar) |

@@ -35,6 +35,7 @@ from pontocerto.labels import (
     CLASS_KEYS,
     FABRIC_LETTERS,
     FABRICS,
+    classes_do_tecido,
 )
 
 # Ordem EXATA das colunas do manifesto (contrato do projeto).
@@ -74,6 +75,8 @@ def _varrer_dataset(raiz: Path, verboso: bool = True) -> list[dict]:
             faltando.append(tecido.folder)
             continue
         for classe in CLASSES:
+            if classe.index not in classes_do_tecido(tecido.letter):
+                continue
             pasta_classe = pasta_tecido / classe.folder
             if not pasta_classe.is_dir():
                 faltando.append(f"{tecido.folder}/{classe.folder}")
@@ -315,7 +318,8 @@ def _verificar(df: pd.DataFrame) -> None:
         for item in incompletos[:10]:
             print(f"        - {item}")
     else:
-        print("[ok] todos os 121 grupos (tecido x classe) aparecem nos tres splits.")
+        n_grupos = df.groupby(["tecido_letra", "classe_idx"]).ngroups
+        print(f"[ok] todos os {n_grupos} grupos (tecido x classe) aparecem nos tres splits.")
 
     n = len(df)
     prop_treino = (df["split"] == "treino").sum() / n
