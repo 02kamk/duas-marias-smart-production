@@ -12,10 +12,30 @@ from PIL import Image
 from pontocerto.config import carregar_config
 from pontocerto.app.auth import secure
 from pontocerto.app.state import EstadoSessao
-from pontocerto.management.store import Store
-from pontocerto.management.api import create_router
-from pontocerto.management.receiving import router as receiving_router
-from pontocerto.management.experiment import DelayModel
+
+
+class BancoFalso:
+    """Faz o papel do Supabase nas rotas de lotes, em memória."""
+    configurado=True
+    def __init__(self):
+        self.clientes=[];self.lotes={}
+    def mascarar(self,texto): return texto
+    def listar_clientes(self): return list(self.clientes)
+    def criar_cliente(self,nome):
+        c={'id':len(self.clientes)+1,'nome':nome};self.clientes.append(c);return c
+    def criar_lote(self,d):
+        i=len(self.lotes)+1
+        nome=next(c['nome'] for c in self.clientes if c['id']==d['cliente_id'])
+        self.lotes[i]={'id':i,'codigo':d['codigo'],'cliente':nome,'modelo_peca':d.get('modelo_peca'),
+                       'quantidade':d['quantidade'],'status':'aberto','inspecionadas':0,'aprovadas':0,'reprovadas':0}
+        return {'id':i}
+    def listar_lotes(self): return [dict(l) for l in self.lotes.values()]
+    def obter_lote(self,i): return dict(self.lotes[i]) if i in self.lotes else None
+    def atualizar_status_lote(self,i,status):
+        if i not in self.lotes: return False
+        self.lotes[i]['status']=status;return True
+    def defeitos_por_classe(self,i): return [{'classe_final':'crooked_seam','quantidade':2},{'classe_final':'normal','quantidade':5}]
+    def ultimas_inspecoes(self,i,limite=30): return []
 
 
 class Acceptance(unittest.TestCase):
@@ -30,14 +50,16 @@ class Acceptance(unittest.TestCase):
         app=FastAPI()
         @app.get('/api/private')
         def private(): return {'ok':True}
-        secure(app,self.root)
+        secure(app,self.root,admins=[])
         with TestClient(app) as c:
             self.assertEqual(c.get('/api/private').status_code,401)
             for pwd in ['abc','abcdefgh','Abcdefgh','Abcdefg1']:
                 self.assertEqual(c.post('/api/auth/register',json={'email':'test@example.com','password':pwd}).status_code,422)
             body={'email':'test@example.com','password':'Teste@1234'}
             self.assertEqual(c.post('/api/auth/register',json=body).status_code,201)
-            self.assertEqual(c.post('/api/auth/register',json=body).status_code,403)
+            # Cadastro aberto, mas o mesmo e-mail não entra duas vezes e criar conta não abre sessão.
+            self.assertEqual(c.post('/api/auth/register',json=body).status_code,409)
+            self.assertEqual(c.get('/api/private').status_code,401)
             self.assertEqual(c.post('/api/auth/login',json={**body,'password':'errada'}).status_code,401)
             login=c.post('/api/auth/login',json=body)
             self.assertEqual(login.status_code,200)
@@ -73,53 +95,21 @@ class Acceptance(unittest.TestCase):
         self.assertEqual(again.eventos(defeitos=True),[])
         self.assertEqual(again.evento(ev.id).revisao_humana['autor'],'test@example.com')
 
-    def test_receipt_differences_and_outlook_confirmation(self):
-        store=Store(self.root/'state.json')
-        app=FastAPI();app.include_router(receiving_router(store))
-        with TestClient(app) as c:
-            body={'day':date.today().isoformat(),'grade':[{'name':'M','expected':3000,'received':2998}],
-                  'supplies':[{'name':'Botão','expected':3000,'received':2900}]}
-            response=c.post('/api/gestao/orders/1/receipts',json=body)
-            self.assertEqual(response.status_code,201)
-            receipt=response.json()
-            self.assertEqual([d['difference'] for d in receipt['differences']],[-2,-100])
-            self.assertEqual(store.read()['orders'][0]['produced'],1950)
-            self.assertEqual(Store(self.root/'state.json').read()['receipts'][0]['id'],receipt['id'])
-            url=f'/api/gestao/receipts/{receipt["id"]}/notify'
-            self.assertEqual(c.post(url,json={'recipient':'test@example.com','confirm':False}).status_code,422)
-            with patch('pontocerto.management.receiving.send_outlook') as send:
-                self.assertEqual(c.post(url,json={'recipient':'test@example.com','confirm':True}).status_code,200)
-                self.assertEqual(c.post(url,json={'recipient':'test@example.com','confirm':True}).status_code,409)
-                send.assert_called_once()
-            before=store.read()
-            body['grade'][0]['expected']=2999
-            self.assertEqual(c.post('/api/gestao/orders/1/receipts',json=body).status_code,422)
-            self.assertEqual(before,store.read())
-
-    def test_reallocation_releases_capacity_and_is_atomic(self):
-        store=Store(self.root/'state.json');app=FastAPI();app.include_router(create_router(store,DelayModel(self.root/'absent')))
-        with TestClient(app) as c:
-            body={'orderId':'1','employeeId':'1','operation':'Gola','minutes':180,'period':date.today().isoformat(),'decision':'accepted','reason':'Revisado manualmente'}
-            original=c.post('/api/gestao/assignments',json=body).json()
-            url=f'/api/gestao/assignments/{original["id"]}/reallocate'
-            self.assertEqual(c.post(url,json={'employeeId':'3','minutes':180,'period':body['period'],'reason':'Destino inválido'}).status_code,422)
-            self.assertEqual(store.read()['assignments'][0]['employeeId'],'1')
-            result=c.post(url,json={'employeeId':'2','minutes':180,'period':body['period'],'reason':'Redistribuição revisada'})
-            self.assertEqual(result.status_code,200)
-            self.assertEqual(len(store.read()['assignments']),1)
-            rows=c.get('/api/gestao/recommendations',params={'operation':'Gola','minutes':180,'period':body['period']}).json()
-            self.assertTrue(any(e['employeeId']=='1' and e['availableMinutes']==240 for e in rows['eligible']))
-
     def test_full_app_real_upload_and_review(self):
-        from pontocerto.app.server import criar_app
-        from pontocerto.management.app import extend as management
-        from pontocerto.app.operational import extend as operational
+        from pontocerto.principal import criar_app_completo
         cfg=carregar_config()
         cfg.app.pasta_capturas=str(self.root/'capturas')
         cfg.app.pasta_relatorios=str(self.root/'relatorios')
         cfg.app.correcoes=str(self.root/'correcoes.csv')
         cfg.banco['lote_ativo']=str(self.root/'lote_ativo.json')
-        app=operational(management(criar_app(cfg),self.root),self.root)
+        # Sem OpenRouter de verdade: este teste exercita a leitura local.
+        cfg.llm['ativo']=False;cfg.llm['leitura_ia']=False
+        # Nunca usa o Supabase do .env: o teste não pode gravar no banco de verdade.
+        sem_supabase=patch('pontocerto.app.db.credenciais_supabase',return_value={})
+        sem_auth=patch('pontocerto.config.credenciais_supabase',return_value={})
+        sem_supabase.start();sem_auth.start()
+        self.addCleanup(sem_supabase.stop);self.addCleanup(sem_auth.stop)
+        app=criar_app_completo(cfg,root=self.root,admins=[])
         with TestClient(app) as c:
             self.assertEqual(c.get('/',follow_redirects=False).status_code,303)
             body={'email':'test@example.com','password':'Teste@1234'}
@@ -130,7 +120,9 @@ class Acceptance(unittest.TestCase):
             self.assertNotIn('data-pagina="treinamento"',html)
             self.assertNotIn('data-pagina="testar"',html)
             self.assertIn('historico-dia',html)
-            self.assertIn('href="/gestao#lotes"',html)
+            self.assertIn('data-pagina="lotes"',html)
+            self.assertNotIn('/gestao#equipe',html)
+            self.assertEqual(c.get('/gestao',follow_redirects=False).headers['location'],'/#lotes')
             self.assertIn('id="foto-camera"',html)
             self.assertEqual(c.get('/manifest.webmanifest').status_code,200)
             image=io.BytesIO();Image.new('RGB',(224,224),'gray').save(image,format='PNG')
@@ -152,10 +144,19 @@ class Acceptance(unittest.TestCase):
             self.assertEqual(c.get('/api/eventos?classe=crooked_seam').json()['eventos'][0]['id'],event['id'])
             pdf=c.get('/api/relatorios/pdf')
             self.assertTrue(pdf.content.startswith(b'%PDF'))
-            self.assertEqual(c.get('/api/relatorios/resumo').json()['revisadas'],1)
-            # Foto da OP vai como formulário e não pode ser barrada como "Envie JSON".
-            op=c.post('/api/gestao/op/read',files={'arquivo':('op.png',image.getvalue(),'image/png')})
-            self.assertNotEqual(op.status_code,415)
+            resumo=c.get('/api/relatorios/resumo').json()
+            self.assertEqual((resumo['total'],resumo['conferidas'],resumo['corrigidas']),(1,1,1))
+            # A peça corrigida conta como "Costura torta" nos números de hoje e no relatório.
+            self.assertEqual(resumo['defeitos_por_tipo'][0]['nome'],'Costura torta')
+            self.assertEqual(c.get('/api/status').json()['estatisticas']['por_classe']['crooked_seam'],1)
+            semana=c.get('/api/relatorios/resumo',params={'de':'2020-01-01','ate':'2020-01-07'}).json()
+            self.assertEqual((semana['de'],semana['total']),('2020-01-01',0))
+            self.assertTrue(c.get('/api/relatorios/pdf',params={'de':'2020-01-01','ate':'2099-01-01'}).content.startswith(b'%PDF'))
+            minha=c.get('/api/perfil/atividade').json()
+            self.assertEqual((minha['hoje'],minha['total'],minha['corrigidas']),(1,1,1))
+            self.assertEqual(minha['ultimas'][0]['nome'],'Costura torta')
+            inicio=c.get('/api/inicio').json()
+            self.assertEqual((inicio['hoje']['total'],inicio['lotes']),(1,[]))
             # A origem real da captura fica registrada.
             c.post('/api/analisar',files={'arquivo':('cam.png',image.getvalue(),'image/png')},data={'origem':'camera_aparelho'})
             self.assertEqual(c.get('/api/eventos').json()['eventos'][0]['origem'],'camera_aparelho')
@@ -165,33 +166,49 @@ class Acceptance(unittest.TestCase):
             saved=c.post(f'/api/eventos/{last["id"]}/conferencia',json={'classe':other,'decisao':'confirmada'}).json()
             self.assertEqual(saved['evento']['revisao_humana']['decisao'],'corrigida')
             self.assertFalse(any(e['id']==last['id'] for e in c.get('/api/eventos?pendentes=true').json()['eventos']))
+            # Excluir a peça tira do histórico, dos números e apaga a foto.
+            antes=c.get('/api/relatorios/resumo').json()['total']
+            foto_peca=self.root/'capturas'/(last['id']+'.jpg')
+            self.assertEqual(c.delete(f'/api/eventos/{last["id"]}').status_code,200)
+            self.assertFalse(any(e['id']==last['id'] for e in c.get('/api/eventos').json()['eventos']))
+            self.assertEqual(c.get('/api/relatorios/resumo').json()['total'],antes-1)
+            self.assertFalse(foto_peca.exists())
+            self.assertEqual(c.delete(f'/api/eventos/{last["id"]}').status_code,404)
             # Ajustes ficam gravados em disco para valer depois de reiniciar.
             c.post('/api/ajustes',json={'meta_pecas':77})
             self.assertTrue((self.root/'ajustes.json').exists())
         with TestClient(app) as c:
             c.post('/api/auth/login',json=body)
             self.assertEqual(c.get('/api/ajustes').json()['meta_pecas'],77)
-            # Receber a OP: quantidade sai da grade e a conferência é salva junto.
-            hoje=date.today().isoformat();prazo=(date.today()+timedelta(days=10)).isoformat()
-            intake=c.post('/api/gestao/intake',json={'code':'OP-900','client':'Cliente','model':'Camiseta','fabric':'Malha',
-                'dueDate':prazo,'day':hoje,'grade':[{'name':'P','expected':60,'received':60},{'name':'M','expected':40,'received':38}],'supplies':[],'note':''})
-            self.assertEqual(intake.status_code,201,intake.text)
-            order=intake.json()['order']
-            self.assertEqual(order['quantity'],100)
-            self.assertEqual(intake.json()['receipt']['status'],'divergente')
-            self.assertEqual(c.post('/api/gestao/intake',json={'code':'op-900','client':'X','model':'Y','dueDate':prazo,'day':hoje,
-                'grade':[{'name':'P','expected':1,'received':1}]}).status_code,422)
-            # Previsão de entrega pelo ritmo, mesmo sem o modelo experimental.
-            analise=c.get(f'/api/gestao/orders/{order["id"]}/analysis').json()
-            self.assertTrue(analise['estimatedDeliveryDate'])
-            self.assertTrue(analise['suggestions'])
-            # Escolher o lote na inspeção funciona sem Supabase e marca as peças.
-            ativo=c.post(f'/api/gestao/orders/{order["id"]}/inspecionar',json={}).json()['lote']
-            self.assertEqual(ativo['codigo'],'OP-900');self.assertIsNone(ativo['id'])
+            # Sem Supabase, os lotes avisam o que falta em vez de quebrar.
+            sem_banco=c.get('/api/lotes').json()
+            self.assertFalse(sem_banco['disponivel']);self.assertIn('Supabase',sem_banco['erro'])
+            self.assertEqual(c.post('/api/lotes',json={'codigo':'OP-1','cliente':'X','quantidade':1}).status_code,503)
+            # Com o banco (aqui, um falso em memória): criar, inspecionar, concluir e baixar o PDF.
+            app.state.banco=BancoFalso()
+            self.assertEqual(c.post('/api/lotes',json={'codigo':'','cliente':'X','quantidade':1}).status_code,422)
+            criado=c.post('/api/lotes',json={'codigo':'OP-900','cliente':'Cliente A','quantidade':100})
+            self.assertEqual(criado.status_code,201,criado.text)
+            lote=criado.json()['lote']
+            self.assertEqual((lote['codigo'],lote['cliente'],lote['quantidade'],lote['inspecionadas']),('OP-900','Cliente A',100,0))
+            self.assertEqual(c.post('/api/lotes',json={'codigo':'op-900','cliente':'B','quantidade':5}).status_code,409)
+            self.assertEqual(c.get('/api/lotes/clientes').json()['clientes'],['Cliente A'])
+            ativo=c.post(f'/api/lotes/{lote["id"]}/inspecionar',json={}).json()['lote']
+            self.assertEqual((ativo['id'],ativo['codigo']),(lote['id'],'OP-900'))
             c.post('/api/analisar',files={'arquivo':('lote.png',image.getvalue(),'image/png')})
             self.assertEqual(c.get('/api/eventos').json()['eventos'][0]['lote_codigo'],'OP-900')
-            lote=next(l for l in c.get('/api/gestao/inspecao').json()['lotes'] if l['code']=='OP-900')
-            self.assertEqual(lote['inspecao']['inspecionadas'],1)
-            c.post('/api/lotes/ativo',json={'lote_id':None})
+            detalhe=c.get(f'/api/lotes/{lote["id"]}').json()
+            self.assertTrue(detalhe['lote']['ativo'])
+            self.assertEqual(detalhe['defeitos'],[{'classe':'crooked_seam','nome':'Costura torta','quantidade':2}])
+            self.assertTrue(c.get(f'/api/lotes/{lote["id"]}/pdf').content.startswith(b'%PDF'))
+            # Concluir tira o lote da lista em aberto e para de gravar nele.
+            self.assertTrue(c.post(f'/api/lotes/{lote["id"]}/concluir',json={}).json()['lote']['concluido'])
+            self.assertIsNone(c.get('/api/lotes/ativo').json()['lote'])
+            self.assertEqual(c.get('/api/lotes').json()['lotes'],[])
+            self.assertEqual(len(c.get('/api/lotes?todos=true').json()['lotes']),1)
+            self.assertEqual(c.post(f'/api/lotes/{lote["id"]}/inspecionar',json={}).status_code,409)
+            c.post(f'/api/lotes/{lote["id"]}/reabrir',json={})
+            c.post(f'/api/lotes/{lote["id"]}/inspecionar',json={})
+            c.post('/api/lotes/ativo',json={})
             self.assertIsNone(c.get('/api/lotes/ativo').json()['lote'])
         # O modelo foi executado; a imagem sintética não comprova acurácia em costura.

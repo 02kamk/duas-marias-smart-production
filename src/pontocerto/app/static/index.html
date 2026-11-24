@@ -3,13 +3,17 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Duas Marias - Inspeção de costura</title>
+<title>Ponto Certo - Inspeção de costura</title>
 <meta name="description" content="Inspeção visual de costura e tecido com detecção de 11 tipos de falha.">
 <meta name="theme-color" content="#C1502E">
 <link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
 <link rel="stylesheet" href="/static/css/style.css">
 <script src="/static/js/app.js" defer></script>
 <script src="/static/js/operacao.js" defer></script>
+<script src="/static/js/paineis.js" defer></script>
 </head>
 <body>
 
@@ -27,32 +31,26 @@
      MENU (o mesmo da Gestão: frontend/src/management/Casca.tsx)
      ========================================================== -->
 <nav class="menu" aria-label="Navegação principal">
-  <a class="marca" href="/#ao-vivo" aria-label="Duas Marias - início"><svg viewBox="0 0 34 34" width="26" height="26" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M28 5.5 13 20.5" stroke="var(--terracota)" stroke-width="3"/><path d="M13 20.5 8.5 25" stroke="var(--barro)" stroke-width="3"/><path d="M26.8 9.6c2.1 3.9-1 6-3.4 7.5-2.4 1.5-4 4-1.6 6.6" stroke="var(--terracota-claro)" stroke-width="2"/><path d="M2.5 29.5h29" stroke="var(--terracota-claro)" stroke-width="3" stroke-dasharray="5 4"/></svg><span class="marca-nome">Duas<span>Marias</span></span></a>
+  <a class="marca" href="/#inicio" aria-label="Ponto Certo - início"><svg class="marca-icone" viewBox="0 0 34 34" width="30" height="30" aria-hidden="true" focusable="false"><rect width="34" height="34" rx="10" fill="var(--terracota)"/><path d="M9 17.5l5.5 5.5L25.5 11" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="marca-nome">Ponto<span>Certo</span></span></a>
 
   <div class="menu-grupo">
-    <p class="menu-titulo">Chão de fábrica</p>
+    <a class="nav-item" href="/#inicio" data-pagina="inicio"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3.5 10.5 12 4l8.5 6.5"/><path d="M5.5 9v10.5h13V9"/><path d="M10 19.5V14h4v5.5"/></svg><span class="nav-texto">Início</span></a>
     <a class="nav-item" href="/#ao-vivo" data-pagina="ao-vivo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3.5 7.5h3L8 5h8l1.5 2.5h3A1.5 1.5 0 0 1 22 9v8.5a1.5 1.5 0 0 1-1.5 1.5h-17A1.5 1.5 0 0 1 2 17.5V9a1.5 1.5 0 0 1 1.5-1.5z"/><circle cx="12" cy="13" r="3.5"/></svg><span class="nav-texto">Inspecionar</span></a>
     <a class="nav-item" href="/#conferir" data-pagina="conferir"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9 11.5l2.5 2.5L20 5.5"/><path d="M20 12v6.5a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18.5v-13A1.5 1.5 0 0 1 5.5 4H15"/></svg><span class="nav-texto">Conferir</span><span class="nav-badge" data-badge-pendentes hidden></span></a>
     <a class="nav-item" href="/#historico" data-pagina="historico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1L3.5 8.5"/><path d="M3.5 4v4.5H8"/><path d="M12 7.5V12l3 2"/></svg><span class="nav-texto">Histórico</span></a>
-    <a class="nav-item" href="/gestao#lotes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3.5 7.5 12 3l8.5 4.5L12 12z"/><path d="m3.5 12 8.5 4.5 8.5-4.5"/><path d="m3.5 16.5 8.5 4.5 8.5-4.5"/></svg><span class="nav-texto">Lotes</span></a>
-  </div>
-
-  <div class="menu-grupo">
-    <p class="menu-titulo">Gestão</p>
-    <a class="nav-item" href="/gestao#equipe"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.5-3.5 3-5.5 6.5-5.5s6 2 6.5 5.5"/><path d="M16 4.8a3.5 3.5 0 0 1 0 6.4"/><path d="M18.5 14.8c1.700.8 2.700 2.5 3 5.2"/></svg><span class="nav-texto">Equipe</span></a>
+    <a class="nav-item" href="/#lotes" data-pagina="lotes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3.5 7.5 12 3l8.5 4.5L12 12z"/><path d="m3.5 12 8.5 4.5 8.5-4.5"/><path d="m3.5 16.5 8.5 4.5 8.5-4.5"/></svg><span class="nav-texto">Lotes</span></a>
     <a class="nav-item" href="/#relatorios" data-pagina="relatorios"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M14 3H7.5A2.5 2.5 0 0 0 5 5.5v13A2.5 2.5 0 0 0 7.5 21h9a2.5 2.5 0 0 0 2.5-2.5V8z"/><path d="M14 3v5h5"/><path d="M9 13h6"/><path d="M9 17h4"/></svg><span class="nav-texto">Relatórios</span></a>
   </div>
 
   <div class="menu-rodape">
-    <p id="chip-banco" class="menu-estado"><span class="chip-texto">Dados neste computador</span></p>
-    <a class="nav-item" href="/#ajustes" data-pagina="ajustes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 6h10"/><path d="M18 6h2"/><circle cx="16" cy="6" r="2"/><path d="M4 12h2"/><path d="M10 12h10"/><circle cx="8" cy="12" r="2"/><path d="M4 18h10"/><path d="M18 18h2"/><circle cx="16" cy="18" r="2"/></svg><span class="nav-texto">Ajustes</span></a>
+    <a class="nav-item perfil-chip" href="/#perfil" data-pagina="perfil" aria-label="Seu perfil"><span class="avatar" data-avatar aria-hidden="true"></span><span class="perfil-chip-texto"><strong data-perfil-nome>Perfil</strong><small data-perfil-email></small></span></a>
     <button id="instalar-app" class="nav-item" type="button" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 16.5V4"/><path d="m7.5 8.5 4.5-4.5 4.5 4.5"/><path d="M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15"/></svg><span class="nav-texto">Instalar aplicativo</span></button>
     <button class="nav-item" type="button" data-sair><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h3"/><path d="M15 16l4-4-4-4"/><path d="M19 12H9"/></svg><span class="nav-texto">Sair</span></button>
   </div>
 </nav>
 
 <header class="topo-movel">
-  <a class="marca" href="/#ao-vivo" aria-label="Duas Marias - início"><svg viewBox="0 0 34 34" width="26" height="26" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M28 5.5 13 20.5" stroke="var(--terracota)" stroke-width="3"/><path d="M13 20.5 8.5 25" stroke="var(--barro)" stroke-width="3"/><path d="M26.8 9.6c2.1 3.9-1 6-3.4 7.5-2.4 1.5-4 4-1.6 6.6" stroke="var(--terracota-claro)" stroke-width="2"/><path d="M2.5 29.5h29" stroke="var(--terracota-claro)" stroke-width="3" stroke-dasharray="5 4"/></svg><span class="marca-nome">Duas<span>Marias</span></span></a>
+  <a class="marca" href="/#inicio" aria-label="Ponto Certo - início"><svg class="marca-icone" viewBox="0 0 34 34" width="30" height="30" aria-hidden="true" focusable="false"><rect width="34" height="34" rx="10" fill="var(--terracota)"/><path d="M9 17.5l5.5 5.5L25.5 11" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="marca-nome">Ponto<span>Certo</span></span></a>
 </header>
 
 <!-- ==========================================================
@@ -61,9 +59,51 @@
 <main id="conteudo" class="conteudo">
 
   <!-- ======================================================
+       PÁGINA: INÍCIO
+       ====================================================== -->
+  <section id="pagina-inicio" class="pagina ativa" aria-label="Início">
+    <section class="hero" aria-labelledby="inicio-saudacao">
+      <div>
+        <p id="inicio-data" class="hero-data"></p>
+        <h1 id="inicio-saudacao">Olá</h1>
+        <p class="hero-sub">Fotografe a peça de perto e a IA confere a costura em poucos segundos.</p>
+        <a class="btn btn-claro btn-grande" href="/#ao-vivo">Inspecionar peças</a>
+      </div>
+      <svg class="hero-ponto" viewBox="0 0 220 170" aria-hidden="true" focusable="false">
+        <path d="M18 92 L78 150 L202 22" fill="none" stroke="#fff" stroke-width="12" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="20 16" opacity=".95"/>
+        <path d="M18 120 L78 178" fill="none" stroke="#fff" stroke-width="2" stroke-dasharray="4 8" opacity=".35"/>
+        <circle cx="202" cy="22" r="9" fill="var(--terracota-claro)" stroke="#fff" stroke-width="3"/>
+      </svg>
+    </section>
+
+    <dl class="resumo" aria-label="Hoje">
+      <div><dt>Inspecionadas hoje</dt><dd id="inicio-total">0</dd></div>
+      <div><dt>Aprovadas</dt><dd id="inicio-aprovadas">0</dd></div>
+      <div><dt>Com defeito</dt><dd><span id="inicio-defeitos-n">0</span> <small id="inicio-taxa" class="resumo-pct"></small></dd></div>
+      <div id="inicio-pendentes-card"><dt>Aguardando conferência</dt><dd id="inicio-pendentes">0</dd></div>
+    </dl>
+    <p id="inicio-aviso-conferir" class="aviso aviso-atencao aviso-acao" hidden>
+      <span id="inicio-aviso-texto"></span> <a href="/#conferir">Conferir agora</a>
+    </p>
+
+    <div class="grade-lateral">
+      <div class="bloco">
+        <div class="bloco-cabecalho"><h2>Defeitos de hoje</h2><a href="/#relatorios">Ver relatórios</a></div>
+        <div id="inicio-defeitos"></div>
+      </div>
+      <aside class="coluna-lateral">
+        <div class="bloco">
+          <div class="bloco-cabecalho"><h2>Lotes em aberto</h2><a href="/#lotes">Ver todos</a></div>
+          <div id="inicio-lotes"></div>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <!-- ======================================================
        PÁGINA: INSPECIONAR
        ====================================================== -->
-  <section id="pagina-ao-vivo" class="pagina ativa" aria-label="Inspecionar">
+  <section id="pagina-ao-vivo" class="pagina" aria-label="Inspecionar">
     <div class="pagina-cabecalho">
       <h1>Inspecionar</h1>
       <div class="pagina-acoes">
@@ -106,7 +146,17 @@
       </div>
       <div class="resultado-corpo">
         <div class="resultado-midia">
-          <img id="peca-analisada" class="resultado-foto" alt="Peça analisada">
+          <div class="foto-palco">
+            <img id="peca-analisada" class="resultado-foto" alt="Peça analisada">
+            <div class="analisando" data-analisando hidden>
+            <span class="analisando-cantos" aria-hidden="true"></span>
+            <span class="analisando-linha" aria-hidden="true"></span>
+            <div class="analisando-rodape">
+              <p class="analisando-texto" data-analisando-texto role="status">Lendo a peça...</p>
+              <span class="analisando-barra" aria-hidden="true"><i data-analisando-barra></i></span>
+            </div>
+          </div>
+          </div>
           <div class="segmentado" role="group" aria-label="O que mostrar na foto">
             <button id="ver-foto" class="ativo" type="button" aria-pressed="true">Foto</button>
             <button id="ver-mapa" type="button" aria-pressed="false">Onde a IA olhou</button>
@@ -120,12 +170,9 @@
               <p id="teste-confianca" class="resultado-confianca"></p>
             </div>
           </div>
+          <p id="teste-explicacao" class="leitura-ia" hidden></p>
           <div id="teste-ia" class="explicacao"></div>
           <div id="conferencia-upload" class="conferencia"></div>
-          <details>
-            <summary>Outras possibilidades</summary>
-            <ul id="teste-top" class="lista-top"></ul>
-          </details>
         </div>
       </div>
       <div class="resultado-rodape">
@@ -134,20 +181,42 @@
     </article>
 
     <!-- Câmera ao vivo do computador: só aparece quando existe câmera -->
-    <details id="bloco-camera" class="bloco bloco-camera" hidden>
-      <summary>Câmera ao vivo deste computador <span id="chip-camera" class="estado estado-neutro">Câmera desligada</span></summary>
+    <section id="bloco-camera" class="bloco bloco-camera" aria-labelledby="titulo-camera" hidden>
+      <div class="bloco-cabecalho">
+        <div>
+          <h2 id="titulo-camera">Câmera deste computador</h2>
+          <p class="texto-apoio">Para inspecionar em sequência: a leitura acontece quando a peça fica parada.</p>
+        </div>
+        <div class="linha-botoes">
+          <span id="chip-camera" class="estado estado-neutro">Câmera desligada</span>
+          <button id="btn-mostrar-camera" class="btn btn-secundario btn-pequeno" type="button" aria-expanded="false" aria-controls="camera-corpo">Abrir câmera</button>
+        </div>
+      </div>
 
+      <div id="camera-corpo" hidden>
       <div class="camera-grade">
         <div>
           <div id="video-wrap" class="video-wrap">
             <img id="video-ao-vivo" class="video-img" alt="Imagem da câmera de inspeção" hidden>
             <p id="video-vazio" class="video-vazio">Câmera desligada. Cada peça vista é registrada no histórico.</p>
             <span id="video-pill" class="video-pill" hidden><span class="pill-ponto" aria-hidden="true"></span>AO VIVO</span>
+            <div class="analisando" id="video-lendo" data-analisando hidden>
+            <span class="analisando-cantos" aria-hidden="true"></span>
+            <span class="analisando-linha" aria-hidden="true"></span>
+            <div class="analisando-rodape">
+              <p class="analisando-texto" data-analisando-texto role="status">Lendo a peça...</p>
+              <span class="analisando-barra" aria-hidden="true"><i data-analisando-barra></i></span>
+            </div>
+          </div>
           </div>
           <div class="camera-controles">
             <button id="btn-camera" class="btn btn-secundario" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.5" y="6" width="13" height="12" rx="2.5"/><path d="M15.5 11 21 7.8v8.4L15.5 13z"/></svg><span class="btn-rotulo">Ligar câmera</span></button>
             <button id="btn-capturar" class="btn btn-secundario" type="button"><span>Analisar esta peça</span></button>
-            <label class="interruptor" for="toggle-gradcam">
+            <label id="auto-ler-rotulo" class="interruptor" for="auto-ler" hidden>
+              <input id="auto-ler" type="checkbox" checked>
+              <span class="interruptor-texto">Ler sozinha quando a peça parar</span>
+            </label>
+            <label id="gradcam-rotulo" class="interruptor" for="toggle-gradcam">
               <input id="toggle-gradcam" type="checkbox">
               <span class="interruptor-texto">Mostrar onde a IA olhou</span>
             </label>
@@ -173,15 +242,10 @@
           <div id="painel-ia" hidden>
             <div id="ia-conteudo" class="explicacao"></div>
           </div>
-          <details>
-            <summary>Outras possibilidades</summary>
-            <ul id="lista-top" class="lista-top">
-              <li class="lista-vazia">Ligue a câmera para ver a leitura.</li>
-            </ul>
-          </details>
         </div>
       </div>
-    </details>
+      </div>
+    </section>
     </div>
 
     <!-- Lateral: meta do turno e últimas peças -->
@@ -299,146 +363,254 @@
   </section>
 
   <!-- ======================================================
+       PÁGINA: LOTES
+       ====================================================== -->
+  <section id="pagina-lotes" class="pagina" aria-label="Lotes">
+    <div class="pagina-cabecalho">
+      <h1>Lotes</h1>
+      <div class="pagina-acoes">
+        <label class="check"><input id="lotes-concluidos" type="checkbox"> Mostrar concluídos</label>
+        <button id="btn-novo-lote" class="btn btn-principal" type="button">Novo lote</button>
+      </div>
+    </div>
+    <p id="lotes-erro" class="aviso aviso-atencao" hidden></p>
+
+    <div class="grade-lateral">
+      <div class="coluna-principal">
+        <div id="lotes-bloco" class="bloco lotes-lista" style="padding:0;gap:0" hidden>
+          <div class="linha-cabecalho linha-lote" aria-hidden="true">
+            <span>Lote</span><span>Inspecionadas</span><span>Com defeito</span><span>Situação</span>
+          </div>
+          <div id="lista-lotes" class="linhas"></div>
+        </div>
+        <div id="lotes-vazio" class="vazio" hidden>
+          <strong>Nenhum lote em aberto</strong>
+          Crie um lote para juntar as peças de um pedido.
+        </div>
+      </div>
+
+      <aside class="coluna-lateral" aria-label="Lote escolhido">
+        <form id="form-lote" class="bloco formulario" hidden novalidate>
+          <div class="bloco-cabecalho"><h2>Novo lote</h2></div>
+          <label class="campo"><span class="campo-rotulo">Código</span>
+            <input id="lote-codigo" class="entrada" required maxlength="40" placeholder="Ex.: OP-1024" autocomplete="off"></label>
+          <label class="campo"><span class="campo-rotulo">Cliente</span>
+            <input id="lote-cliente" class="entrada" required maxlength="120" list="lista-clientes" autocomplete="off"></label>
+          <datalist id="lista-clientes"></datalist>
+          <label class="campo"><span class="campo-rotulo">Peça <small class="texto-apoio">(opcional)</small></span>
+            <input id="lote-peca" class="entrada" maxlength="120" placeholder="Ex.: Camiseta gola careca" autocomplete="off"></label>
+          <label class="campo"><span class="campo-rotulo">Quantidade de peças</span>
+            <input id="lote-quantidade" class="entrada" type="number" min="1" max="1000000" inputmode="numeric" required></label>
+          <p id="lote-form-erro" class="campo-erro" role="alert"></p>
+          <div class="linha-botoes">
+            <button class="btn btn-principal" type="submit">Criar lote</button>
+            <button id="lote-cancelar" class="btn btn-secundario" type="button">Cancelar</button>
+          </div>
+        </form>
+
+        <div id="lote-detalhe" class="bloco" hidden></div>
+        <div id="lote-dica" class="vazio">Escolha um lote para ver os defeitos e baixar o relatório de qualidade.</div>
+      </aside>
+    </div>
+  </section>
+
+  <!-- ======================================================
        PÁGINA: RELATÓRIOS
        ====================================================== -->
   <section id="pagina-relatorios" class="pagina" aria-label="Relatórios">
     <div class="pagina-cabecalho">
       <h1>Relatórios</h1>
       <div class="pagina-acoes">
-        <label class="campo campo-inline" for="relatorio-dia">
-          <span class="campo-rotulo">Dia</span>
-          <input id="relatorio-dia" class="entrada" type="date">
-        </label>
+        <a id="relatorio-pdf" class="btn btn-secundario" href="/api/relatorios/pdf" download>Baixar PDF</a>
       </div>
     </div>
+
+    <div class="periodo" role="group" aria-label="Período">
+      <div class="segmentado">
+        <button type="button" data-periodo="0" aria-pressed="true">Hoje</button>
+        <button type="button" data-periodo="6" aria-pressed="false">7 dias</button>
+        <button type="button" data-periodo="29" aria-pressed="false">30 dias</button>
+      </div>
+      <label class="campo campo-inline"><span class="campo-rotulo">De</span><input id="relatorio-de" class="entrada" type="date"></label>
+      <label class="campo campo-inline"><span class="campo-rotulo">Até</span><input id="relatorio-ate" class="entrada" type="date"></label>
+    </div>
+
+    <dl class="resumo" aria-label="Números do período" aria-live="polite">
+      <div><dt>Inspecionadas</dt><dd id="rel-total">0</dd></div>
+      <div><dt>Aprovadas</dt><dd id="rel-aprovadas">0</dd></div>
+      <div><dt>Com defeito</dt><dd><span id="rel-defeitos">0</span> <small id="rel-taxa" class="resumo-pct"></small></dd></div>
+      <div><dt>Conferidas por uma pessoa</dt><dd><span id="rel-conferidas">0</span> <small id="rel-corrigidas" class="resumo-pct"></small></dd></div>
+    </dl>
 
     <div class="grade-lateral">
-    <div class="bloco">
-      <h2>Inspeções do dia</h2>
-      <div id="relatorio-indicadores" class="relatorio-indicadores" aria-live="polite"></div>
-      <div id="relatorio-classes"></div>
-      <div class="linha-botoes">
-        <a id="relatorio-pdf" class="btn btn-principal" href="/api/relatorios/pdf" download>Baixar inspeções (PDF)</a>
-      </div>
-    </div>
-
-    <aside class="coluna-lateral">
-      <div class="bloco">
-        <h2>Lotes</h2>
-        <p class="texto-apoio">Lotes, prazos e situação de cada um, como estão agora.</p>
-        <div class="linha-botoes">
-          <a class="btn btn-secundario" href="/api/gestao/report.pdf" download>Baixar lotes (PDF)</a>
+      <div class="coluna-principal">
+        <div class="bloco">
+          <h2>Defeitos por tipo</h2>
+          <div id="rel-tipos"></div>
+        </div>
+        <div id="rel-dias-bloco" class="bloco" hidden>
+          <h2>Por dia</h2>
+          <div id="rel-dias" class="rel-dias"></div>
         </div>
       </div>
-    </aside>
+      <aside class="coluna-lateral">
+        <div class="bloco">
+          <h2>Por lote</h2>
+          <div id="rel-lotes"></div>
+        </div>
+      </aside>
     </div>
   </section>
 
   <!-- ======================================================
-       PÁGINA: AJUSTES
+       PÁGINA: PERFIL
        ====================================================== -->
-  <section id="pagina-ajustes" class="pagina ajustes" aria-label="Ajustes">
+  <section id="pagina-perfil" class="pagina" aria-label="Perfil">
     <div class="pagina-cabecalho">
-      <h1>Ajustes</h1>
+      <h1>Perfil</h1>
+    </div>
+    <div class="segmentado abas-perfil" role="tablist" aria-label="Perfil">
+      <button id="aba-btn-dados" type="button" role="tab" aria-selected="true" aria-controls="aba-dados" class="ativo" data-aba="dados">Meus dados</button>
+      <button id="aba-btn-ajustes" type="button" role="tab" aria-selected="false" aria-controls="aba-ajustes" data-aba="ajustes">Ajustes</button>
     </div>
 
-    <div class="grade-duas">
-    <div class="bloco">
-      <h2>Inspeção</h2>
-      <div class="campos dois">
-        <div class="campo">
-          <label for="aj-sensibilidade">Rigor da inspeção</label>
-          <select id="aj-sensibilidade" class="entrada">
-            <option value="baixa">Tolerante: reprova só defeitos evidentes</option>
-            <option value="normal">Normal</option>
-            <option value="alta">Rigoroso: reprova na dúvida</option>
-            <option value="personalizado" hidden>Personalizado</option>
-          </select>
-        </div>
-        <div class="campo">
-          <label for="aj-meta">Meta de peças por turno</label>
-          <input id="aj-meta" class="entrada" type="number" min="1" max="100000" step="1">
-        </div>
-      </div>
-
-      <details>
-        <summary>Ajuste fino do rigor</summary>
-        <div class="formulario">
-          <div class="campo">
-            <label for="aj-limiar-alerta">Certeza mínima para reprovar</label>
-            <div class="range-linha">
-              <input id="aj-limiar-alerta" type="range" min="0.3" max="0.99" step="0.01" value="0.55">
-              <output id="aj-limiar-alerta-out" for="aj-limiar-alerta">0,55</output>
-            </div>
-          </div>
-          <div class="campo">
-            <label for="aj-limiar-incerteza">Abaixo disto, a leitura vai para conferência</label>
-            <div class="range-linha">
-              <input id="aj-limiar-incerteza" type="range" min="0.1" max="0.95" step="0.01" value="0.70">
-              <output id="aj-limiar-incerteza-out" for="aj-limiar-incerteza">0,70</output>
-            </div>
-          </div>
-          <div class="campo">
-            <label for="aj-frames">Imagens seguidas antes de decidir (câmera ao vivo)</label>
-            <div class="range-linha">
-              <input id="aj-frames" type="range" min="1" max="15" step="1" value="4">
-              <output id="aj-frames-out" for="aj-frames">4</output>
-            </div>
-          </div>
-          <div class="campo">
-            <label for="aj-ema">Estabilidade da leitura ao vivo</label>
-            <div class="range-linha">
-              <input id="aj-ema" type="range" min="0.05" max="0.95" step="0.05" value="0.45">
-              <output id="aj-ema-out" for="aj-ema">0,45</output>
-            </div>
+    <div id="aba-dados" role="tabpanel" aria-labelledby="aba-btn-dados">
+    <div class="grade-lateral">
+      <div class="coluna-principal">
+      <form id="form-perfil" class="bloco formulario" novalidate>
+        <h2>Seus dados</h2>
+        <div class="perfil-foto">
+          <span id="perfil-avatar" class="avatar avatar-grande" data-avatar aria-hidden="true"></span>
+          <div class="linha-botoes">
+            <label class="btn btn-secundario" for="perfil-arquivo">Trocar foto</label>
+            <input id="perfil-arquivo" type="file" accept="image/*" hidden>
+            <button id="perfil-remover-foto" class="btn-link" type="button" hidden>Remover foto</button>
           </div>
         </div>
-      </details>
+        <label class="campo"><span class="campo-rotulo">Nome</span>
+          <input id="perfil-nome" class="entrada" maxlength="80" autocomplete="name" placeholder="Como você quer ser chamada"></label>
+        <label class="campo"><span class="campo-rotulo">E-mail</span>
+          <input id="perfil-email" class="entrada" type="email" readonly>
+          <span class="campo-ajuda">É o e-mail que você usa para entrar.</span></label>
+        <div class="linha-botoes">
+          <button class="btn btn-principal" type="submit">Salvar</button>
+        </div>
+      </form>
 
-      <div class="linha-botoes">
-        <button id="btn-salvar-ajustes" class="btn btn-principal" type="button"><span>Salvar</span></button>
-        <span id="ajustes-status" class="texto-apoio" role="status"></span>
-      </div>
-    </div>
-
-    <div class="bloco">
-      <h2>Contas</h2>
-      <div id="contas-lista"></div>
-      <details id="nova-conta">
-        <summary>Nova conta</summary>
-        <form id="form-conta" class="conta-form">
-          <label class="campo"><span class="campo-rotulo">E-mail</span>
-            <input id="conta-email" class="entrada" type="email" autocomplete="off" required maxlength="254"></label>
-          <label class="campo"><span class="campo-rotulo">Senha inicial</span>
-            <input id="conta-senha" class="entrada" type="password" autocomplete="new-password" required maxlength="128"></label>
-          <button class="btn btn-secundario" type="submit">Criar conta</button>
+      <div class="bloco perfil-linha">
+        <div class="perfil-linha-topo">
+          <div>
+            <h2>Senha</h2>
+            <p class="texto-apoio">A que você usa para entrar no sistema.</p>
+          </div>
+          <button id="btn-abrir-senha" class="btn btn-secundario" type="button" aria-expanded="false" aria-controls="form-senha">Trocar senha</button>
+        </div>
+        <form id="form-senha" class="formulario" hidden novalidate>
+          <label class="campo"><span class="campo-rotulo">Senha atual</span>
+            <input id="senha-atual" class="entrada" type="password" autocomplete="current-password" maxlength="128" required></label>
+          <label class="campo"><span class="campo-rotulo">Senha nova</span>
+            <input id="senha-nova" class="entrada" type="password" autocomplete="new-password" maxlength="128" required>
+            <span class="campo-ajuda">8 caracteres ou mais, com maiúscula, minúscula, número e símbolo.</span></label>
+          <label class="campo"><span class="campo-rotulo">Repita a senha nova</span>
+            <input id="senha-nova2" class="entrada" type="password" autocomplete="new-password" maxlength="128" required></label>
+          <p id="senha-erro" class="campo-erro" role="alert"></p>
+          <div class="linha-botoes">
+            <button class="btn btn-principal" type="submit">Salvar senha nova</button>
+            <button id="btn-cancelar-senha" class="btn btn-secundario" type="button">Cancelar</button>
+          </div>
         </form>
-        <p class="campo-ajuda">A senha precisa de 8 caracteres ou mais, com maiúscula, minúscula, número e símbolo.</p>
-      </details>
+      </div>
+
+      <div class="bloco perfil-linha">
+        <div class="perfil-linha-topo">
+          <div>
+            <h2>Sair da conta</h2>
+            <p class="texto-apoio">Neste aparelho. Para entrar de novo, use seu e-mail e senha.</p>
+          </div>
+          <button class="btn btn-secundario" type="button" data-sair>Sair</button>
+        </div>
+      </div>
+      </div>
+
+      <aside class="coluna-lateral" aria-label="Sua atividade">
+        <div class="bloco">
+          <div class="bloco-cabecalho"><h2>Sua atividade</h2><a href="/#historico">Ver histórico</a></div>
+          <dl class="perfil-numeros">
+            <div><dt>Conferidas hoje</dt><dd id="ativ-hoje">0</dd></div>
+            <div><dt>Últimos 7 dias</dt><dd id="ativ-semana">0</dd></div>
+            <div><dt>Leituras da IA que você corrigiu</dt><dd id="ativ-corrigidas">0</dd></div>
+          </dl>
+          <h3 id="ativ-titulo">Últimas conferências</h3>
+          <ul id="ativ-ultimas" class="ativ-lista"></ul>
+          <p id="ativ-vazio" class="texto-apoio" hidden>Você ainda não conferiu nenhuma peça. As peças com defeito ou leitura incerta aparecem em <a href="/#conferir">Conferir</a>.</p>
+        </div>
+      </aside>
     </div>
     </div>
 
-    <details class="bloco">
-      <summary>Sistema</summary>
-      <div class="formulario">
-        <div>
-          <div class="bloco-cabecalho">
-            <h3>Onde os dados ficam</h3>
-            <button id="btn-testar-banco" class="btn btn-quieto" type="button"><span>Testar agora</span></button>
+    <div id="aba-ajustes" role="tabpanel" aria-labelledby="aba-btn-ajustes" hidden>
+    <div class="grade-lateral">
+      <div class="coluna-principal">
+        <form id="form-ajustes" class="bloco formulario" novalidate>
+          <div>
+            <h2>Inspeção</h2>
+            <p class="texto-apoio">Vale para todos que usam o sistema neste servidor.</p>
           </div>
-          <div id="banco-status" class="texto-apoio"></div>
+          <div class="ajuste-linha">
+            <div>
+              <label class="ajuste-rotulo" for="aj-meta">Meta de peças por turno</label>
+              <p class="texto-apoio">Aparece na barra de progresso da tela Inspecionar.</p>
+            </div>
+            <input id="aj-meta" class="entrada entrada-numero" type="number" min="1" max="100000" step="1" inputmode="numeric">
+          </div>
+          <div class="ajuste-linha">
+            <div>
+              <label class="ajuste-rotulo" for="aj-limite-ia">Leituras por IA por dia</label>
+              <p class="texto-apoio">Passando disso, a leitura volta para o modelo local até o dia seguinte. Cada 100 leituras custam uns US$ 0,05.</p>
+            </div>
+            <input id="aj-limite-ia" class="entrada entrada-numero" type="number" min="0" max="5000" step="10" inputmode="numeric">
+          </div>
+          <div class="linha-botoes">
+            <button id="btn-salvar-ajustes" class="btn btn-principal" type="submit"><span>Salvar</span></button>
+            <span id="ajustes-status" class="texto-apoio" role="status"></span>
+          </div>
+        </form>
+
+        <div class="bloco">
+          <div>
+            <h2>Contas</h2>
+            <p class="texto-apoio">Quem precisa de acesso cria a própria conta na tela de entrar, em <em>Criar conta</em>.</p>
+          </div>
+          <div id="contas-lista" class="contas-lista"></div>
         </div>
-        <div>
+      </div>
+
+      <aside class="coluna-lateral" aria-label="Leitura por IA">
+        <div class="bloco cartao-ia">
           <div class="bloco-cabecalho">
-            <h3>Explicações por IA</h3>
-            <button id="btn-testar-llm" class="btn btn-quieto" type="button"><span>Testar conexão</span></button>
+            <h2>Leitura por IA</h2>
+            <span id="ia-estado" class="estado estado-neutro">...</span>
           </div>
-          <p class="texto-apoio">Sem conexão, as explicações usam a base técnica que vem com o sistema.</p>
+          <div>
+            <p class="ia-uso"><strong id="ia-chamadas">0</strong> <span id="ia-limite">de 0 leituras hoje</span></p>
+            <span class="progresso"><i id="ia-barra" style="width:0%"></i></span>
+          </div>
+          <dl class="ia-detalhes">
+            <div><dt>Gasto hoje</dt><dd id="ia-custo">US$ 0,00</dd></div>
+            <div><dt>Modelo</dt><dd id="ia-modelo">—</dd></div>
+          </dl>
+          <p id="ia-motivo" class="texto-apoio" hidden></p>
+          <div class="linha-botoes">
+            <button id="btn-testar-llm" class="btn btn-secundario btn-pequeno" type="button"><span>Testar conexão</span></button>
+          </div>
           <div id="llm-status"></div>
         </div>
-      </div>
-    </details>
+
+      </aside>
+    </div>
+    </div>
   </section>
+
 
 </main>
 
@@ -446,16 +618,16 @@
      BARRA INFERIOR (celular)
      ========================================================== -->
 <nav class="tabbar" aria-label="Navegação inferior">
+  <a class="nav-item" href="/#inicio" data-pagina="inicio"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3.5 10.5 12 4l8.5 6.5"/><path d="M5.5 9v10.5h13V9"/><path d="M10 19.5V14h4v5.5"/></svg><span class="nav-texto">Início</span></a>
   <a class="nav-item" href="/#ao-vivo" data-pagina="ao-vivo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3.5 7.5h3L8 5h8l1.5 2.5h3A1.5 1.5 0 0 1 22 9v8.5a1.5 1.5 0 0 1-1.5 1.5h-17A1.5 1.5 0 0 1 2 17.5V9a1.5 1.5 0 0 1 1.5-1.5z"/><circle cx="12" cy="13" r="3.5"/></svg><span class="nav-texto">Inspecionar</span></a>
   <a class="nav-item" href="/#conferir" data-pagina="conferir"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9 11.5l2.5 2.5L20 5.5"/><path d="M20 12v6.5a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18.5v-13A1.5 1.5 0 0 1 5.5 4H15"/></svg><span class="nav-texto">Conferir</span><span class="nav-badge" data-badge-pendentes hidden></span></a>
-  <a class="nav-item" href="/gestao#lotes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3.5 7.5 12 3l8.5 4.5L12 12z"/><path d="m3.5 12 8.5 4.5 8.5-4.5"/><path d="m3.5 16.5 8.5 4.5 8.5-4.5"/></svg><span class="nav-texto">Lotes</span></a>
-  <a class="nav-item" href="/gestao#equipe"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.5-3.5 3-5.5 6.5-5.5s6 2 6.5 5.5"/><path d="M16 4.8a3.5 3.5 0 0 1 0 6.4"/><path d="M18.5 14.8c1.700.8 2.700 2.5 3 5.2"/></svg><span class="nav-texto">Equipe</span></a>
+  <a class="nav-item" href="/#lotes" data-pagina="lotes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3.5 7.5 12 3l8.5 4.5L12 12z"/><path d="m3.5 12 8.5 4.5 8.5-4.5"/><path d="m3.5 16.5 8.5 4.5 8.5-4.5"/></svg><span class="nav-texto">Lotes</span></a>
   <button id="tab-mais" class="nav-item" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="menu-mais"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h16"/></svg><span class="nav-texto">Mais</span></button>
 </nav>
 <div id="menu-mais" class="menu-mais" hidden>
   <a class="nav-item" href="/#historico" data-pagina="historico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1L3.5 8.5"/><path d="M3.5 4v4.5H8"/><path d="M12 7.5V12l3 2"/></svg><span class="nav-texto">Histórico</span></a>
   <a class="nav-item" href="/#relatorios" data-pagina="relatorios"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M14 3H7.5A2.5 2.5 0 0 0 5 5.5v13A2.5 2.5 0 0 0 7.5 21h9a2.5 2.5 0 0 0 2.5-2.5V8z"/><path d="M14 3v5h5"/><path d="M9 13h6"/><path d="M9 17h4"/></svg><span class="nav-texto">Relatórios</span></a>
-  <a class="nav-item" href="/#ajustes" data-pagina="ajustes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 6h10"/><path d="M18 6h2"/><circle cx="16" cy="6" r="2"/><path d="M4 12h2"/><path d="M10 12h10"/><circle cx="8" cy="12" r="2"/><path d="M4 18h10"/><path d="M18 18h2"/><circle cx="16" cy="18" r="2"/></svg><span class="nav-texto">Ajustes</span></a>
+  <a class="nav-item" href="/#perfil" data-pagina="perfil"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="8" r="4"/><path d="M4 20.5c.8-4 4-6 8-6s7.2 2 8 6"/></svg><span class="nav-texto">Perfil</span></a>
   <button class="nav-item" type="button" data-instalar hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 16.5V4"/><path d="m7.5 8.5 4.5-4.5 4.5 4.5"/><path d="M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15"/></svg><span class="nav-texto">Instalar aplicativo</span></button>
   <button class="nav-item" type="button" data-sair><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h3"/><path d="M15 16l4-4-4-4"/><path d="M19 12H9"/></svg><span class="nav-texto">Sair</span></button>
 </div>
@@ -486,20 +658,28 @@
 
       <div id="modal-conferencia" class="conferencia"></div>
 
-      <details>
-        <summary>Por quê? Como resolver?</summary>
+      <div class="modal-secao">
+        <div class="bloco-cabecalho">
+          <h3>Por quê? Como resolver?</h3>
+          <button id="btn-modal-diagnostico" class="btn btn-secundario btn-pequeno" type="button"><span>Explicar</span></button>
+        </div>
         <div id="modal-diagnostico" class="explicacao"></div>
-        <button id="btn-modal-diagnostico" class="btn btn-secundario btn-pequeno" type="button"><span>Explicar</span></button>
-      </details>
+      </div>
 
-      <details>
-        <summary>Apagar foto</summary>
+      <div class="modal-rodape">
         <p id="modal-foto-texto" class="texto-apoio">A peça continua no histórico; só a imagem é apagada.</p>
         <div class="linha-botoes">
-          <button id="btn-modal-apagar-foto" class="btn btn-perigo btn-pequeno" type="button"><span>Apagar foto</span></button>
+          <button id="btn-modal-apagar-foto" class="btn btn-quieto btn-pequeno" type="button"><span>Apagar foto</span></button>
           <button id="btn-modal-cancelar-apagar" class="btn btn-quieto" type="button" hidden>Cancelar</button>
         </div>
-      </details>
+      </div>
+      <div class="modal-rodape modal-excluir">
+        <p id="modal-excluir-texto" class="texto-apoio">Excluir tira a peça do histórico, dos números, do lote e do banco.</p>
+        <div class="linha-botoes">
+          <button id="btn-modal-excluir" class="btn btn-perigo btn-pequeno" type="button"><span>Excluir peça</span></button>
+          <button id="btn-modal-cancelar-excluir" class="btn btn-quieto" type="button" hidden>Cancelar</button>
+        </div>
+      </div>
     </div>
   </div>
 </div>

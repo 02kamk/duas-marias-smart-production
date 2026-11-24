@@ -1,4 +1,4 @@
-"""Entrada única do sistema Duas Marias: inspeção + gestão, sempre com login.
+"""Entrada única do sistema Ponto Certo: inspeção + lotes, sempre com login.
 
 Use `python scripts/rodar.py` (ou o atalho `Iniciar.ps1` no Windows).
 """
@@ -11,15 +11,26 @@ import webbrowser
 from typing import Any
 
 
-def criar_app_completo(cfg: Any = None):
-    """Monta inspeção, gestão e login numa aplicação só."""
+def criar_app_completo(cfg: Any = None, root=None, admins=None):
+    """Monta inspeção, lotes e login numa aplicação só."""
+    from fastapi.responses import RedirectResponse
+
     from pontocerto.app.operational import extend as com_login
     from pontocerto.app.server import criar_app
     from pontocerto.config import credenciais_supabase
-    from pontocerto.management.app import extend as com_gestao
 
-    # Com SUPABASE_DB_URL no .env, as contas de login ficam no Supabase.
-    return com_login(com_gestao(criar_app(cfg)), db_url=credenciais_supabase()["db_url"])
+    app = criar_app(cfg)
+
+    # A antiga tela de Gestão (React) saiu: os lotes ficam na própria inspeção.
+    @app.get("/gestao", include_in_schema=False)
+    @app.get("/gestao/", include_in_schema=False)
+    def antiga_gestao():
+        return RedirectResponse("/#lotes", status_code=307)
+
+    # Com SUPABASE_URL e SUPABASE_SECRET_KEY no .env, as contas ficam no Supabase Auth.
+    if root is not None:  # testes: contas e sessões numa pasta temporária
+        return com_login(app, root, supabase=credenciais_supabase(), admins=admins)
+    return com_login(app, supabase=credenciais_supabase())
 
 
 def _ip_local() -> str | None:
@@ -36,7 +47,7 @@ def main(argv: list[str] | None = None) -> None:
     from pontocerto.config import carregar_config
 
     cfg = carregar_config()
-    parser = argparse.ArgumentParser(prog="rodar", description="Sobe o sistema Duas Marias.")
+    parser = argparse.ArgumentParser(prog="rodar", description="Sobe o sistema Ponto Certo.")
     parser.add_argument("--porta", type=int, default=int(cfg.app.get("porta", 8000)),
                         help="porta TCP (padrão: %(default)s)")
     parser.add_argument("--rede", action="store_true",
@@ -48,7 +59,7 @@ def main(argv: list[str] | None = None) -> None:
 
     host = "0.0.0.0" if args.rede else "127.0.0.1"
     endereco = f"http://127.0.0.1:{args.porta}/login"
-    print(f"\n  Duas Marias: abra {endereco}", flush=True)
+    print(f"\n  Ponto Certo: abra {endereco}", flush=True)
     if args.rede:
         ip = _ip_local()
         if ip:

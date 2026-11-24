@@ -3,3 +3,6 @@ timestamp,hora,evento_id,imagem,classe_predita,classe_corrigida,confianca,tecido
 1794873947.496,2026-11-16 21:05:47,3a6e25d03e01,3a6e25d03e01.jpg,puckering,skipped_stitch,0.2625,
 1794874087.437,2026-11-16 21:08:07,f0c4914bb7a8,f0c4914bb7a8.jpg,pinched_fabric,skipped_stitch,0.7667,
 1794874014.235,2026-11-16 21:06:54,0716876814e2,0716876814e2.jpg,bobbin_pullup,stain_damage,0.4306,
+1795484229.527,2026-11-23 22:37:09,aa8ed6f47a45,aa8ed6f47a45.jpg,pinched_fabric,fabric_defect,0.5006,
+1795484214.892,2026-11-23 22:36:54,54c852c05e06,54c852c05e06.jpg,pinched_fabric,fabric_defect,0.5006,
+1795487112.706,2026-11-23 23:25:12,dde571f7c233,dde571f7c233.jpg,fabric_defect,skipped_stitch,0.5027,

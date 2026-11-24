@@ -40,3 +40,10 @@ docs/testes/fontes/*.pdf
 
 # Datasets baixados para treino (grandes, ficam so nesta maquina)
 dados/
+
+# Gasto diário da leitura por IA (local)
+artifacts/uso_ia.json
+
+.vercel
+.env*
+!.env.example

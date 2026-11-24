@@ -46,6 +46,7 @@ MODULO_DA_DISTRIBUICAO = {
     "torch": "torch",
     "torchvision": "torchvision",
     "opencv-python": "cv2",
+    "opencv-python-headless": "cv2",
     "numpy": "numpy",
     "pillow": "PIL",
     "pandas": "pandas",

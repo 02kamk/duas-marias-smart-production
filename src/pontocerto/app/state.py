@@ -118,13 +118,19 @@ class EstadoSessao:
         self._sequencia_ok = 0
         self._melhor_sequencia = 0
         self._por_classe: dict[str, int] = {k: 0 for k in CLASS_KEYS}
-        self.meta_pecas = int(app.get("meta_pecas", META_PECAS_PADRAO))
+        from pontocerto import nuvem
+        # Online (Vercel): histórico, ajustes e lote ativo no Supabase; nada em memória entre pedidos.
+        self._nuvem = nuvem.ativo()
+        self._meta_local = int(app.get("meta_pecas", META_PECAS_PADRAO))
         # Lote em producao ({"id": ..., "codigo": ...}) carimbado em cada evento novo.
-        self.lote_ativo: dict | None = None
+        self._lote_local: dict | None = None
         # Chamado (fora do lock) sempre que um evento nasce ou muda. O servidor
         # liga aqui o sincronizador do banco; deve ser rapido e nunca estourar.
         self.observador: Callable[[Evento], None] | None = None
         self._db = self._pasta_capturas.parent / 'inspecoes.sqlite3'
+        if self._nuvem:
+            garantir_pasta(self._pasta_capturas)
+            return
         try:
             garantir_pasta(self._pasta_capturas)
             with self._connect() as db:
@@ -149,8 +155,42 @@ class EstadoSessao:
 
     # ------------------------------------------------------------- registrar
 
+    # Meta e lote ativo: no modo online valem para todas as máquinas (pc_config).
+    @property
+    def meta_pecas(self) -> int:
+        if self._nuvem:
+            from pontocerto import nuvem
+            return int(nuvem.ler("meta_pecas", self._meta_local) or self._meta_local)
+        return self._meta_local
+
+    @meta_pecas.setter
+    def meta_pecas(self, valor: int) -> None:
+        self._meta_local = int(valor)
+        if self._nuvem:
+            from pontocerto import nuvem
+            nuvem.gravar("meta_pecas", int(valor))
+
+    @property
+    def lote_ativo(self) -> dict | None:
+        if self._nuvem:
+            from pontocerto import nuvem
+            return nuvem.ler("lote_ativo", None, cache_s=1.0) or None
+        return self._lote_local
+
+    @lote_ativo.setter
+    def lote_ativo(self, valor: dict | None) -> None:
+        self._lote_local = valor
+        if self._nuvem:
+            from pontocerto import nuvem
+            nuvem.gravar("lote_ativo", valor)
+
     @contextmanager
     def _connect(self):
+        if self._nuvem:
+            from pontocerto import nuvem
+            with nuvem.conexao() as db:
+                yield db
+            return
         db=sqlite3.connect(self._db,timeout=30)
         try:
             with db:
@@ -196,6 +236,7 @@ class EstadoSessao:
             imagem=imagem_url,
             lote_id=int(lote["id"]) if lote and lote.get("id") is not None else None,
             lote_codigo=str(lote.get("codigo") or "") if lote else None,
+            revisao_llm=predicao_dict.get("leitura"),
         )
 
         with self._lock:
@@ -242,6 +283,9 @@ class EstadoSessao:
             ok = cv2.imwrite(str(destino), frame_bgr, [int(cv2.IMWRITE_JPEG_QUALITY), 88])
             if not ok:
                 return None
+            if self._nuvem:
+                from pontocerto import nuvem
+                nuvem.enviar_foto(destino.name, destino.read_bytes())
             return f"/capturas/{destino.name}"
         except Exception:
             return None
@@ -252,6 +296,12 @@ class EstadoSessao:
         if ev is None or not ev.imagem:
             return None
         destino = self._pasta_capturas / Path(ev.imagem).name
+        if not destino.exists() and self._nuvem:
+            from pontocerto import nuvem
+            dados = nuvem.baixar_foto(destino.name)
+            if dados:
+                garantir_pasta(destino.parent)
+                destino.write_bytes(dados)
         return destino if destino.exists() else None
 
     def remover_captura(self, evento_id: str) -> bool | None:
@@ -263,17 +313,46 @@ class EstadoSessao:
         Levanta OSError se o arquivo nao pode ser apagado (ex.: aberto em outro
         programa no Windows); nesse caso o evento continua apontando para a foto.
         """
+        ev = self.evento(evento_id)
+        if ev is None:
+            return None
         with self._lock:
-            ev = self._indice.get(str(evento_id))
-            if ev is None:
-                return None
             if not ev.imagem:
                 return False
             destino = self._pasta_capturas / Path(ev.imagem).name
             destino.unlink(missing_ok=True)
+            if self._nuvem:
+                from pontocerto import nuvem
+                nuvem.apagar_foto(destino.name)
             ev.imagem = None
         self._avisar(ev)
         return True
+
+    def excluir_evento(self, evento_id: str) -> "Evento | None":
+        """Apaga a peça de vez: registro, foto e números. Devolve o evento apagado ou None."""
+        evento_id = str(evento_id)
+        with self._connect() as db:
+            linha = db.execute('SELECT payload FROM eventos WHERE id=?', (evento_id,)).fetchone()
+            if linha is None:
+                return None
+            db.execute('DELETE FROM eventos WHERE id=?', (evento_id,))
+        ev = Evento(**json.loads(linha[0]))
+        with self._lock:
+            em_memoria = self._indice.pop(evento_id, None)
+            if em_memoria is not None:
+                try:
+                    self._eventos.remove(em_memoria)
+                except ValueError:
+                    pass
+        if ev.imagem:
+            try:
+                (self._pasta_capturas / Path(ev.imagem).name).unlink(missing_ok=True)
+                if self._nuvem:
+                    from pontocerto import nuvem
+                    nuvem.apagar_foto(Path(ev.imagem).name)
+            except Exception:
+                pass  # o registro já saiu; a foto órfã não aparece em lugar nenhum
+        return ev
 
     # ----------------------------------------------------------------- leitura
 
@@ -312,7 +391,8 @@ class EstadoSessao:
 
     def evento(self, evento_id: str) -> Evento | None:
         with self._lock:
-            ev = self._indice.get(str(evento_id))
+            # Online, outra máquina pode ter mudado a peça: sempre lê do banco.
+            ev = None if self._nuvem else self._indice.get(str(evento_id))
             if ev is None:
                 with self._connect() as db:
                     row = db.execute('SELECT payload FROM eventos WHERE id=?', (str(evento_id),)).fetchone()
@@ -348,24 +428,24 @@ class EstadoSessao:
         if decisao == 'corrigida':
             self._gravar_correcao(linha)
         self._avisar(ev)
-        return True
+        return ev  # a peça já atualizada (online, cada leitura é uma cópia nova)
 
     # ------------------------------------------------------------- anexos LLM
 
     def anexar_diagnostico(self, evento_id: str, diagnostico: dict) -> bool:
+        ev = self.evento(evento_id)
+        if ev is None:
+            return False
         with self._lock:
-            ev = self._indice.get(str(evento_id))
-            if ev is None:
-                return False
             ev.diagnostico = diagnostico
         self._avisar(ev)
         return True
 
     def anexar_revisao(self, evento_id: str, revisao: dict) -> bool:
+        ev = self.evento(evento_id)
+        if ev is None:
+            return False
         with self._lock:
-            ev = self._indice.get(str(evento_id))
-            if ev is None:
-                return False
             ev.revisao_llm = revisao
         self._avisar(ev)
         return True
@@ -388,20 +468,34 @@ class EstadoSessao:
 
     # ------------------------------------------------------------ estatisticas
 
+    def eventos_periodo(self, de: str, ate: str) -> list["Evento"]:
+        """Eventos entre duas datas (AAAA-MM-DD, inclusive), mais recentes primeiro."""
+        with self._connect() as db:
+            rows = db.execute('SELECT payload FROM eventos WHERE data BETWEEN ? AND ? ORDER BY timestamp DESC',
+                              (de, ate)).fetchall()
+        return [Evento(**json.loads(row[0])) for row in rows]
+
     def estatisticas(self) -> dict:
+        """Números de hoje, pela classe que vale (a corrigida na conferência, se houver)."""
+        hoje = datetime.now().date().isoformat()
+        eventos = self.eventos_periodo(hoje, hoje)
+        total = len(eventos)
+        aprovadas = sum(e.classe_final == "normal" for e in eventos)
+        reprovadas = total - aprovadas
+        por_classe = {k: 0 for k in CLASS_KEYS}
+        for e in eventos:
+            por_classe[e.classe_final] = por_classe.get(e.classe_final, 0) + 1
         with self._lock:
-            total = self._total
-            aprovadas = self._aprovadas
-            reprovadas = self._reprovadas
             meta = max(1, int(self.meta_pecas))
             return {
                 "total": total,
                 "aprovadas": aprovadas,
                 "reprovadas": reprovadas,
+                "pendentes": sum(e.precisa_revisao for e in eventos),
                 "sequencia_ok": self._sequencia_ok,
                 "melhor_sequencia": self._melhor_sequencia,
                 "taxa_aprovacao": round(aprovadas / total, 4) if total else 0.0,
-                "por_classe": dict(self._por_classe),
+                "por_classe": por_classe,
                 "inicio": self._inicio,
                 "duracao_s": round(time.time() - self._inicio, 1),
                 "meta_pecas": int(self.meta_pecas),

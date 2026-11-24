@@ -1,4 +1,4 @@
-# Duas Marias Smart Production — Contexto do projeto
+# Ponto Certo — Contexto do projeto
 
 Documento de referência para continuidade do desenvolvimento no Codex. Versão: 19/10/2026. Idioma do produto e da documentação: português brasileiro.
 
@@ -16,7 +16,7 @@ O histórico descreve intenções e entregas desejadas; não comprova que códig
 |---|---|---|
 | Demonstração mock | Valores fictícios fixos ou respostas simuladas para navegar pelas telas | Demonstra o fluxo e a interface; não analisa de fato a produção ou imagem |
 | Dados sintéticos | Registros gerados por regras documentadas para experimentos | Permitem testar o pipeline e comportamento sob hipóteses; não comprovam desempenho na empresa |
-| Dataset público | Dados de terceiros, sujeitos à verificação de origem, licença e adequação | Pode apoiar experimentos após verificação; não representa automaticamente a Duas Marias |
+| Dataset público | Dados de terceiros, sujeitos à verificação de origem, licença e adequação | Pode apoiar experimentos após verificação; não representa automaticamente a Ponto Certo |
 | Dados reais | Registros e imagens coletados na empresa com autorização e rastreabilidade | Podem subsidiar avaliação local após análise de qualidade e protocolo experimental |
 | Modelo treinado | Artefato produzido por execução documentada de treinamento | Só declarar quando houver artefato, configuração, origem de dados e registro da execução |
 | Modelo validado | Modelo avaliado em conjunto independente segundo protocolo e métricas | Informar em qual população e cenário foi avaliado; teste público ou sintético não é validação na empresa |
@@ -265,7 +265,7 @@ No mock, `riskScore` não é probabilidade calibrada. Em modelo experimental, s�
 
 ## 9. Páginas, identidade e comportamento do mock
 
-Marca: **Duas Marias / Smart Production**. Subtítulo: **Gestão Inteligente da Produção**. Estilo corporativo limpo, fundo claro, branco/cinza, vinho/rosa escuro, cards, sombras suaves, menu lateral e gráficos legíveis; evitar estética futurista exagerada.
+Marca: **Ponto Certo**. Subtítulo: **Gestão Inteligente da Produção**. Estilo corporativo limpo, fundo claro, branco/cinza, vinho/rosa escuro, cards, sombras suaves, menu lateral e gráficos legíveis; evitar estética futurista exagerada.
 
 | Página/rota proposta | Conteúdo e interação |
 |---|---|
@@ -315,7 +315,7 @@ Não escrever “fonte de dados resolvida”. A adequação depende de domínio 
 
 ## 11. Dados sintéticos e previsão de atraso
 
-Não foi identificada no histórico recuperado uma base operacional pública confirmada que represente os lotes, pessoas, prazos, faltas e conclusão da Duas Marias. Isso não prova inexistência de bases; indica uma lacuna de dados do projeto.
+Não foi identificada no histórico recuperado uma base operacional pública confirmada que represente os lotes, pessoas, prazos, faltas e conclusão da Ponto Certo. Isso não prova inexistência de bases; indica uma lacuna de dados do projeto.
 
 O gerador sintético proposto deve produzir lotes, operações, capacidades, produção por período, retrabalho, disponibilidade e conclusão segundo hipóteses explícitas. Registrar semente aleatória, distribuições, unidades, correlações, limites, cenários extremos, versão e dicionário. Não incluir nomes reais.
 
@@ -409,7 +409,7 @@ Entregas acadêmicas recomendadas: matriz de requisitos e evidências, arquitetu
 - Experimento registra código/configuração, semente, baseline, métricas, limitações e artefato, quando houver.
 - Não há vazamento conhecido entre treino e teste; ocorrências e limitações são relatadas.
 - Inferência integrada informa versão e origem dos dados e trata indisponibilidade sem inventar saída.
-- Relatório diferencia resultado público, sintético e local; nenhuma alegação de validação na Duas Marias sem estudo próprio.
+- Relatório diferencia resultado público, sintético e local; nenhuma alegação de validação na Ponto Certo sem estudo próprio.
 
 ## 16. Segurança, privacidade e operação
 

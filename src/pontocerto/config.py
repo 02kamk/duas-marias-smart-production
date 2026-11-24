@@ -117,8 +117,8 @@ def credenciais_supabase() -> dict[str, str | None]:
     """Le as variaveis do Supabase (ambiente ou .env). Ausentes viram None.
 
     - SUPABASE_DB_URL: connection string do Session pooler (porta 5432)
-    - SUPABASE_URL: https://<projeto>.supabase.co (usado so para o Storage)
-    - SUPABASE_SECRET_KEY: chave secreta (sb_secret_...) para o Storage
+    - SUPABASE_URL: https://<projeto>.supabase.co (Storage e Supabase Auth)
+    - SUPABASE_SECRET_KEY: chave secreta (sb_secret_...) para o Storage e o Supabase Auth
     - SUPABASE_BUCKET: nome do bucket privado das capturas
 
     Esses valores sao segredos: quem os recebe nunca deve imprimi-los.

@@ -33,12 +33,12 @@
    * 00. CONSTANTES E ESTADO INTERNO
    * ===================================================================== */
 
-  var PAGINAS = ["ao-vivo", "conferir", "historico", "relatorios", "ajustes"];
+  var PAGINAS = ["inicio", "ao-vivo", "conferir", "historico", "lotes", "relatorios", "perfil"];
 
   // Situacao do banco (chip da barra superior): consulta lenta, o servidor ja
   // guarda o teste de conexao em cache.
-  var INTERVALO_BANCO_MS = 15000;
-  var PAGINA_PADRAO = "ao-vivo";
+  var INTERVALO_BANCO_MS = 60000;
+  var PAGINA_PADRAO = "inicio";
 
   // Intervalo do polling da pagina ao vivo (5 Hz). Encadeado com setTimeout,
   // nunca setInterval, para que uma resposta lenta nao empilhe requisicoes.
@@ -362,15 +362,15 @@
 
   function paginaDoHash() {
     var bruto = (location.hash || "").replace(/^#\/?/, "").trim();
-    if (bruto === "lotes") return "lotes";
+    // Ajustes agora é uma aba do Perfil; o endereço antigo continua valendo.
+    if (bruto === "ajustes") { App.abaPerfil = "ajustes"; return "perfil"; }
     return PAGINAS.indexOf(bruto) >= 0 ? bruto : PAGINA_PADRAO;
   }
 
   function irPara(pagina, atualizarHash) {
-    // Os lotes agora ficam numa tela só, na Gestão.
-    if (pagina === "lotes") { location.assign("/gestao#lotes"); return; }
     // Endereços antigos (#testar, #treinamento) caem na inspeção.
     if (pagina === "testar" || pagina === "treinamento") pagina = "ao-vivo";
+    if (pagina === "ajustes") { App.abaPerfil = "ajustes"; pagina = "perfil"; }
     if (PAGINAS.indexOf(pagina) < 0) pagina = PAGINA_PADRAO;
     var anterior = App.pagina;
     if (anterior === pagina) {
@@ -414,11 +414,14 @@
       carregarFila();
     } else if (pagina === "historico") {
       carregarHistorico();
+    } else if (pagina === "lotes") {
+      carregarPaginaLotes();
     } else if (pagina === "ajustes") {
       carregarAjustes();
       atualizarBanco(false);
     }
-    // A pagina "relatorios" nao precisa buscar nada ao entrar.
+    // Início, Relatórios e Perfil ficam em paineis.js.
+    if (window.Paineis && typeof window.Paineis[pagina] === "function") window.Paineis[pagina]();
   }
 
   /* =======================================================================
@@ -608,11 +611,11 @@
    * /api/analisar. Como o stream e da mesma origem, o canvas nao fica "tainted".
    * O resultado abre na pagina Testar, que ja sabe exibir predicao e heatmap.
    */
-  function capturarQuadro() {
+  function capturarQuadro(automatico) {
     var img = $("video-ao-vivo");
     if (!App.cameraAtiva || !img || !img.naturalWidth) {
       toast("Ligue a câmera antes de analisar.", "aviso");
-      return;
+      return Promise.reject(new Error("câmera desligada"));
     }
     var btn = $("btn-capturar");
     var canvas = document.createElement("canvas");
@@ -624,21 +627,111 @@
       toast("Não consegui capturar a imagem.", "erro");
       return;
     }
-    botaoCarregando(btn, true, "Capturando...");
-    canvas.toBlob(function (blob) {
-      if (!blob) {
-        botaoCarregando(btn, false);
-        toast("Captura vazia.", "erro");
-        return;
-      }
-      var arquivo = new File([blob], "captura.jpg", { type: "image/jpeg" });
-      enviarParaAnalise(arquivo, "camera_servidor")
-        .then(function () {
-          botaoCarregando(btn, false);
-        })
-        .catch(function () { botaoCarregando(btn, false); });
-    }, "image/jpeg", 0.92);
+    botaoCarregando(btn, true, "Lendo...");
+    var fimVideo = iniciarEspera($("video-lendo"));
+    return new Promise(function (resolver, rejeitar) {
+      canvas.toBlob(function (blob) {
+        if (!blob) {
+          botaoCarregando(btn, false); fimVideo();
+          toast("Captura vazia.", "erro");
+          rejeitar(new Error("captura vazia"));
+          return;
+        }
+        var arquivo = new File([blob], "captura.jpg", { type: "image/jpeg" });
+        enviarParaAnalise(arquivo, "camera_servidor", { semRolar: !!automatico })
+          .then(function (d) { botaoCarregando(btn, false); fimVideo(); resolver(d); })
+          .catch(function (e) { botaoCarregando(btn, false); fimVideo(); rejeitar(e); });
+      }, "image/jpeg", 0.92);
+    });
   }
+
+  /* --- Tela de espera enquanto a IA lê a peça ------------------------------ */
+
+  var MENSAGENS_LEITURA = [
+    "Recebendo a foto...",
+    "Procurando pontos falhados...",
+    "Olhando a linha e a tensão da costura...",
+    "Conferindo o tecido...",
+    "Comparando com os 12 tipos de defeito...",
+    "Separando franzido de defeito...",
+    "Quase pronto..."
+  ];
+
+  function iniciarEspera(caixa) {
+    if (!caixa) return function () {};
+    var texto = caixa.querySelector("[data-analisando-texto]");
+    var barra = caixa.querySelector("[data-analisando-barra]");
+    var inicio = Date.now(), i = 0;
+    caixa.hidden = false;
+    caixa.classList.remove("concluido");
+    if (texto) texto.textContent = MENSAGENS_LEITURA[0];
+    if (barra) barra.style.width = "4%";
+    var relogio = setInterval(function () {
+      var t = Date.now() - inicio;
+      // Anda rápido no começo e desacelera: nunca chega a 100% antes da resposta.
+      if (barra) barra.style.width = (4 + 88 * (1 - Math.exp(-t / 3200))).toFixed(1) + "%";
+      var proxima = Math.min(MENSAGENS_LEITURA.length - 1, Math.floor(t / 1400));
+      if (proxima !== i && texto) { i = proxima; texto.textContent = MENSAGENS_LEITURA[i]; }
+    }, 120);
+    return function () {
+      clearInterval(relogio);
+      if (barra) barra.style.width = "100%";
+      caixa.classList.add("concluido");
+      setTimeout(function () { caixa.hidden = true; }, 260);
+    };
+  }
+
+  /* --- Câmera ao vivo: lê sozinha quando a peça fica parada ---------------- */
+
+  var Auto = { timer: null, anterior: null, paradoDesde: 0, armado: true, ocupado: false, canvas: null };
+
+  function textoAuto(titulo, sub) {
+    setTexto($("veredito-titulo"), titulo);
+    setTexto($("veredito-sub"), sub || "");
+  }
+
+  function iniciarAuto() {
+    if (Auto.timer) return;
+    Auto.anterior = null; Auto.paradoDesde = 0; Auto.armado = true;
+    Auto.timer = setInterval(passoAuto, 300);
+  }
+
+  function pararAuto() {
+    if (Auto.timer) clearInterval(Auto.timer);
+    Auto.timer = null;
+  }
+
+  function passoAuto() {
+    if (App.leituraModo !== "ia" || !App.cameraAtiva || App.pagina !== "ao-vivo") return;
+    var img = $("video-ao-vivo");
+    var ligado = $("auto-ler") && $("auto-ler").checked;
+    if (!img || !img.naturalWidth || Auto.ocupado) return;
+    if (!ligado) { textoAuto("Leitura por IA", "Toque em “Analisar esta peça” para ler."); return; }
+    if (!Auto.canvas) { Auto.canvas = document.createElement("canvas"); Auto.canvas.width = 40; Auto.canvas.height = 30; }
+    var ctx = Auto.canvas.getContext("2d", { willReadFrequently: true });
+    try { ctx.drawImage(img, 0, 0, 40, 30); } catch (e) { return; }
+    var px = ctx.getImageData(0, 0, 40, 30).data, cinza = new Float32Array(1200);
+    for (var k = 0; k < 1200; k++) cinza[k] = 0.3 * px[k * 4] + 0.59 * px[k * 4 + 1] + 0.11 * px[k * 4 + 2];
+    var dif = 0;
+    if (Auto.anterior) { for (var j = 0; j < 1200; j++) dif += Math.abs(cinza[j] - Auto.anterior[j]); dif /= 1200; }
+    Auto.anterior = cinza;
+    var agora = Date.now();
+    if (dif > 10) {
+      Auto.armado = true; Auto.paradoDesde = 0;
+      textoAuto("Peça em movimento", "Quando ela parar, a leitura começa sozinha.");
+      return;
+    }
+    if (dif > 4) { Auto.paradoDesde = 0; return; }
+    if (!Auto.paradoDesde) Auto.paradoDesde = agora;
+    if (!Auto.armado) { textoAuto("Peça lida", "Troque de peça (ou mexa nela) para ler a próxima."); return; }
+    if (agora - Auto.paradoDesde < 1200) { textoAuto("Segure a peça parada", "Lendo em um instante..."); return; }
+    Auto.armado = false;
+    Auto.ocupado = true;
+    textoAuto("Lendo a peça", "A IA está olhando a costura.");
+    var fim = capturarQuadro(true);
+    Promise.resolve(fim).then(function () { Auto.ocupado = false; }, function () { Auto.ocupado = false; Auto.armado = true; });
+  }
+
 
   /* =======================================================================
    * 07. POLLING DE /api/status E RENDER DA PAGINA AO VIVO
@@ -684,6 +777,9 @@
 
   function agendarProximoStatus(ms) {
     if (!App.poll.ativo) return;
+    // Rápido só com a câmera do computador ligada; sem ela, os números mudam
+    // só quando alguém fotografa (e online cada consulta conta no plano grátis).
+    if (!App.cameraAtiva) ms = Math.max(ms, document.hidden ? 60000 : 10000);
     App.poll.timer = setTimeout(cicloStatus, ms);
   }
 
@@ -718,8 +814,24 @@
     var predicao = d.predicao || null;
     var stats = d.estatisticas || {};
 
-    renderVeredito(veredito, predicao);
-    renderTop(predicao);
+    App.leituraModo = (d.leitura && d.leitura.modo) || "local";
+    var daIA = App.leituraModo === "ia";
+    mostrar($("auto-ler-rotulo"), daIA);
+    mostrar($("gradcam-rotulo"), !daIA);
+    if (daIA && App.cameraAtiva) {
+      iniciarAuto();
+      var caixaVeredito = $("veredito");
+      if (caixaVeredito && App.cache.vereditoEstado !== "ia") {
+        App.cache.vereditoEstado = "ia";
+        caixaVeredito.classList.remove("estado-aquecendo", "estado-ok", "estado-falha", "estado-incerto");
+        caixaVeredito.classList.add("estado-aquecendo");
+        setHTML($("veredito-icone"), iconeDoEstado("aquecendo"), "veredito-icone");
+      }
+    } else {
+      pararAuto();
+      renderVeredito(veredito, predicao);
+      renderTop(predicao);
+    }
     renderEstatisticas(stats);
 
     if (d.camera) atualizarChipCamera(d.camera);
@@ -943,7 +1055,8 @@
       listaHTML("Como prevenir", diag.prevencao) +
       seloFonte(diag.fonte);
     return (frase ? '<p class="explicacao-frase">' + esc(frase) + "</p>" : "") +
-      "<details><summary>Ver causas e prevenção</summary>" + resto + "</details>";
+      '<button type="button" class="btn-link" data-alternar="Esconder causas e prevenção" aria-expanded="false">Ver causas e prevenção</button>' +
+      '<div class="explicacao-mais" hidden>' + resto + "</div>";
   }
 
   function htmlRevisao(rev) {
@@ -1038,7 +1151,25 @@
     enviarParaAnalise(arquivo, origem || "upload").catch(function () {});
   }
 
-  function enviarParaAnalise(arquivo, origem) {
+  /** Foto grande (celular) vira JPEG de até 1600 px: leve para enviar e suficiente para a IA. */
+  function reduzirParaEnvio(arquivo) {
+    return new Promise(function (resolver) {
+      if (!arquivo || arquivo.size < 900 * 1024 || !window.createImageBitmap) { resolver(arquivo); return; }
+      createImageBitmap(arquivo).then(function (bmp) {
+        var escala = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
+        var tela = document.createElement("canvas");
+        tela.width = Math.round(bmp.width * escala);
+        tela.height = Math.round(bmp.height * escala);
+        tela.getContext("2d").drawImage(bmp, 0, 0, tela.width, tela.height);
+        tela.toBlob(function (blob) {
+          resolver(blob ? new File([blob], "foto.jpg", { type: "image/jpeg" }) : arquivo);
+        }, "image/jpeg", 0.88);
+      }).catch(function () { resolver(arquivo); });
+    });
+  }
+
+  function enviarParaAnalise(arquivo, origem, opcoes) {
+    opcoes = opcoes || {};
     var resultado = $("resultado-teste");
     mostrar(resultado, true);
     // "Próxima peça" repete o caminho que a pessoa acabou de usar.
@@ -1046,18 +1177,27 @@
     if (proxima) proxima.setAttribute("for", origem === "camera_aparelho" ? "foto-camera" : "input-arquivo");
     setHTML($("teste-ia"), "", "teste-ia");
     setHTML($("conferencia-upload"), "", "conferencia-upload");
-    setTexto($("teste-classe"), "Analisando a costura...");
-    setTexto($("teste-confianca"), "");
+    setTexto($("teste-classe"), "Lendo a peça...");
+    setTexto($("teste-confianca"), App.leituraModo === "ia" ? "A IA leva alguns segundos para olhar com cuidado." : "");
+    mostrar($("teste-explicacao"), false);
     if (resultado) resultado.classList.remove("resultado-ok", "resultado-falha", "resultado-incerto");
     var fotoAnterior = $("peca-analisada");
-    if (fotoAnterior) fotoAnterior.src = PIXEL_VAZIO;
+    if (fotoAnterior) {
+      if (App.urlPrevia) URL.revokeObjectURL(App.urlPrevia);
+      App.urlPrevia = URL.createObjectURL(arquivo);
+      fotoAnterior.src = App.urlPrevia;
+    }
+    var fimEspera = iniciarEspera(resultado && resultado.querySelector("[data-analisando]"));
+    if (!opcoes.semRolar && resultado && resultado.scrollIntoView) resultado.scrollIntoView({ behavior: "smooth", block: "start" });
 
-    var fd = new FormData();
-    fd.append("arquivo", arquivo, arquivo.name || "imagem.jpg");
-    fd.append("origem", origem || "upload");
-
-    return fetchJSON("/api/analisar", { method: "POST", body: fd, timeout: 60000 })
+    return reduzirParaEnvio(arquivo).then(function (leve) {
+      var fd = new FormData();
+      fd.append("arquivo", leve, leve.name || "imagem.jpg");
+      fd.append("origem", origem || "upload");
+      return fetchJSON("/api/analisar", { method: "POST", body: fd, timeout: 60000 });
+    })
       .then(function (d) {
+        fimEspera();
         if (d && d.erro) {
           setTexto($("teste-classe"), "Não foi possível analisar");
           setTexto($("teste-confianca"), d.erro);
@@ -1067,11 +1207,12 @@
         renderResultadoTeste(App.analiseAtual);
         atualizarPendentes();
         carregarRecentes();
-        // Leva a pessoa direto ao resultado.
-        if (resultado && resultado.scrollIntoView) resultado.scrollIntoView({ behavior: "smooth", block: "start" });
+        if (d.aviso) toast(d.aviso, "aviso");
+        fetchJSON("/api/status").then(function (st) { if (st) renderAoVivo(st); }).catch(function () {});
         return App.analiseAtual;
       })
       .catch(function (e) {
+        fimEspera();
         setTexto($("teste-classe"), "Não foi possível analisar");
         toast(e.message, "erro");
         throw e;
@@ -1096,7 +1237,12 @@
     // A predição nem sempre traz e_falha; o evento sempre traz.
     if (p.e_falha == null) p.e_falha = ev.e_falha != null ? !!ev.e_falha : p.classe_key !== "normal";
     mostrar($("resultado-teste"), true);
-    mostrarMidiaResultado(false);
+    var daIA = d.fonte === "ia";
+    setTexto($("ver-mapa"), daIA ? "Onde está o defeito" : "Onde a IA olhou");
+    mostrarMidiaResultado(daIA && !!d.heatmap);
+    var leitura = p.leitura || {};
+    setTexto($("teste-explicacao"), daIA ? (leitura.explicacao || "") : "");
+    mostrar($("teste-explicacao"), daIA && !!leitura.explicacao);
     setTexto($("resultado-lote"), ev.lote_codigo ? "Lote " + ev.lote_codigo : "Sem lote");
     setTexto($("resultado-ordem"), (NOMES_ORIGEM[ev.origem] || "Foto enviada") + (ev.hora ? " · " + horaCurta(ev) : ""));
     habilitar($("ver-mapa"), !!d.heatmap);
@@ -1104,7 +1250,10 @@
     var incerta = !p.e_falha && !!ev.precisa_revisao;
     setTexto($("teste-classe"), p.e_falha ? (p.nome || nomeDaClasse(p.classe_key))
       : (incerta ? "Leitura incerta: parece normal" : "Costura aprovada"));
-    setTexto($("teste-confianca"), "A IA tem " + formatarPercentual(p.confianca, 0) + " de certeza" + (incerta ? ". Confira a peça." : ""));
+    setTexto($("teste-confianca"), daIA
+      ? (incerta || leitura.veredito === "incerta" ? "A IA ficou em dúvida. Confira a peça."
+        : "Lida pela IA, com " + formatarPercentual(p.confianca, 0) + " de certeza.")
+      : "Leitura local, com " + formatarPercentual(p.confianca, 0) + " de certeza" + (incerta ? ". Confira a peça." : "."));
 
     var caixa = $("resultado-teste");
     if (caixa) {
@@ -1472,6 +1621,48 @@
     }
   }
 
+  /** Excluir a peça inteira. O primeiro clique pede confirmação; não há como desfazer. */
+  function desarmarExcluir() {
+    var btn = $("btn-modal-excluir");
+    if (!btn) return;
+    btn.classList.remove("confirmando");
+    btn.innerHTML = "<span>Excluir peça</span>";
+    mostrar($("btn-modal-cancelar-excluir"), false);
+    setTexto($("modal-excluir-texto"), "Excluir tira a peça do histórico, dos números, do lote e do banco.");
+  }
+
+  function excluirDoModal() {
+    var ev = App.eventoAberto;
+    var btn = $("btn-modal-excluir");
+    if (!ev || !btn) return;
+    if (!btn.classList.contains("confirmando")) {
+      btn.classList.add("confirmando");
+      btn.innerHTML = "<span>Excluir de vez</span>";
+      mostrar($("btn-modal-cancelar-excluir"), true);
+      setTexto($("modal-excluir-texto"), "Tem certeza? Não dá para desfazer.");
+      return;
+    }
+    botaoCarregando(btn, true, "Excluindo...");
+    fetchJSON("/api/eventos/" + encodeURIComponent(ev.id), { method: "DELETE", timeout: 30000 })
+      .then(function (d) {
+        botaoCarregando(btn, false);
+        desarmarExcluir();
+        delete historico.porId[ev.id];
+        fecharModal();
+        var aviso = d && d.nuvem && d.nuvem.erro;
+        toast(aviso ? "Peça excluída aqui, mas o banco não respondeu: " + aviso : "Peça excluída.", aviso ? "aviso" : "ok");
+        atualizarPendentes();
+        carregarRecentes();
+        if (App.pagina === "historico") carregarHistorico();
+        if (App.pagina === "conferir") carregarFila();
+      })
+      .catch(function (e) {
+        botaoCarregando(btn, false);
+        desarmarExcluir();
+        toast("Não consegui excluir: " + e.message, "erro");
+      });
+  }
+
   function fecharModal() {
     var modal = $("modal-evento");
     if (!modal || modal.hidden) return;
@@ -1491,6 +1682,7 @@
       desarmarApagarFoto(btn);
       btn.hidden = !temFoto;
     }
+    desarmarExcluir();
     setTexto($("modal-foto-texto"), temFoto
       ? "A peça continua no histórico; só a imagem é apagada."
       : "A foto desta peça foi apagada. A inspeção continua contando nos números.");
@@ -1643,6 +1835,8 @@
           sincronizarSaida(input);
         });
         if ($("aj-meta") && d.meta_pecas != null) $("aj-meta").value = String(d.meta_pecas);
+        if ($("aj-limite-ia") && d.leitura_limite_diario != null) $("aj-limite-ia").value = String(d.leitura_limite_diario);
+        carregarLeituraIA();
         marcarNivelRigor();
         setTexto($("ajustes-status"), "");
       })
@@ -1656,6 +1850,8 @@
     var corpo = valoresAvancados();
     var meta = $("aj-meta") && Number($("aj-meta").value);
     if (meta && isFinite(meta)) corpo.meta_pecas = Math.round(meta);
+    var limite = $("aj-limite-ia") && $("aj-limite-ia").value !== "" ? Number($("aj-limite-ia").value) : NaN;
+    if (isFinite(limite)) corpo.leitura_limite_diario = Math.round(limite);
 
     botaoCarregando(btn, true, "Salvando...");
     setTexto($("ajustes-status"), "");
@@ -1663,14 +1859,38 @@
       .then(function (d) {
         botaoCarregando(btn, false);
         if (d && d.erro) { setTexto($("ajustes-status"), d.erro); toast(d.erro, "erro"); return; }
-        setTexto($("ajustes-status"), "Ajustes salvos.");
+        setTexto($("ajustes-status"), "");
         toast("Ajustes salvos.", "ok");
+        carregarLeituraIA();
       })
       .catch(function (e) {
         botaoCarregando(btn, false);
         setTexto($("ajustes-status"), "Falhou: " + e.message);
         toast("Não consegui salvar: " + e.message, "erro");
       });
+  }
+
+  /** Cartão "Leitura por IA" em Ajustes: uso do dia, gasto e modelo. */
+  function carregarLeituraIA() {
+    return fetchJSON("/api/status").then(function (d) {
+      var l = (d && d.leitura) || {};
+      var ligada = l.modo === "ia";
+      var est = $("ia-estado");
+      if (est) {
+        est.className = "estado " + (ligada ? "estado-ok" : "estado-atencao");
+        est.textContent = ligada ? "Ligada" : "Desligada";
+      }
+      var feitas = numero(l.chamadas, 0), limite = numero(l.limite, 0);
+      setTexto($("ia-chamadas"), feitas.toLocaleString("pt-BR"));
+      setTexto($("ia-limite"), "de " + limite.toLocaleString("pt-BR") + " leituras hoje");
+      var barra = $("ia-barra");
+      if (barra) barra.style.width = (limite ? Math.min(100, feitas / limite * 100) : 0).toFixed(1) + "%";
+      setTexto($("ia-custo"), "US$ " + numero(l.custo_usd, 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 4 }));
+      var nomeModelo = String(l.modelo || "—").split("/").pop().replace(/-/g, " ");
+      setTexto($("ia-modelo"), nomeModelo.split(" ").map(function (w) { return w.charAt(0).toUpperCase() + w.slice(1); }).join(" "));
+      setTexto($("ia-motivo"), ligada ? "" : (l.motivo || ""));
+      mostrar($("ia-motivo"), !ligada && !!l.motivo);
+    }).catch(function () {});
   }
 
   function testarLLM() {
@@ -1686,8 +1906,8 @@
         setHTML(caixa, '<div class="llm-cartao ' + (ok ? "llm-ok" : "llm-erro") + '">' +
           '<span class="selo-fonte ' + (ok ? "selo-ok" : "selo-nao") + '">' +
           '<span class="selo-icone" aria-hidden="true">' + (ok ? ICONES.check : ICONES.erro) + "</span>" +
-          esc(ok ? "Conectado" : "Sem conexão") + "</span>" +
-          '<p class="llm-mensagem">' + esc(ok ? "As explicações usam a IA." : (d.mensagem || "As explicações usam a base técnica local.")) + "</p></div>", "llm-status");
+          esc(ok ? "OpenRouter respondeu" : "Sem conexão") + "</span>" +
+          (ok ? "" : '<p class="llm-mensagem">' + esc(d.mensagem || "Sem conexão com o OpenRouter.") + "</p>") + "</div>", "llm-status");
       })
       .catch(function (e) {
         botaoCarregando(btn, false);
@@ -1754,30 +1974,34 @@
     if (!caixa) return;
     if (!d.configurado) {
       setHTML(caixa, "<p>As inspeções ficam guardadas neste computador. Para guardar também na nuvem, " +
-        "peça a quem instalou o sistema para configurar o banco.</p>", "banco-status");
+        "configure o Supabase no .env (veja o README).</p>", "banco-status");
       return;
     }
     var st = d.storage || {};
     var sinc = d.sincronizacao || {};
-    var linhas = [];
-    linhas.push("<span><strong>Banco:</strong> " + (d.conectado ? "conectado" : "sem conexão - " + esc(d.erro || "")) + "</span>");
-    linhas.push("<span><strong>Fotos:</strong> " + (st.ok ? "sendo enviadas" : esc(st.erro || "não configurado; as inspeções sobem sem foto")) + "</span>");
-    linhas.push("<span><strong>Aguardando envio:</strong> " + esc(pend) + "</span>");
-    if (sinc.ultimo_erro) linhas.push("<span><strong>Último erro:</strong> " + esc(sinc.ultimo_erro) + "</span>");
-    setHTML(caixa, '<div class="banco-linhas">' + linhas.join("") + "</div>", "banco-status");
+    function linha(nome, ok, texto) {
+      return '<li><span>' + esc(nome) + '</span><span class="estado ' + (ok ? "estado-ok" : "estado-atencao") + '">' + esc(texto) + "</span></li>";
+    }
+    var linhas = [
+      linha("Banco (Supabase)", d.conectado, d.conectado ? "Conectado" : "Sem conexão"),
+      linha("Fotos de defeito", st.ok, st.ok ? "Sendo enviadas" : "Sem envio"),
+      linha("Aguardando envio", pend === 0, pend === 0 ? "Nada" : String(pend))
+    ];
+    var erro = !d.conectado ? d.erro : (sinc.ultimo_erro || (!st.ok && st.erro));
+    setHTML(caixa, '<ul class="conexoes">' + linhas.join("") + "</ul>" +
+      (erro ? '<p class="conexoes-erro">' + esc(erro) + "</p>" : ""), "banco-status");
   }
 
-  /* --- Lote em produção ------------------------------------------------- */
+  /* --- Lote em inspeção (seletor da tela Inspecionar) ------------------- */
 
-  /** Lote em inspeção: o seletor no topo da tela Inspecionar. */
   function renderChipLote(lote) {
     App.lotes.ativo = lote || null;
     var sel = $("sel-lote");
     if (sel) {
-      var id = lote ? String(lote.ordem_id || "") : "";
-      // O lote ativo pode não estar na lista ainda (ou ter sido concluído).
+      var id = lote && lote.id != null ? String(lote.id) : "";
+      // O lote ativo pode não estar na lista (ex.: sem internet agora).
       if (id && !sel.querySelector('option[value="' + id.replace(/"/g, "") + '"]')) {
-        var opt = criar("option", null, lote.codigo + (lote.modelo_peca ? " · " + lote.modelo_peca : ""));
+        var opt = criar("option", null, lote.codigo + (lote.cliente ? " · " + lote.cliente : ""));
         opt.value = id;
         sel.appendChild(opt);
       }
@@ -1787,13 +2011,13 @@
   }
 
   function carregarLotes() {
-    return fetchJSON("/api/gestao/inspecao")
+    return fetchJSON("/api/lotes")
       .then(function (d) {
         App.lotes.lista = (d && d.lotes) || [];
         App.lotes.ativo = (d && d.ativo) || null;
         renderLotes();
       })
-      .catch(function (e) {
+      .catch(function () {
         App.lotes.lista = [];
         renderLotes();
       });
@@ -1803,31 +2027,194 @@
     var sel = $("sel-lote");
     if (!sel) return;
     var html = '<option value="">Sem lote</option>' + App.lotes.lista.map(function (l) {
-      return '<option value="' + esc(l.id) + '">' + esc(l.code) + " · " + esc(l.model) + "</option>";
+      return '<option value="' + esc(l.id) + '">' + esc(l.codigo) + " · " + esc(l.cliente) + "</option>";
     }).join("");
     setHTML(sel, html, "sel-lote");
     renderChipLote(App.lotes.ativo);
   }
 
   function usarLote(id) {
-    postJSON("/api/gestao/orders/" + encodeURIComponent(id) + "/inspecionar", {})
+    return postJSON("/api/lotes/" + encodeURIComponent(id) + "/inspecionar", {})
       .then(function (d) {
         renderChipLote(d.lote);
         toast("As próximas peças vão para o lote " + d.lote.codigo + ".", "ok");
+        return d.lote;
       })
       .catch(function (e) {
         renderChipLote(App.lotes.ativo);
         toast("Não consegui escolher o lote: " + e.message, "erro");
+        throw e;
       });
   }
 
   function pararLote() {
-    postJSON("/api/lotes/ativo", { lote_id: null })
+    return postJSON("/api/lotes/ativo", {})
       .then(function () {
         renderChipLote(null);
-        toast("Nenhum lote em inspeção.", "info");
+        toast("As próximas peças ficam sem lote.", "info");
       })
       .catch(function (e) { toast("Não consegui parar: " + e.message, "erro"); });
+  }
+
+  /* --- Página Lotes ------------------------------------------------------ */
+
+  var Lotes = { lista: [], escolhido: null };
+
+  function pctBR(v) { return (Math.round(v * 1000) / 10).toLocaleString("pt-BR") + "%"; }
+  function numBR(v) { return Number(v || 0).toLocaleString("pt-BR"); }
+
+  function carregarPaginaLotes() {
+    var todos = $("lotes-concluidos") && $("lotes-concluidos").checked;
+    return fetchJSON("/api/lotes" + (todos ? "?todos=true" : ""))
+      .then(function (d) {
+        Lotes.lista = d.lotes || [];
+        App.lotes.ativo = d.ativo || null;
+        var erro = $("lotes-erro");
+        setTexto(erro, d.disponivel === false ? d.erro : "");
+        mostrar(erro, d.disponivel === false);
+        $("btn-novo-lote").disabled = d.disponivel === false;
+        renderListaLotes(d.disponivel !== false);
+        if (Lotes.escolhido) abrirLote(Lotes.escolhido, true);
+      })
+      .catch(function (e) {
+        setTexto($("lotes-erro"), "Não consegui carregar os lotes: " + e.message);
+        mostrar($("lotes-erro"), true);
+      });
+  }
+
+  function renderListaLotes(disponivel) {
+    var tem = Lotes.lista.length > 0;
+    mostrar($("lotes-bloco"), tem);
+    mostrar($("lotes-vazio"), disponivel && !tem);
+    var ativo = App.lotes.ativo && App.lotes.ativo.id;
+    setHTML($("lista-lotes"), Lotes.lista.map(function (l) {
+      var situacao = l.concluido ? '<span class="estado estado-neutro">Concluído</span>'
+        : l.id === ativo ? '<span class="estado estado-ok">Inspecionando agora</span>'
+        : '<span class="estado estado-neutro">Aberto</span>';
+      var feito = l.quantidade ? Math.min(1, l.inspecionadas / l.quantidade) : 0;
+      var defeito = l.inspecionadas
+        ? '<span class="num">' + numBR(l.reprovadas) + "</span> <small>" + pctBR(l.taxa_defeito) + "</small>"
+        : '<small class="texto-apoio">—</small>';
+      return '<button type="button" class="linha linha-lote linha-clicavel' + (Lotes.escolhido === l.id ? " selecionada" : "") +
+        '" data-lote-id="' + esc(l.id) + '">' +
+        "<span><strong>" + esc(l.codigo) + "</strong><small>" + esc(l.cliente) + (l.modelo_peca ? " · " + esc(l.modelo_peca) : "") + "</small></span>" +
+        '<span class="lote-feito"><span class="num">' + numBR(l.inspecionadas) + " de " + numBR(l.quantidade) +
+          '</span><span class="progresso"><i style="width:' + (feito * 100).toFixed(1) + '%"></i></span></span>' +
+        "<span>" + defeito + "</span>" +
+        "<span>" + situacao + "</span></button>";
+    }).join(""), "lista-lotes");
+  }
+
+  function abrirLote(id, silencioso) {
+    Lotes.escolhido = id;
+    $$("#lista-lotes .linha").forEach(function (el) {
+      el.classList.toggle("selecionada", String(el.getAttribute("data-lote-id")) === String(id));
+    });
+    mostrar($("form-lote"), false);
+    return fetchJSON("/api/lotes/" + encodeURIComponent(id))
+      .then(renderDetalheLote)
+      .catch(function (e) {
+        if (!silencioso) toast("Não consegui abrir o lote: " + e.message, "erro");
+      });
+  }
+
+  function renderDetalheLote(d) {
+    var l = d.lote, caixa = $("lote-detalhe");
+    var maior = d.defeitos.length ? d.defeitos[0].quantidade : 0;
+    var defeitos = d.defeitos.length ? '<ul class="lote-defeitos">' + d.defeitos.map(function (x) {
+      return "<li><span>" + esc(x.nome) + '</span><span class="num">' + numBR(x.quantidade) + "</span>" +
+        '<span class="progresso"><i style="width:' + (maior ? x.quantidade / maior * 100 : 0).toFixed(1) + '%"></i></span></li>';
+    }).join("") + "</ul>"
+      : '<p class="texto-apoio">' + (l.inspecionadas ? "Nenhum defeito encontrado até agora." : "Nenhuma peça inspecionada neste lote ainda.") + "</p>";
+    var acoes = [];
+    if (!l.concluido) {
+      acoes.push(l.ativo
+        ? '<button type="button" class="btn btn-secundario" data-lote-acao="parar">Parar de inspecionar este lote</button>'
+        : '<button type="button" class="btn btn-principal" data-lote-acao="inspecionar">Inspecionar este lote</button>');
+    }
+    acoes.push('<a class="btn btn-secundario" href="/api/lotes/' + esc(l.id) + '/pdf" download>Relatório de qualidade (PDF)</a>');
+    acoes.push(l.concluido
+      ? '<button type="button" class="btn-link" data-lote-acao="reabrir">Reabrir lote</button>'
+      : '<button type="button" class="btn-link" data-lote-acao="concluir">Concluir lote</button>');
+    setHTML(caixa,
+      '<div class="bloco-cabecalho"><div><h2>' + esc(l.codigo) + '</h2><p class="texto-apoio">' + esc(l.cliente) +
+        (l.modelo_peca ? " · " + esc(l.modelo_peca) : "") + "</p></div>" +
+        (l.concluido ? '<span class="estado estado-neutro">Concluído</span>'
+          : l.ativo ? '<span class="estado estado-ok">Inspecionando agora</span>' : "") + "</div>" +
+      '<dl class="lote-numeros">' +
+        "<div><dt>Inspecionadas</dt><dd>" + numBR(l.inspecionadas) + " <small>de " + numBR(l.quantidade) + "</small></dd></div>" +
+        "<div><dt>Aprovadas</dt><dd>" + numBR(l.aprovadas) + "</dd></div>" +
+        "<div><dt>Com defeito</dt><dd>" + numBR(l.reprovadas) + (l.inspecionadas ? " <small>" + pctBR(l.taxa_defeito) + "</small>" : "") + "</dd></div>" +
+      "</dl>" +
+      "<h3>Defeitos encontrados</h3>" + defeitos +
+      '<div class="lote-acoes">' + acoes.join("") + "</div>", "lote-detalhe");
+    mostrar(caixa, true);
+    mostrar($("lote-dica"), false);
+  }
+
+  function acaoLote(acao) {
+    var id = Lotes.escolhido;
+    if (!id) return;
+    var feito = null;
+    if (acao === "inspecionar") {
+      usarLote(id).then(function () { irPara("ao-vivo"); }).catch(function () {});
+      return;
+    } else if (acao === "parar") {
+      feito = pararLote();
+    } else if (acao === "concluir") {
+      if (!confirm("Concluir este lote? Ele sai da lista de lotes em aberto e não recebe mais peças.")) return;
+      feito = postJSON("/api/lotes/" + id + "/concluir", {}).then(function () { toast("Lote concluído.", "ok"); });
+    } else if (acao === "reabrir") {
+      feito = postJSON("/api/lotes/" + id + "/reabrir", {}).then(function () { toast("Lote reaberto.", "ok"); });
+    }
+    if (feito) feito.then(carregarPaginaLotes).catch(function (e) { toast(e.message, "erro"); });
+  }
+
+  function abrirFormLote() {
+    Lotes.escolhido = null;
+    $$("#lista-lotes .linha").forEach(function (el) { el.classList.remove("selecionada"); });
+    mostrar($("lote-detalhe"), false);
+    mostrar($("lote-dica"), false);
+    var form = $("form-lote");
+    form.reset();
+    setTexto($("lote-form-erro"), "");
+    mostrar(form, true);
+    $("lote-codigo").focus();
+    fetchJSON("/api/lotes/clientes").then(function (d) {
+      setHTML($("lista-clientes"), (d.clientes || []).map(function (c) {
+        return '<option value="' + esc(c) + '">';
+      }).join(""), "lista-clientes");
+    }).catch(function () {});
+  }
+
+  function fecharFormLote() {
+    mostrar($("form-lote"), false);
+    mostrar($("lote-dica"), !Lotes.escolhido);
+  }
+
+  function enviarFormLote(ev) {
+    ev.preventDefault();
+    var corpo = {
+      codigo: $("lote-codigo").value.trim(),
+      cliente: $("lote-cliente").value.trim(),
+      modelo_peca: $("lote-peca").value.trim() || null,
+      quantidade: parseInt($("lote-quantidade").value, 10) || 0
+    };
+    if (!corpo.codigo || !corpo.cliente || corpo.quantidade < 1) {
+      setTexto($("lote-form-erro"), "Preencha código, cliente e a quantidade de peças.");
+      return;
+    }
+    var botao = ev.target.querySelector('button[type="submit"]');
+    botao.disabled = true;
+    postJSON("/api/lotes", corpo)
+      .then(function (d) {
+        toast("Lote " + d.lote.codigo + " criado.", "ok");
+        mostrar($("form-lote"), false);
+        Lotes.escolhido = d.lote.id;
+        return carregarPaginaLotes();
+      })
+      .catch(function (e) { setTexto($("lote-form-erro"), e.message); })
+      .then(function () { botao.disabled = false; });
   }
 
   /* =======================================================================
@@ -1876,19 +2263,34 @@
       }
     });
     ligar($("toggle-gradcam"), "change", function (e) { alternarGradcam(e.target.checked); });
-    ligar($("btn-capturar"), "click", capturarQuadro);
+    ligar($("btn-capturar"), "click", function () { capturarQuadro(false).catch(function () {}); });
     ligar($("btn-diagnostico"), "click", pedirDiagnostico);
     ligar($("btn-conferir-ultimo"), "click", function () { abrirModalEvento(App.ultimoEvento); });
-    // A câmera ao vivo começa recolhida; abre de novo se a pessoa deixou aberta.
-    var blocoCamera = $("bloco-camera");
-    if (blocoCamera) {
-      var salvo = null;
-      try { salvo = localStorage.getItem("blocoCameraAberto"); } catch (e) {}
-      blocoCamera.open = salvo === "1";
-      blocoCamera.addEventListener("toggle", function () {
-        try { localStorage.setItem("blocoCameraAberto", blocoCamera.open ? "1" : "0"); } catch (e) {}
-      });
+    // A câmera começa fechada; abre de novo se a pessoa deixou aberta.
+    function abrirCamera(aberta) {
+      mostrar($("camera-corpo"), aberta);
+      var b = $("btn-mostrar-camera");
+      if (b) { b.textContent = aberta ? "Fechar câmera" : "Abrir câmera"; b.setAttribute("aria-expanded", String(aberta)); }
+      try { localStorage.setItem("blocoCameraAberto", aberta ? "1" : "0"); } catch (e) {}
     }
+    var salvo = null;
+    try { salvo = localStorage.getItem("blocoCameraAberto"); } catch (e) {}
+    abrirCamera(salvo === "1");
+    ligar($("btn-mostrar-camera"), "click", function () { abrirCamera($("camera-corpo").hidden); });
+
+    // "Ver causas e prevenção" e afins: o botão mostra o bloco logo depois dele.
+    document.addEventListener("click", function (e) {
+      var b = e.target.closest("[data-alternar]");
+      if (!b) return;
+      var alvo = b.nextElementSibling;
+      if (!alvo) return;
+      var abrir = alvo.hidden;
+      alvo.hidden = !abrir;
+      var outro = b.getAttribute("data-alternar");
+      b.setAttribute("data-alternar", b.textContent);
+      b.textContent = outro;
+      b.setAttribute("aria-expanded", String(abrir));
+    });
 
     var video = $("video-ao-vivo");
     ligar(video, "error", function () {
@@ -1926,14 +2328,30 @@
     ligar($("historico-modo"), "change", function (e) { mudarModoHistorico(e.target.value); });
     ligar($("historico-tipo"), "change", function (e) { filtrarHistorico(e.target.value); });
     ligar($("sel-lote"), "change", function (e) {
-      if (e.target.value) usarLote(e.target.value);
+      if (e.target.value) usarLote(e.target.value).catch(function () {});
       else pararLote();
+    });
+
+    /* --- Lotes ---------------------------------------------------------- */
+    ligar($("btn-novo-lote"), "click", abrirFormLote);
+    ligar($("lote-cancelar"), "click", fecharFormLote);
+    ligar($("form-lote"), "submit", enviarFormLote);
+    ligar($("lotes-concluidos"), "change", carregarPaginaLotes);
+    ligar($("lista-lotes"), "click", function (e) {
+      var linha = e.target.closest("[data-lote-id]");
+      if (linha) abrirLote(Number(linha.getAttribute("data-lote-id")));
+    });
+    ligar($("lote-detalhe"), "click", function (e) {
+      var botao = e.target.closest("[data-lote-acao]");
+      if (botao) acaoLote(botao.getAttribute("data-lote-acao"));
     });
 
     /* --- Historico e modal ---------------------------------------------- */
     ligar($("btn-modal-fechar"), "click", fecharModal);
     ligar($("btn-modal-diagnostico"), "click", diagnosticoDoModal);
     ligar($("btn-modal-apagar-foto"), "click", apagarFotoDoModal);
+    ligar($("btn-modal-excluir"), "click", excluirDoModal);
+    ligar($("btn-modal-cancelar-excluir"), "click", desarmarExcluir);
     ligar($("btn-modal-cancelar-apagar"), "click", function () { desarmarApagarFoto($("btn-modal-apagar-foto")); });
 
     var modal = $("modal-evento");
@@ -1956,7 +2374,7 @@
       ligar(el, "input", function () { sincronizarSaida(el); marcarNivelRigor(); });
     });
     ligar($("aj-sensibilidade"), "change", function (e) { aplicarNivelRigor(e.target.value); });
-    ligar($("btn-salvar-ajustes"), "click", salvarAjustes);
+    ligar($("form-ajustes"), "submit", function (e) { e.preventDefault(); salvarAjustes(); });
     ligar($("btn-testar-llm"), "click", testarLLM);
 
     /* --- Lotes e banco --------------------------------------------------- */
@@ -2023,6 +2441,7 @@
     estado: App,
     irPara: irPara,
     toast: toast,
+    carregarAjustes: carregarAjustes,
     recarregarHistorico: carregarHistorico
   };
 })();

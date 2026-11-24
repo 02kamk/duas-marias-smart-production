@@ -81,14 +81,18 @@ llm:
   ativo: true
   provedor: "openrouter"
   base_url: "https://openrouter.ai/api/v1"
-  modelo_visao: "openai/gpt-4o-mini"
-  modelo_texto: "openai/gpt-4o-mini"
+  # Leitura das peças: Claude Haiku 5.5 acertou as fotos reais de teste (nov/2026),
+  # ~US$0,47 a cada 1000 peças e ~4,5 s por leitura.
+  modelo_visao: "anthropic/claude-haiku-5.5"
+  modelo_texto: "anthropic/claude-haiku-5.5"
+  leitura_ia: true                 # a IA de visão lê cada foto (o modelo local vira apoio)
+  leitura_limite_diario: 400       # teto de leituras por IA por dia (controle de gasto)
   timeout_s: 45
   max_tentativas: 3
   temperatura: 0.2
   max_tokens: 700
   # Guardas de custo
-  max_chamadas_por_minuto: 8
+  max_chamadas_por_minuto: 20
   cache_diagnostico: true
   # Auditoria de rotulos assistida por LLM (etapa de preparacao dos dados)
   auditoria:

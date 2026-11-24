@@ -4,6 +4,7 @@ if (-not $Python) {
     # .venv do projeto primeiro; o do TEMP serve quando o caminho do OneDrive é longo demais.
     $candidatos = @(
         (Join-Path $PSScriptRoot '.venv/Scripts/python.exe'),
+        (Join-Path $env:TEMP 'ponto-certo-venv/Scripts/python.exe'),
         (Join-Path $env:TEMP 'duas-marias-venv/Scripts/python.exe')
     )
     $Python = $candidatos | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
