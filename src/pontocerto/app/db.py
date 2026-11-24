@@ -133,6 +133,12 @@ class BancoSupabase:
         self._timeout_storage = float(self._cfg.get("timeout_storage_s", 20))
         self._intervalo_status = float(self._cfg.get("intervalo_status_s", 15))
         self._pool_max = max(1, int(self._cfg.get("pool_max", 4)))
+        try:
+            from pontocerto import nuvem
+            if nuvem.ativo():
+                self._pool_max = 2  # online: várias cópias do servidor dividem o mesmo pooler
+        except Exception:
+            pass
         self._arquivo_pendentes = self._cfg.get("pendentes")
 
         self._segredos = self._coletar_segredos()
