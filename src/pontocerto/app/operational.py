@@ -9,7 +9,7 @@ ROOT=Path(__file__).resolve().parents[3]
 STATIC=Path(__file__).parent/'static'
 
 
-def extend(app,root=ROOT):
+def extend(app,root=ROOT,db_url=None):
     def inspection_rows(day):
         return app.state.estado.eventos(limite=500,dia=day.isoformat() if day else None)
 
@@ -18,6 +18,7 @@ def extend(app,root=ROOT):
         events=inspection_rows(dia)
         return {'total':len(events),'defeitos':sum(e['e_falha'] for e in events),
                 'revisadas':sum(bool(e['revisao_humana']) for e in events),
+                'pendentes':sum(bool(e.get('precisa_revisao')) for e in events),
                 'classes':dict(Counter(e['nome_final'] for e in events)),
                 'scope':'Até 500 inspeções mais recentes no período selecionado.'}
 
@@ -33,14 +34,14 @@ def extend(app,root=ROOT):
              summary['scope'],'As sugestões do modelo permanecem distintas das classes conferidas.'],
             ['Data / hora','Sugestão original','Classe atual','Conferência'],
             [[e['data']+' '+e['hora'],e['nome'],e['nome_final'],
-              'Conferida' if e['revisao_humana'] else 'Pendente'] for e in events])
+              'Conferida' if e['revisao_humana'] else ('Aguardando' if e.get('precisa_revisao') else 'Automática')] for e in events])
         return Response(data,media_type='application/pdf',headers={'Content-Disposition':'attachment; filename="relatorio-inspecoes.pdf"'})
 
     @app.get('/manifest.webmanifest',include_in_schema=False)
     def manifest():
         return JSONResponse({'name':'Duas Marias Smart Production','short_name':'Duas Marias',
             'id':'/','start_url':'/','scope':'/','display':'standalone','lang':'pt-BR',
-            'background_color':'#ffffff','theme_color':'#81334f',
+            'background_color':'#ffffff','theme_color':'#C1502E',
             'icons':[{'src':f'/static/icon-{size}.png','sizes':f'{size}x{size}','type':'image/png','purpose':'any'} for size in (192,512)]},
             media_type='application/manifest+json')
 
@@ -52,4 +53,4 @@ def extend(app,root=ROOT):
     def offline():
         return HTMLResponse('<!doctype html><html lang="pt-BR"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sem conexão</title><h1>Conecte-se ao servidor Duas Marias</h1><p>Inspeções, fotos e dados de sessão não são armazenados no cache do navegador. A câmera e o modelo dependem do servidor.</p><a href="/">Tentar novamente</a></html>')
 
-    return secure(app,root)
+    return secure(app,root,db_url)

@@ -288,7 +288,7 @@ def main(argv=None) -> None:
     # ------------------------------------------------------------------
     print("-" * 74)
     print(f"  Amostras de teste ........ {len(reais)}")
-    print(f"  Acuracia (11 classes) .... {acuracia*100:.2f}%")
+    print(f"  Acuracia ({NUM_CLASSES} classes) .... {acuracia*100:.2f}%")
     print(f"  Macro-F1 ................. {f1*100:.2f}%")
     print(f"  Acuracia aprovado/reprovado {okng*100:.2f}%   <- a metrica da linha")
     print(f"  Tempo de inferencia ...... {metricas['ms_por_imagem']:.1f} ms/imagem")

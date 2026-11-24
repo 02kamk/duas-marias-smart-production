@@ -52,64 +52,64 @@ __all__ = ["BASE_CONHECIMENTO", "diagnosticar", "gerar_relatorio"]
 BASE_CONHECIMENTO: dict[str, dict[str, Any]] = {
     "normal": {
         "resumo": (
-            "Costura dentro do padrao: pontos uniformes, entrelacamento no meio "
+            "Costura dentro do padrão: pontos uniformes, entrelaçamento no meio "
             "das camadas e tecido liso ao longo da carreira."
         ),
         "causas": [
-            "Tensao da linha superior e da bobina equilibradas, com o no travando "
+            "Tensão da linha superior e da bobina equilibradas, com o nó travando "
             "no meio da espessura do tecido.",
-            "Agulha nova, do sistema e numero certos para o tecido, montada ate o "
-            "batente com o escape voltado para a lancadeira.",
-            "Pressao do calcador suficiente para o tecido nao flutuar, sem marcar.",
+            "Agulha nova, do sistema e número certos para o tecido, montada até o "
+            "batente com o escape voltado para a lançadeira.",
+            "Pressão do calcador suficiente para o tecido não flutuar, sem marcar.",
             "Dentes impelentes limpos e com altura correta, arrastando as duas "
             "camadas por igual.",
         ],
         "acoes": [
-            "Siga a producao sem mexer em regulagem.",
-            "Anote os parametros atuais (numero da agulha, linha, tensao, pontos "
-            "por centimetro) como referencia deste lote.",
-            "Amostre uma peca a cada bloco de pecas para confirmar que o ajuste "
-            "se mantem.",
+            "Siga a produção sem mexer em regulagem.",
+            "Anote os parâmetros atuais (número da agulha, linha, tensão, pontos "
+            "por centímetro) como referência deste lote.",
+            "Amostre uma peça a cada bloco de peças para confirmar que o ajuste "
+            "se mantém.",
         ],
         "prevencao": [
-            "Manter a ficha de parametros por tecido afixada no posto.",
+            "Manter a ficha de parâmetros por tecido afixada no posto.",
             "Troca programada de agulha por turno, antes de aparecer defeito.",
             "Limpeza do gancho e da caixa de bobina no fim do turno.",
         ],
     },
     "skipped_stitch": {
         "resumo": (
-            "Ponto falhado: a agulha subiu e o bico da lancadeira nao pegou a laca "
-            "da linha superior, deixando um vao na carreira."
+            "Ponto falhado: a agulha subiu e o bico da lançadeira não pegou a laça "
+            "da linha superior, deixando um vão na carreira."
         ),
         "causas": [
             "Agulha cega, torta ou com ponta errada para o material (ponta bola em "
             "tecido plano, ponta redonda em malha).",
-            "Agulha mal montada: nao foi ate o batente ou o escape nao esta voltado "
-            "para a lancadeira.",
+            "Agulha mal montada: não foi até o batente ou o escape não está voltado "
+            "para a lançadeira.",
             "Folga entre a agulha e o bico do gancho fora do especificado, ou "
-            "temporizacao (altura da barra de agulha) desregulada.",
-            "Tecido flutuando por pressao de calcador baixa ou furo da chapa de "
+            "temporização (altura da barra de agulha) desregulada.",
+            "Tecido flutuando por pressão de calcador baixa ou furo da chapa de "
             "agulha grande demais para o material.",
             "Linha ressecada, de baixa qualidade ou grossa demais para o olhal da "
-            "agulha, o que atrapalha a formacao da laca.",
+            "agulha, o que atrapalha a formação da laça.",
         ],
         "acoes": [
-            "Desligue a maquina e troque a agulha por uma nova, do sistema e numero "
+            "Desligue a máquina e troque a agulha por uma nova, do sistema e número "
             "corretos para o tecido.",
-            "Remonte a agulha ate o batente com o escape (canal longo) voltado para "
-            "o bico da lancadeira.",
+            "Remonte a agulha até o batente com o escape (canal longo) voltado para "
+            "o bico da lançadeira.",
             "Ajuste a folga agulha-bico do gancho em torno de 0,05 a 0,10 mm e "
             "confira a altura da barra de agulha.",
-            "Aumente a pressao do calcador aos poucos ate o tecido parar de subir "
+            "Aumente a pressão do calcador aos poucos até o tecido parar de subir "
             "junto com a agulha.",
-            "Reduza a velocidade no trecho e, se for malha ou tecido elastico, "
+            "Reduza a velocidade no trecho e, se for malha ou tecido elástico, "
             "troque para agulha de ponta bola.",
         ],
         "prevencao": [
-            "Trocar a agulha a cada 8 horas de producao ou a cada troca de lote.",
-            "Padronizar sistema e numero de agulha por tipo de tecido em ficha no posto.",
-            "Conferir temporizacao e folga do gancho na manutencao preventiva semanal.",
+            "Trocar a agulha a cada 8 horas de produção ou a cada troca de lote.",
+            "Padronizar sistema e número de agulha por tipo de tecido em ficha no posto.",
+            "Conferir temporização e folga do gancho na manutenção preventiva semanal.",
         ],
     },
     "broken_stitch": {
@@ -118,28 +118,28 @@ BASE_CONHECIMENTO: dict[str, dict[str, Any]] = {
             "interrompida."
         ),
         "causas": [
-            "Tensao da linha superior alta demais, esticando a linha alem do que ela "
+            "Tensão da linha superior alta demais, esticando a linha além do que ela "
             "aguenta em alta velocidade.",
-            "Rebarba ou arranhao no furo da chapa de agulha, no olhal da agulha, no "
+            "Rebarba ou arranhão no furo da chapa de agulha, no olhal da agulha, no "
             "calcador ou no gancho, cortando a linha.",
-            "Agulha aquecida em costura longa e rapida, derretendo linha sintetica.",
+            "Agulha aquecida em costura longa e rápida, derretendo linha sintética.",
             "Enfiamento errado: linha fora de um guia, presa no cone ou passando "
             "torcida pelo estica-fio.",
-            "Linha velha, ressecada ou de titulo incompativel com o olhal da agulha.",
+            "Linha velha, ressecada ou de título incompatível com o olhal da agulha.",
         ],
         "acoes": [
-            "Reduza a tensao da linha superior meia volta por vez e teste em retalho.",
+            "Reduza a tensão da linha superior meia volta por vez e teste em retalho.",
             "Passe uma meia de nylon pelo caminho da linha (chapa, calcador, olhal, "
-            "gancho) para achar rebarba; polir com lixa fina ou trocar a peca.",
+            "gancho) para achar rebarba; polir com lixa fina ou trocar a peça.",
             "Repasse todo o enfiamento com o calcador levantado, conferindo cada guia.",
-            "Use agulha um numero maior para dar folga ao olhal, ou linha mais fina.",
-            "Reduza a rotacao em costuras longas ou use agulha com acabamento que "
+            "Use agulha um número maior para dar folga ao olhal, ou linha mais fina.",
+            "Reduza a rotação em costuras longas ou use agulha com acabamento que "
             "dissipa calor.",
         ],
         "prevencao": [
             "Inspecionar chapa, calcador e gancho toda vez que uma agulha quebrar.",
-            "Guardar a linha protegida de sol e umidade, fora do chao.",
-            "Padronizar o par linha-agulha por operacao e registrar na ficha.",
+            "Guardar a linha protegida de sol e umidade, fora do chão.",
+            "Padronizar o par linha-agulha por operação e registrar na ficha.",
         ],
     },
     "pinched_fabric": {
@@ -150,80 +150,80 @@ BASE_CONHECIMENTO: dict[str, dict[str, Any]] = {
         "causas": [
             "Camadas mal alinhadas na entrada do calcador, com sobra de pano dobrando.",
             "Excesso de tecido acumulado na guia ou na mesa, empurrando o pano de lado.",
-            "Pressao do calcador insuficiente no inicio da costura, deixando o pano escorregar.",
+            "Pressão do calcador insuficiente no início da costura, deixando o pano escorregar.",
             "Operador puxando ou segurando o tecido em vez de deixar o arraste conduzir.",
             "Tecido escorregadio (cetim, chiffon, nylon) costurado sem guia ou gabarito.",
         ],
         "acoes": [
-            "Pare a maquina, descosture o trecho e reposicione as camadas antes de retomar.",
-            "Alise o pano com a mao aberta antes do calcador e use guia ou regua para "
+            "Pare a máquina, descosture o trecho e reposicione as camadas antes de retomar.",
+            "Alise o pano com a mão aberta antes do calcador e use guia ou régua para "
             "manter a margem.",
-            "Aumente a pressao do calcador o suficiente para segurar as duas camadas "
+            "Aumente a pressão do calcador o suficiente para segurar as duas camadas "
             "desde o primeiro ponto.",
             "Troque para calcador de mola dupla ou de transporte duplo em tecido escorregadio.",
-            "Nao puxe nem segure o pano durante a costura: apenas conduza.",
+            "Não puxe nem segure o pano durante a costura: apenas conduza.",
         ],
         "prevencao": [
-            "Treinar o alimentador de pecas no posicionamento das camadas.",
-            "Usar gabarito, guia magnetica ou marcacao de margem na chapa.",
-            "Conferir a primeira peca de cada pacote antes de liberar o lote.",
+            "Treinar o alimentador de peças no posicionamento das camadas.",
+            "Usar gabarito, guia magnética ou marcação de margem na chapa.",
+            "Conferir a primeira peça de cada pacote antes de liberar o lote.",
         ],
     },
     "crooked_seam": {
         "resumo": (
-            "Costura torta: a carreira fugiu da linha de referencia e a margem "
-            "ficou irregular ao longo da peca."
+            "Costura torta: a carreira fugiu da linha de referência e a margem "
+            "ficou irregular ao longo da peça."
         ),
         "causas": [
-            "Falta de guia de margem, ou guia deslocada da distancia especificada.",
-            "Operador conduzindo o pano no olho, sem referencia fisica.",
+            "Falta de guia de margem, ou guia deslocada da distância especificada.",
+            "Operador conduzindo o pano no olho, sem referência física.",
             "Arraste desigual entre as camadas: a de baixo anda mais que a de cima e "
             "a costura desvia.",
             "Dentes impelentes gastos ou com altura irregular, puxando o pano de lado.",
-            "Velocidade alta em curva ou em mudanca de direcao sem reposicionar a peca.",
+            "Velocidade alta em curva ou em mudança de direção sem reposicionar a peça.",
         ],
         "acoes": [
-            "Instale ou reposicione a guia de margem na distancia da ficha e trave o parafuso.",
+            "Instale ou reposicione a guia de margem na distância da ficha e trave o parafuso.",
             "Troque para calcador de transporte duplo (walking foot) ou ligue a "
-            "alimentacao superior para as camadas andarem juntas.",
+            "alimentação superior para as camadas andarem juntas.",
             "Troque os dentes impelentes gastos e confira a altura acima da chapa.",
-            "Reduza a velocidade nas curvas e pare com a agulha embaixo para girar a peca.",
+            "Reduza a velocidade nas curvas e pare com a agulha embaixo para girar a peça.",
             "Alinhe os piques das camadas antes de comecar e confira na metade da costura.",
         ],
         "prevencao": [
-            "Piquetar e marcar as pecas no corte para dar referencia ao operador.",
-            "Conferir a distancia da margem com gabarito na primeira peca de cada pacote.",
-            "Incluir dentes impelentes e chapa na rota de manutencao preventiva.",
+            "Piquetar e marcar as peças no corte para dar referência ao operador.",
+            "Conferir a distância da margem com gabarito na primeira peça de cada pacote.",
+            "Incluir dentes impelentes e chapa na rota de manutenção preventiva.",
         ],
     },
     "thread_sagging": {
         "resumo": (
-            "Linha frouxa: lacadas soltas na costura por tensao insuficiente na "
+            "Linha frouxa: laçadas soltas na costura por tensão insuficiente na "
             "linha superior ou na da bobina."
         ),
         "causas": [
-            "Tensao superior baixa, ou linha enfiada com o calcador abaixado e por "
-            "isso fora dos discos de tensao.",
-            "Discos de tensao sujos de fiapo e goma, sem conseguir segurar a linha.",
+            "Tensão superior baixa, ou linha enfiada com o calcador abaixado e por "
+            "isso fora dos discos de tensão.",
+            "Discos de tensão sujos de fiapo e goma, sem conseguir segurar a linha.",
             "Linha escapou de um guia ou do estica-fio, perdendo o percurso correto.",
             "Mola do estica-fio fraca, empenada ou quebrada.",
-            "Bobina mal enrolada (enrolada a mao ou frouxa) ou mola da caixa de "
+            "Bobina mal enrolada (enrolada à mão ou frouxa) ou mola da caixa de "
             "bobina folgada.",
         ],
         "acoes": [
-            "Reenfie a maquina com o calcador LEVANTADO, para a linha entrar entre os "
-            "discos, e so depois abaixe o calcador.",
-            "Limpe os discos de tensao, o estica-fio e o percurso da linha com ar e pincel.",
-            "Aumente a tensao superior meia volta por vez, testando em retalho ate a "
-            "laca travar no meio das camadas.",
-            "Aperte o parafuso da mola da caixa de bobina 1/8 de volta por vez, ate a "
-            "caixa descer devagar no teste do ioio.",
-            "Descarte bobinas mal enroladas e reenrole na propria maquina.",
+            "Reenfie a máquina com o calcador LEVANTADO, para a linha entrar entre os "
+            "discos, e só depois abaixe o calcador.",
+            "Limpe os discos de tensão, o estica-fio e o percurso da linha com ar e pincel.",
+            "Aumente a tensão superior meia volta por vez, testando em retalho até a "
+            "laça travar no meio das camadas.",
+            "Aperte o parafuso da mola da caixa de bobina 1/8 de volta por vez, até a "
+            "caixa descer devagar no teste do ioiô.",
+            "Descarte bobinas mal enroladas e reenrole na própria máquina.",
         ],
         "prevencao": [
             "Fazer teste de costura em retalho a cada troca de linha ou de cor.",
-            "Limpar discos de tensao e caixa de bobina no fim de cada turno.",
-            "Enrolar bobina sempre na maquina, com a linha passando pelo tensor do enchedor.",
+            "Limpar discos de tensão e caixa de bobina no fim de cada turno.",
+            "Enrolar bobina sempre na máquina, com a linha passando pelo tensor do enchedor.",
         ],
     },
     "puckering": {
@@ -232,67 +232,67 @@ BASE_CONHECIMENTO: dict[str, dict[str, Any]] = {
             "margem em vez de ficar liso."
         ),
         "causas": [
-            "Tensao da linha superior e da bobina alta demais, encolhendo a costura "
+            "Tensão da linha superior e da bobina alta demais, encolhendo a costura "
             "depois de pronta.",
-            "Tecido leve e de trama fechada (chiffon, cetim, nylon, poliester fino) "
+            "Tecido leve e de trama fechada (chiffon, cetim, nylon, poliéster fino) "
             "costurado sem estabilizador.",
             "Arraste desigual entre as camadas, com a de baixo sendo empurrada mais "
             "que a de cima.",
             "Agulha grossa demais para o tecido, deslocando os fios da trama.",
-            "Pontos por centimetro excessivos, acumulando linha na costura.",
-            "Linha com muita retracao, que encolhe depois de costurada ou passada.",
+            "Pontos por centímetro excessivos, acumulando linha na costura.",
+            "Linha com muita retração, que encolhe depois de costurada ou passada.",
         ],
         "acoes": [
-            "Baixe a tensao superior e a da bobina ate o minimo que ainda trava a "
-            "laca no meio das camadas.",
+            "Baixe a tensão superior e a da bobina até o mínimo que ainda trava a "
+            "laça no meio das camadas.",
             "Troque para agulha mais fina de ponta fina, por exemplo 65/9 ou 70/10 em "
             "tecido leve.",
             "Use calcador de transporte duplo ou coloque papel de seda / entretela "
-            "soluvel embaixo da costura em chiffon e cetim.",
-            "Reduza os pontos por centimetro (por exemplo de 5 para 4 pontos por cm).",
-            "Reduza a pressao do calcador ao minimo que ainda segura o tecido e use "
-            "linha de poliester fina, de baixa retracao.",
+            "solúvel embaixo da costura em chiffon e cetim.",
+            "Reduza os pontos por centímetro (por exemplo de 5 para 4 pontos por cm).",
+            "Reduza a pressão do calcador ao mínimo que ainda segura o tecido e use "
+            "linha de poliéster fina, de baixa retração.",
         ],
         "prevencao": [
-            "Manter ficha de parametro por tecido com agulha, linha, tensao e pontos "
-            "por centimetro.",
-            "Fazer teste de costura em retalho do mesmo lote antes de liberar a producao.",
+            "Manter ficha de parâmetro por tecido com agulha, linha, tensão e pontos "
+            "por centímetro.",
+            "Fazer teste de costura em retalho do mesmo lote antes de liberar a produção.",
             "Nunca reaproveitar a regulagem de tecido pesado ao trocar para tecido leve.",
         ],
     },
     "stain_damage": {
         "resumo": (
-            "Mancha ou dano: sujeira, oleo, furo ou rasgo no tecido na regiao da "
-            "costura, o que condena a peca."
+            "Mancha ou dano: sujeira, óleo, furo ou rasgo no tecido na região da "
+            "costura, o que condena a peça."
         ),
         "causas": [
-            "Vazamento ou excesso de oleo da maquina, deixando mancha escura perto do "
+            "Vazamento ou excesso de óleo da máquina, deixando mancha escura perto do "
             "furo da agulha.",
-            "Mao suja, giz, marcador permanente ou graxa da esteira em contato com a peca.",
+            "Mão suja, giz, marcador permanente ou graxa da esteira em contato com a peça.",
             "Furo ou rasgo provocado por agulha cega, torta ou grossa demais para a trama.",
-            "Peca arrastada sobre rebarba da mesa, do gabarito ou da chapa de agulha.",
-            "Fio puxado no manuseio ou no empilhamento das pecas.",
+            "Peça arrastada sobre rebarba da mesa, do gabarito ou da chapa de agulha.",
+            "Fio puxado no manuseio ou no empilhamento das peças.",
         ],
         "acoes": [
-            "Separe a peca para retrabalho ou limpeza e identifique o lote antes de "
+            "Separe a peça para retrabalho ou limpeza e identifique o lote antes de "
             "misturar com as boas.",
-            "Verifique o nivel e o retorno de oleo, limpe o excesso, troque o feltro e "
-            "corra algumas pecas de teste em retalho ate sair limpo.",
-            "Troque a agulha e passe a mao na chapa, no calcador e no gabarito atras "
+            "Verifique o nível e o retorno de óleo, limpe o excesso, troque o feltro e "
+            "corra algumas peças de teste em retalho até sair limpo.",
+            "Troque a agulha e passe a mão na chapa, no calcador e no gabarito atrás "
             "de rebarba; lixe ou substitua o que estiver arranhando.",
-            "Revise as pecas produzidas desde a ultima peca comprovadamente boa.",
-            "Limpe a mesa, o gabarito e as maos antes de retomar a producao.",
+            "Revise as peças produzidas desde a última peça comprovadamente boa.",
+            "Limpe a mesa, o gabarito e as mãos antes de retomar a produção.",
         ],
         "prevencao": [
-            "Plano de limpeza e troca de oleo da maquina com registro por turno.",
+            "Plano de limpeza e troca de óleo da máquina com registro por turno.",
             "Proibir marcador permanente e caneta perto da linha de costura; usar giz "
             "ou marcador que sai na lavagem.",
-            "Inspecao visual a cada bloco de pecas, antes do empilhamento.",
+            "Inspeção visual a cada bloco de peças, antes do empilhamento.",
         ],
     },
     "needle_mark": {
         "resumo": (
-            "Marca de agulha: furos visiveis ao longo da carreira, porque a agulha "
+            "Marca de agulha: furos visíveis ao longo da carreira, porque a agulha "
             "rompeu os fios em vez de afasta-los."
         ),
         "causas": [
@@ -300,88 +300,118 @@ BASE_CONHECIMENTO: dict[str, dict[str, Any]] = {
             "Agulha cega ou com ponta danificada, que arrebenta o fio da trama.",
             "Tipo de ponta errado: ponta cortante em tecido plano fino, ou ponta bola "
             "grossa demais.",
-            "Material revestido, laminado ou de fibra sintetica que nao fecha o furo "
+            "Material revestido, laminado ou de fibra sintética que não fecha o furo "
             "depois que a agulha passa.",
             "Costura descosturada e refeita exatamente sobre a mesma linha de furos.",
         ],
         "acoes": [
-            "Desligue a maquina e troque por uma agulha nova, de numero menor (por "
+            "Desligue a máquina e troque por uma agulha nova, de número menor (por "
             "exemplo de 80/12 para 70/10).",
             "Use ponta adequada ao material: ponta redonda fina (R/SES) em tecido "
             "plano leve, ponta bola leve em malha.",
             "Em tecido revestido, aumente o comprimento do ponto para reduzir a "
-            "quantidade de furos por centimetro.",
-            "Nunca refaca a costura sobre a mesma linha de furos: desloque a carreira "
+            "quantidade de furos por centímetro.",
+            "Nunca refaça a costura sobre a mesma linha de furos: desloque a carreira "
             "1 a 2 mm.",
             "Se o material permitir, vaporize e prense levemente para fechar a marca.",
         ],
         "prevencao": [
             "Afixar tabela agulha x tecido no posto e conferir a cada troca de artigo.",
             "Troca programada de agulha, sem esperar defeito aparecer.",
-            "Teste em retalho do proprio lote antes de liberar tecido revestido ou "
+            "Teste em retalho do próprio lote antes de liberar tecido revestido ou "
             "muito fechado.",
         ],
     },
     "bobbin_pullup": {
         "resumo": (
-            "Linha da bobina subindo: o entrelacamento saiu do meio das camadas e a "
+            "Linha da bobina subindo: o entrelaçamento saiu do meio das camadas e a "
             "linha de baixo aparece na face de cima."
         ),
         "causas": [
-            "Tensao da linha superior alta demais em relacao a da bobina, puxando a "
-            "laca para cima.",
-            "Enfiamento superior fora dos discos de tensao ou do estica-fio.",
+            "Tensão da linha superior alta demais em relação a da bobina, puxando a "
+            "laça para cima.",
+            "Enfiamento superior fora dos discos de tensão ou do estica-fio.",
             "Fiapo preso sob a mola da caixa de bobina, ou parafuso da mola frouxo.",
             "Bobina errada, empenada ou mal encaixada na caixa, girando solta.",
-            "Linhas de titulos diferentes em cima e embaixo, com comportamento de "
-            "tensao diferente.",
+            "Linhas de títulos diferentes em cima e embaixo, com comportamento de "
+            "tensão diferente.",
         ],
         "acoes": [
             "Reenfie toda a parte de cima com o calcador levantado e confirme que a "
             "linha assentou entre os discos.",
-            "Retire a caixa de bobina, limpe o fiapo sob a mola e recoloque ate travar.",
-            "Reduza a tensao superior meia volta por vez ate o no voltar para o meio "
+            "Retire a caixa de bobina, limpe o fiapo sob a mola e recoloque até travar.",
+            "Reduza a tensão superior meia volta por vez até o nó voltar para o meio "
             "das camadas no teste em retalho.",
-            "Faca o teste do ioio: segurando a linha, a caixa de bobina deve descer "
+            "Faça o teste do ioiô: segurando a linha, a caixa de bobina deve descer "
             "devagar; se cair livre, aperte o parafuso 1/8 de volta.",
-            "Use a mesma linha em cima e embaixo, do mesmo titulo e fabricante.",
+            "Use a mesma linha em cima e embaixo, do mesmo título e fabricante.",
         ],
         "prevencao": [
-            "Fazer o teste do ioio a cada troca de bobina.",
-            "Limpeza diaria do gancho, da pista e da caixa de bobina.",
-            "Padronizar bobinas do fabricante da maquina e descartar as amassadas.",
+            "Fazer o teste do ioiô a cada troca de bobina.",
+            "Limpeza diária do gancho, da pista e da caixa de bobina.",
+            "Padronizar bobinas do fabricante da máquina e descartar as amassadas.",
         ],
     },
     "overlapped_stitch": {
         "resumo": (
-            "Ponto sobreposto: duas carreiras de pontos se sobrepoem no mesmo trecho, "
+            "Ponto sobreposto: duas carreiras de pontos se sobrepõem no mesmo trecho, "
             "engrossando e endurecendo a costura."
         ),
         "causas": [
-            "Reinicio da costura fora do ponto de parada, sobrepondo mais do que o "
+            "Reinício da costura fora do ponto de parada, sobrepondo mais do que o "
             "remate previsto.",
             "Travete ou remate longo demais, ou acionado duas vezes.",
-            "Arraste travando: o tecido para de andar e a maquina costura no mesmo lugar.",
-            "Fechamento de costura circular sem alinhar com o inicio da carreira.",
-            "Corta-linha nao acionado e peca reposicionada por cima da costura pronta.",
+            "Arraste travando: o tecido para de andar e a máquina costura no mesmo lugar.",
+            "Fechamento de costura circular sem alinhar com o início da carreira.",
+            "Corta-linha não acionado e peça reposicionada por cima da costura pronta.",
         ],
         "acoes": [
-            "Padronize o remate em 2 a 4 pontos re, sem repetir o acionamento.",
-            "Ao retomar, posicione a agulha exatamente no ultimo furo antes de seguir.",
-            "Verifique se os dentes impelentes estao subindo acima da chapa e se a "
-            "pressao do calcador nao esta travando o pano.",
-            "Ajuste o parametro de travete no painel da maquina eletronica.",
-            "Use o corta-linha e a parada com agulha embaixo para nao perder a posicao.",
+            "Padronize o remate em 2 a 4 pontos de ré, sem repetir o acionamento.",
+            "Ao retomar, posicione a agulha exatamente no último furo antes de seguir.",
+            "Verifique se os dentes impelentes estão subindo acima da chapa e se a "
+            "pressão do calcador não está travando o pano.",
+            "Ajuste o parâmetro de travete no painel da máquina eletrônica.",
+            "Use o corta-linha e a parada com agulha embaixo para não perder a posição.",
         ],
         "prevencao": [
-            "Definir o remate padrao por operacao e treinar o operador.",
-            "Checar o arraste e a altura dos dentes na manutencao preventiva.",
+            "Definir o remate padrão por operação e treinar o operador.",
+            "Checar o arraste e a altura dos dentes na manutenção preventiva.",
             "Marcar o ponto de fechamento em costuras circulares.",
+        ],
+    },
+    "fabric_defect": {
+        "resumo": (
+            "Defeito no tecido: a falha está no próprio pano, fora da costura "
+            "(fio puxado, furo, nó, mancha ou falha de trama)."
+        ),
+        "causas": [
+            "Falha de tecelagem ou malharia que veio do fornecedor (trama falhada, "
+            "fio grosso, nó, barramento).",
+            "Fio puxado por rebarba na mesa, na chapa da agulha ou em grampos e "
+            "anéis no manuseio.",
+            "Furo por agulha ou tesoura no corte, ou por peça presa ao puxar o enfesto.",
+            "Mancha de óleo da máquina, de marcador ou de sujeira no transporte.",
+            "Tecido guardado dobrado, úmido ou exposto à luz, marcando ou desbotando.",
+        ],
+        "acoes": [
+            "Separe a peça e marque a área: se o defeito estiver em parte visível, "
+            "a peça vai para segunda qualidade ou para troca da parte.",
+            "Confira se o mesmo defeito aparece no rolo de origem antes de seguir "
+            "cortando dele.",
+            "Passe a mão na mesa, na chapa e no calcador procurando rebarba que "
+            "possa estar puxando fio.",
+            "Para mancha de óleo, limpe a máquina e use papel absorvente na primeira "
+            "costura depois da lubrificação.",
+        ],
+        "prevencao": [
+            "Fazer a revisão do tecido (enfesto contra a luz) antes do corte.",
+            "Registrar o defeito por rolo e fornecedor para cobrar a reposição.",
+            "Manter mesas, carrinhos e máquinas sem rebarbas e limpos de óleo.",
         ],
     },
 }
 
-# Trava de coerencia: a base precisa cobrir exatamente a taxonomia do projeto.
+# Trava de coerência: a base precisa cobrir exatamente a taxonomia do projeto.
 _FALTAM = set(CLASS_KEYS) - set(BASE_CONHECIMENTO)
 _SOBRAM = set(BASE_CONHECIMENTO) - set(CLASS_KEYS)
 if _FALTAM or _SOBRAM:  # pragma: no cover - erro de programacao, nao de runtime

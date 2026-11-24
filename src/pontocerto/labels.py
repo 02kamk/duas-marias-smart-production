@@ -12,7 +12,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class ClassInfo:
-    index: int          # indice usado pelo modelo (0..10)
+    index: int          # indice usado pelo modelo (0..11)
     key: str            # identificador estavel em snake_case
     folder: str         # nome exato da pasta no dataset
     pt: str             # nome curto em portugues (UI)
@@ -22,27 +22,30 @@ class ClassInfo:
 
 CLASSES: tuple[ClassInfo, ...] = (
     ClassInfo(0, "normal", "0. Normal", "Costura normal",
-              "Pontos uniformes, tensao equilibrada e alinhamento correto.", "ok"),
+              "Pontos uniformes, tensão equilibrada e alinhamento correto.", "ok"),
     ClassInfo(1, "skipped_stitch", "1. Skipped stitch", "Ponto falhado",
-              "A agulha nao prendeu a linha da bobina e deixou um vao na carreira.", "alta"),
+              "A agulha não prendeu a linha da bobina e deixou um vão na carreira.", "alta"),
     ClassInfo(2, "broken_stitch", "2. Broken stitch", "Ponto quebrado",
               "A linha rompeu durante a costura, interrompendo a carreira de pontos.", "alta"),
     ClassInfo(3, "pinched_fabric", "3. Pinched fabric", "Tecido beliscado",
               "Uma dobra do tecido foi presa sob o calcador e costurada junto.", "alta"),
     ClassInfo(4, "crooked_seam", "4. Crooked seam", "Costura torta",
-              "A carreira fugiu da linha de referencia da peca.", "media"),
+              "A carreira fugiu da linha de referência da peça.", "media"),
     ClassInfo(5, "thread_sagging", "5. Thread sagging", "Linha frouxa",
-              "Lacadas soltas por tensao insuficiente na linha superior ou da bobina.", "media"),
+              "Laçadas soltas por tensão insuficiente na linha superior ou da bobina.", "media"),
     ClassInfo(6, "puckering", "6. Puckering", "Franzimento",
-              "O tecido enrugou ao longo da costura por tensao ou arraste desigual.", "media"),
+              "O tecido enrugou ao longo da costura por tensão ou arraste desigual.", "media"),
     ClassInfo(7, "stain_damage", "7. Stain and damage", "Mancha ou dano",
-              "Sujeira, oleo, furo ou rasgo no tecido na regiao da costura.", "alta"),
+              "Sujeira, óleo, furo ou rasgo no tecido na região da costura.", "alta"),
     ClassInfo(8, "needle_mark", "8. Needle mark", "Marca de agulha",
-              "Furos visiveis deixados pela agulha, geralmente por agulha grossa ou cega.", "leve"),
+              "Furos visíveis deixados pela agulha, geralmente por agulha grossa ou cega.", "leve"),
     ClassInfo(9, "bobbin_pullup", "9. Bobbin thread pulling up", "Linha da bobina subindo",
-              "A linha da bobina aparece na face superior por desequilibrio de tensao.", "media"),
+              "A linha da bobina aparece na face superior por desequilíbrio de tensão.", "media"),
     ClassInfo(10, "overlapped_stitch", "10. Overlapped stitch", "Ponto sobreposto",
-              "Duas carreiras de pontos se sobrepoem no mesmo trecho.", "leve"),
+              "Duas carreiras de pontos se sobrepõem no mesmo trecho.", "leve"),
+    # Vem do ZJU-Leaper (defeitos no tecido, fora da costura). Ver scripts/05_preparar_zju.py.
+    ClassInfo(11, "fabric_defect", "11. Fabric defect", "Defeito no tecido",
+              "Falha no próprio tecido, fora da costura: fio puxado, furo, nó, mancha ou falha de trama.", "alta"),
 )
 
 NUM_CLASSES: int = len(CLASSES)
@@ -77,7 +80,22 @@ FABRICS: tuple[FabricInfo, ...] = (
     FabricInfo("I", "I. Jacquard-Poly", "Jacquard", "Poly"),
     FabricInfo("J", "J. Oxford-Core", "Oxford", "Core"),
     FabricInfo("K", "K. Polyester (coated)-Core", "Poliester revestido", "Core"),
+    # Recortes do ZJU-Leaper: 19 padrões de tecido (lisos, listrados, xadrez, estampados).
+    # So tem "0. Normal" e "11. Fabric defect".
+    FabricInfo("Z", "Z. ZJU-Leaper", "Tecidos estampados (ZJU-Leaper)", "Tecido"),
 )
+
+
+
+def classes_do_tecido(letter: str) -> tuple[int, ...]:
+    """Classes que existem em cada tecido do dataset de treino.
+
+    StitchingNet (A..K) tem as 11 de costura; o ZJU-Leaper (Z) so tem Normal e
+    Defeito no tecido. A varredura so reclama de pasta faltando nesses pares.
+    """
+    if letter.upper() == "Z":
+        return (0, 11)
+    return tuple(range(11))
 
 NUM_FABRICS: int = len(FABRICS)
 FABRIC_LETTERS: tuple[str, ...] = tuple(f.letter for f in FABRICS)

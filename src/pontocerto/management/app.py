@@ -9,10 +9,6 @@ from .store import Store
 
 ROOT=Path(__file__).resolve().parents[3]
 STATIC=Path(__file__).resolve().parent/'static'
-NAV_MARCA='<!--nav-extensoes-->'
-NAV_GESTAO=('<a class="nav-item" href="/gestao" title="Gestao de producao e atrasos">'
-           '<span class="nav-icone" aria-hidden="true"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false"><path d="M4 20V10"/><path d="M10 20V4"/><path d="M16 20v-7"/><path d="M22 20H2"/></svg></span>'
-           '<span class="nav-texto">Gestao</span></a>')
 
 
 def extend(app: FastAPI, root=ROOT):
@@ -28,6 +24,32 @@ def extend(app: FastAPI, root=ROOT):
     from .documents import router as documents_router
     app.include_router(documents_router(store))
     app.include_router(create_router(store,model))
+    @app.get('/api/gestao/inspecao')
+    def lotes_para_inspecao(request: Request):
+        """OPs em aberto com os números da inspeção, para escolher o lote em produção."""
+        estado=getattr(request.app.state,'estado',None)
+        resumo=estado.resumo_por_lote() if estado is not None else {}
+        ativo=estado.lote_ativo if estado is not None else None
+        lotes=[{**{k:o.get(k) for k in ('id','code','client','model','fabric','quantity','produced','dueDate','status')},
+                'inspecao':resumo.get(o['code'],{'inspecionadas':0,'defeitos':0,'pendentes':0})}
+               for o in store.read()['orders'] if o.get('status')!='Concluído']
+        return {'lotes':lotes,'ativo':ativo}
+
+    @app.post('/api/gestao/orders/{order_id}/inspecionar')
+    def inspecionar_lote(order_id: str, request: Request):
+        order=next((o for o in store.read()['orders'] if o['id']==order_id),None)
+        if order is None:
+            return JSONResponse({'detail':'Lote não encontrado.'},status_code=404)
+        if order.get('status')=='Concluído':
+            return JSONResponse({'detail':'Lote concluído não recebe novas inspeções.'},status_code=409)
+        ativar=getattr(request.app.state,'ativar_lote',None)
+        if ativar is None:
+            return JSONResponse({'detail':'Inspeção indisponível neste servidor.'},status_code=503)
+        lote=ativar({'ordem_id':order['id'],'codigo':order['code'],'cliente':order['client'],
+                     'modelo_peca':order['model'],'tecido':order.get('fabric') or None,
+                     'quantidade':order['quantity'],'prazo_entrega':order['dueDate']})
+        return {'lote':lote}
+
     app.mount('/gestao-assets',StaticFiles(directory=str(STATIC),check_dir=False),name='gestao-assets')
 
     @app.get('/gestao',include_in_schema=False)
@@ -45,23 +67,11 @@ def extend(app: FastAPI, root=ROOT):
             origin=request.headers.get('origin')
             if origin and origin.rstrip('/') != str(request.base_url).rstrip('/'):
                 return JSONResponse({'detail':'Origem de gravação não permitida.'},status_code=403)
-            if not request.headers.get('content-type','').startswith('application/json'):
+            # A leitura da OP recebe a foto como formulário; o resto só aceita JSON.
+            tipo=request.headers.get('content-type','')
+            foto_op=request.url.path=='/api/gestao/op/read' and tipo.startswith('multipart/form-data')
+            if not foto_op and not tipo.startswith('application/json'):
                 return JSONResponse({'detail':'Envie JSON.'},status_code=415)
-        response=await call_next(request)
-        if request.url.path=='/' and response.status_code==200 and 'text/html' in response.headers.get('content-type',''):
-            body=b''.join([chunk async for chunk in response.body_iterator]).decode('utf-8')
-            # Acrescenta só um acesso; todos os controles de câmera continuam no HTML original.
-            if NAV_MARCA in body:
-                # Item no menu lateral da inspecao (nao cobre a barra superior).
-                body=body.replace(NAV_MARCA,NAV_GESTAO+NAV_MARCA)
-            else:
-                link='<a href="/gestao" style="position:fixed;right:20px;top:12px;z-index:9999;background:#81334f;color:white;padding:10px 14px;border-radius:8px;font:600 13px system-ui;text-decoration:none">Gestão de produção e atrasos →</a>'
-                body=body.replace('</body>',link+'</body>')
-            return HTMLResponse(body,background=response.background)
-        return response
+        return await call_next(request)
     return app
 
-
-def create_app():
-    from pontocerto.app.server import criar_app
-    return extend(criar_app())

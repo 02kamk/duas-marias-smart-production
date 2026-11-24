@@ -42,12 +42,24 @@ create table if not exists public.inspecoes (
     constraint classes_validas check (
         classe_predita in ('normal','skipped_stitch','broken_stitch','pinched_fabric','crooked_seam',
                            'thread_sagging','puckering','stain_damage','needle_mark','bobbin_pullup',
-                           'overlapped_stitch')
+                           'overlapped_stitch','fabric_defect')
         and (classe_confirmada is null or classe_confirmada in
                           ('normal','skipped_stitch','broken_stitch','pinched_fabric','crooked_seam',
                            'thread_sagging','puckering','stain_damage','needle_mark','bobbin_pullup',
-                           'overlapped_stitch'))
+                           'overlapped_stitch','fabric_defect'))
     )
+);
+
+-- Bancos criados antes da classe "fabric_defect" (Defeito no tecido): troca a regra.
+alter table public.inspecoes drop constraint if exists classes_validas;
+alter table public.inspecoes add constraint classes_validas check (
+    classe_predita in ('normal','skipped_stitch','broken_stitch','pinched_fabric','crooked_seam',
+                       'thread_sagging','puckering','stain_damage','needle_mark','bobbin_pullup',
+                       'overlapped_stitch','fabric_defect')
+    and (classe_confirmada is null or classe_confirmada in
+                      ('normal','skipped_stitch','broken_stitch','pinched_fabric','crooked_seam',
+                       'thread_sagging','puckering','stain_damage','needle_mark','bobbin_pullup',
+                       'overlapped_stitch','fabric_defect'))
 );
 
 create index if not exists idx_inspecoes_lote_data on public.inspecoes (lote_id, criado_em);

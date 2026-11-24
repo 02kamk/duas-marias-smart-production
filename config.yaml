@@ -8,9 +8,9 @@ projeto:
   descricao: "Inspecao de costura em tempo real por visao computacional"
 
 dados:
-  # Pasta que contem "A. Cotton-Poly", "B. Linen-Poly", ... (o dataset bruto).
-  # "." = a raiz do repositorio (a mesma pasta deste config.yaml).
-  raiz: "."
+  # Pasta que contem "A. Cotton-Poly", "B. Linen-Poly", ... (StitchingNet) e
+  # "Z. ZJU-Leaper" (recortes de scripts/05_preparar_zju.py). Fica fora do git.
+  raiz: "dados/treino"
   tamanho_imagem: 224
   # Manifesto gerado por scripts/01_preparar_dados.py
   manifesto: "artifacts/splits.csv"

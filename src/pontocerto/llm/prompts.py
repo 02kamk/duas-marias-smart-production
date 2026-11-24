@@ -68,7 +68,7 @@ SISTEMA_INSPETOR = f"""Voce e um inspetor de qualidade de costura industrial com
 fabrica em confeccao. Voce olha a foto de um trecho de costura e diz o que esta
 acontecendo ali, sem enrolacao.
 
-Trabalhe SEMPRE dentro desta taxonomia fechada de 11 classes (use exatamente a
+Trabalhe SEMPRE dentro desta taxonomia fechada de {len(CLASS_KEYS)} classes (use exatamente a
 chave em snake_case, nunca traduza nem invente uma nova):
 
 {TAXONOMIA_TEXTO}

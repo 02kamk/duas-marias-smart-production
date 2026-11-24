@@ -38,7 +38,7 @@ import numpy as np
 if __package__ in (None, ""):  # permite "python src/pontocerto/app/server.py"
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from fastapi import Body, FastAPI, File, Query, UploadFile, Request
+from fastapi import Body, FastAPI, File, Form, Query, UploadFile, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import (
     FileResponse,
@@ -96,10 +96,9 @@ except Exception as _exc:  # pragma: no cover
     IMPORTS_FALHOS["openrouter"] = f"{type(_exc).__name__}: {_exc}"
 
 try:
-    from pontocerto.llm.diagnosis import diagnosticar, gerar_relatorio  # type: ignore
+    from pontocerto.llm.diagnosis import diagnosticar  # type: ignore
 except Exception as _exc:  # pragma: no cover
     diagnosticar = None  # type: ignore[assignment]
-    gerar_relatorio = None  # type: ignore[assignment]
     IMPORTS_FALHOS["diagnosis"] = f"{type(_exc).__name__}: {_exc}"
 
 try:
@@ -549,6 +548,10 @@ def criar_app(cfg: Any = None) -> FastAPI:
     cfg = cfg if cfg is not None else carregar_config()
     cfg_banco = cfg.get("banco") or {}
 
+    # ---------------------------------------------------------- ajustes
+    def _arquivo_ajustes() -> Path:
+        return Path(cfg.app.pasta_capturas).parent / "ajustes.json"
+
     # ------------------------------------------------------- lote ativo
     def _arquivo_lote_ativo() -> Path | None:
         caminho = cfg_banco.get("lote_ativo")
@@ -559,11 +562,14 @@ def criar_app(cfg: Any = None) -> FastAPI:
         resumo = None
         if lote:
             resumo = {
-                "id": int(lote["id"]),
+                # id do lote no Supabase; None quando o banco não está configurado.
+                "id": int(lote["id"]) if lote.get("id") is not None else None,
+                "ordem_id": lote.get("ordem_id"),
                 "codigo": lote.get("codigo"),
                 "cliente": lote.get("cliente"),
                 "modelo_peca": lote.get("modelo_peca"),
                 "tecido": lote.get("tecido"),
+                "quantidade": lote.get("quantidade"),
             }
         app.state.estado.lote_ativo = resumo
         arquivo = _arquivo_lote_ativo()
@@ -584,28 +590,12 @@ def criar_app(cfg: Any = None) -> FastAPI:
         try:
             banco.status(forcar=True)
             lote = app.state.estado.lote_ativo
-            if lote and banco.disponivel:
+            if lote and lote.get("id") is not None and banco.disponivel:
                 atual = banco.obter_lote(int(lote["id"]))
                 if not atual or atual.get("status") == "concluido":
                     _definir_lote_ativo(None)
-                else:
-                    _definir_lote_ativo(atual)
         except Exception:
             pass  # sem internet: mantem o lote lembrado, o reenvio cuida depois
-
-    def _com_alerta(lote: dict | None) -> dict | None:
-        """Marca `alerta` quando a taxa de defeito passa do limite do lote."""
-        if not lote:
-            return lote
-        minimo = int(cfg_banco.get("min_pecas_alerta", 20))
-        inspecionadas = int(lote.get("inspecionadas") or 0)
-        taxa = float(lote.get("taxa_defeito") or 0)
-        limite = float(lote.get("limite_defeito") or 0.05)
-        lote["min_pecas_alerta"] = minimo
-        lote["alerta"] = inspecionadas >= minimo and taxa > limite
-        ativo = app.state.estado.lote_ativo
-        lote["ativo"] = bool(ativo and int(ativo["id"]) == int(lote["id"]))
-        return lote
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -646,9 +636,9 @@ def criar_app(cfg: Any = None) -> FastAPI:
                 app.state.banco = None
                 app.state.erros_import["db"] = f"{type(exc).__name__}: {exc}"
 
+        app.state.estado.lote_ativo = _ler_json(_arquivo_lote_ativo()) or None
         banco = app.state.banco
         if banco is not None and banco.configurado:
-            app.state.estado.lote_ativo = _ler_json(_arquivo_lote_ativo()) or None
             if Sincronizador is not None:
                 try:
                     sinc = Sincronizador(cfg, banco, cfg.app.pasta_capturas)
@@ -661,6 +651,12 @@ def criar_app(cfg: Any = None) -> FastAPI:
                              daemon=True).start()
 
         app.state.motor = Motor(cfg, app.state.camera, app.state.preditor, app.state.estado)
+        salvos = _ler_json(_arquivo_ajustes())
+        if isinstance(salvos, dict):
+            try:
+                aplicar_ajustes(salvos, gravar=False)
+            except Exception:
+                pass
         app.state.motor.iniciar()  # a camera NAO e aberta automaticamente
         try:
             yield
@@ -789,7 +785,10 @@ def criar_app(cfg: Any = None) -> FastAPI:
         }
 
     @app.post("/api/ajustes")
-    def aplicar_ajustes(corpo: dict = Body(default={})):
+    def rota_ajustes(corpo: dict = Body(default={})):
+        return aplicar_ajustes(corpo or {})
+
+    def aplicar_ajustes(corpo: dict, gravar: bool = True):
         corpo = corpo or {}
         inf = cfg.inferencia
         numericos = {
@@ -821,7 +820,16 @@ def criar_app(cfg: Any = None) -> FastAPI:
             app.state.motor.tecido = str(tecido) if tecido else None
         if mudou_suavizador:
             app.state.motor.reconfigurar()
-        return ler_ajustes()
+        atuais = ler_ajustes()
+        if gravar:
+            # Guarda em disco para valer depois que o servidor reiniciar.
+            try:
+                arquivo = _arquivo_ajustes()
+                garantir_pasta(arquivo.parent)
+                arquivo.write_text(json.dumps(atuais, ensure_ascii=False), encoding="utf-8")
+            except Exception:
+                pass
+        return atuais
 
     # ------------------------------------------------------------- camera
     @app.get("/api/camera/dispositivos")
@@ -909,7 +917,9 @@ def criar_app(cfg: Any = None) -> FastAPI:
 
     # ----------------------------------------------------------- analisar
     @app.post("/api/analisar")
-    async def analisar(arquivo: UploadFile = File(...)):
+    async def analisar(arquivo: UploadFile = File(...), origem: str = Form("upload")):
+        if origem not in ("upload", "camera_aparelho", "camera_servidor"):
+            origem = "upload"
         dados = b""
         try:
             while True:
@@ -955,7 +965,7 @@ def criar_app(cfg: Any = None) -> FastAPI:
         else:
             heat = frame
 
-        evento = app.state.estado.registrar_evento(predicao_dict, frame, origem='upload')
+        evento = app.state.estado.registrar_evento(predicao_dict, frame, origem=origem)
         return {
             "predicao": predicao_dict,
             "heatmap": _data_uri(heat),
@@ -966,14 +976,14 @@ def criar_app(cfg: Any = None) -> FastAPI:
 
     # ------------------------------------------------------------ eventos
     @app.get("/api/eventos")
-    def listar_eventos(limite: int = Query(60, ge=1, le=500), classe: str | None = None, dia: str | None = None, defeitos: bool = False):
+    def listar_eventos(limite: int = Query(60, ge=1, le=500), classe: str | None = None, dia: str | None = None, defeitos: bool = False, pendentes: bool = False):
         if dia:
             try:
                 datetime.strptime(dia, '%Y-%m-%d')
             except ValueError:
                 return JSONResponse(status_code=422, content={'erro': 'Data inválida.'})
         return {
-            "eventos": app.state.estado.eventos(limite=limite, classe=classe, dia=dia, defeitos=defeitos),
+            "eventos": app.state.estado.eventos(limite=limite, classe=classe, dia=dia, defeitos=defeitos, pendentes=pendentes),
             "estatisticas": app.state.estado.estatisticas(),
         }
 
@@ -983,12 +993,12 @@ def criar_app(cfg: Any = None) -> FastAPI:
         if ev is None:
             return JSONResponse(status_code=404, content={'erro': 'Evento não encontrado.'})
         classe = str(corpo.get('classe', ''))
-        decisao = str(corpo.get('decisao', ''))
         observacao = str(corpo.get('observacao', '')).strip()
-        if classe not in CLASS_KEYS or decisao not in ('confirmada', 'corrigida') or len(observacao)>1000:
-            return JSONResponse(status_code=422, content={'erro': 'Classe, decisão ou observação inválida.'})
-        if decisao == 'confirmada' and classe != ev.classe_key:
-            return JSONResponse(status_code=422, content={'erro': 'Para trocar a classe, selecione Corrigir.'})
+        if classe not in CLASS_KEYS or len(observacao)>1000:
+            return JSONResponse(status_code=422, content={'erro': 'Classe ou observação inválida.'})
+        # A decisão sai da comparação com a sugestão: assim nunca grava
+        # "confirmada" com uma classe diferente da que a IA sugeriu.
+        decisao = 'confirmada' if classe == ev.classe_key else 'corrigida'
         app.state.estado.revisar_humano(evento_id, classe, decisao, observacao, getattr(request.state, 'user', 'operador-local'))
         return {'ok': True, 'evento': ev.to_dict()}
 
@@ -1047,15 +1057,6 @@ def criar_app(cfg: Any = None) -> FastAPI:
                 nuvem["erro"] = banco.mascarar(str(exc))
         return {"ok": True, "removida_local": bool(resultado), "nuvem": nuvem}
 
-    @app.post("/api/eventos/{evento_id}/rotulo")
-    def rotular(evento_id: str, corpo: dict = Body(default={})):
-        corpo = corpo or {}
-        classe_key = str(corpo.get("classe_key", "")).strip()
-        if classe_key not in CLASS_KEYS:
-            return {"ok": False, "erro": f"classe_key invalida: '{classe_key}'"}
-        ok = app.state.estado.corrigir_rotulo(evento_id, classe_key)
-        return {"ok": bool(ok)} if ok else {"ok": False, "erro": "evento nao encontrado"}
-
     @app.post("/api/eventos/{evento_id}/diagnostico")
     def diagnostico_evento(evento_id: str, corpo: dict = Body(default={})):
         corpo = corpo or {}
@@ -1077,38 +1078,6 @@ def criar_app(cfg: Any = None) -> FastAPI:
         except Exception as exc:
             return {"erro": f"falha ao diagnosticar: {exc}"}
         app.state.estado.anexar_diagnostico(evento_id, resultado)
-        return {"diagnostico": resultado}
-
-    @app.post("/api/diagnostico")
-    def diagnostico_avulso(corpo: dict = Body(default={})):
-        """Diagnostico por classe, sem evento associado.
-
-        A aba "Testar" analisa uma imagem enviada pelo operador: nao existe
-        evento na sessao para pendurar o diagnostico, entao o pedido vem so com
-        a classe prevista. Mesma logica de /api/eventos/{id}/diagnostico, sem o
-        passo de anexar ao historico.
-        """
-        corpo = corpo or {}
-        classe_key = str(corpo.get("classe_key", "")).strip()
-        if classe_key not in CLASS_KEYS:
-            return {"erro": f"classe_key invalida: '{classe_key}'"}
-        if diagnosticar is None:
-            return {"erro": "modulo de diagnostico indisponivel: "
-                            + IMPORTS_FALHOS.get("diagnosis", "")}
-        confianca = corpo.get("confianca")
-        try:
-            confianca = float(confianca) if confianca is not None else None
-        except (TypeError, ValueError):
-            confianca = None
-        tecido = corpo.get("tecido") or app.state.motor.tecido
-        usar_llm = bool(corpo.get("usar_llm", True)) and bool(cfg.llm.get("ativo", True))
-        try:
-            resultado = diagnosticar(
-                app.state.cliente, classe_key,
-                tecido=tecido, confianca=confianca, usar_llm=usar_llm,
-            )
-        except Exception as exc:
-            return {"erro": f"falha ao diagnosticar: {exc}"}
         return {"diagnostico": resultado}
 
     @app.post("/api/eventos/{evento_id}/revisao")
@@ -1172,127 +1141,55 @@ def criar_app(cfg: Any = None) -> FastAPI:
         resultado["lote_ativo"] = app.state.estado.lote_ativo
         return resultado
 
-    # ------------------------------------------------------ clientes e lotes
-    def _banco_pronto():
-        """(banco, None) se da para consultar; (None, resposta 503) se nao."""
+    # ------------------------------------------------------------ lote ativo
+    def _lote_no_banco(dados: dict) -> int | None:
+        """Garante o lote da OP no Supabase (pelo código) e devolve o id.
+
+        Sem banco configurado ou sem conexão devolve None: a inspeção continua
+        registrando o lote localmente, só não envia para o banco.
+        """
         banco = app.state.banco
         if banco is None or not banco.configurado:
-            motivo = (getattr(banco, "erro", None)
-                      or app.state.erros_import.get("db") or "banco nao configurado")
-            return None, JSONResponse(status_code=503,
-                                      content={"erro": f"Banco indisponivel: {motivo}"})
-        return banco, None
-
-    def _falha_banco(banco, exc: Exception) -> JSONResponse:
-        # Erro de validacao/regra (banco respondeu) = 400; sem conexao = 503.
-        codigo = 400 if (isinstance(exc, ErroBanco) and banco.disponivel) else 503
-        return JSONResponse(status_code=codigo, content={"erro": banco.mascarar(str(exc))})
-
-    @app.get("/api/clientes")
-    def listar_clientes():
-        banco, erro = _banco_pronto()
-        if erro:
-            return erro
+            return None
         try:
-            return {"clientes": banco.listar_clientes()}
-        except Exception as exc:
-            return _falha_banco(banco, exc)
+            codigo = str(dados["codigo"]).strip()
+            existente = next((l for l in banco.listar_lotes() if str(l.get("codigo")) == codigo), None)
+            if existente:
+                if existente.get("status") == "aberto":
+                    banco.atualizar_status_lote(int(existente["id"]), "em_inspecao")
+                return int(existente["id"])
+            nome = str(dados.get("cliente") or "Sem cliente").strip()
+            cliente = next((c for c in banco.listar_clientes() if str(c.get("nome")).casefold() == nome.casefold()), None)
+            if cliente is None:
+                cliente = banco.criar_cliente(nome)
+            novo = banco.criar_lote({
+                "cliente_id": cliente["id"], "codigo": codigo, "modelo_peca": dados.get("modelo_peca") or "-",
+                "tecido": dados.get("tecido"), "quantidade": dados.get("quantidade") or 1,
+                "prazo_entrega": dados.get("prazo_entrega"),
+            })
+            banco.atualizar_status_lote(int(novo["id"]), "em_inspecao")
+            return int(novo["id"])
+        except Exception:
+            return None
 
-    @app.post("/api/clientes")
-    def criar_cliente(corpo: dict = Body(default={})):
-        banco, erro = _banco_pronto()
-        if erro:
-            return erro
-        corpo = corpo or {}
-        try:
-            return {"cliente": banco.criar_cliente(str(corpo.get("nome") or ""),
-                                                   corpo.get("cnpj"))}
-        except Exception as exc:
-            return _falha_banco(banco, exc)
+    def ativar_lote(dados: dict | None) -> dict | None:
+        """Põe uma OP da Gestão em inspeção (None = parar de gravar em lote)."""
+        if not dados:
+            return _definir_lote_ativo(None)
+        return _definir_lote_ativo({**dados, "id": _lote_no_banco(dados)})
 
-    @app.get("/api/lotes")
-    def listar_lotes():
-        banco, erro = _banco_pronto()
-        if erro:
-            return erro
-        try:
-            lotes = [_com_alerta(l) for l in banco.listar_lotes()]
-        except Exception as exc:
-            return _falha_banco(banco, exc)
-        return {"lotes": lotes, "ativo": app.state.estado.lote_ativo}
-
-    @app.post("/api/lotes")
-    def criar_lote(corpo: dict = Body(default={})):
-        banco, erro = _banco_pronto()
-        if erro:
-            return erro
-        try:
-            novo = banco.criar_lote(corpo or {})
-            return {"lote": _com_alerta(banco.obter_lote(int(novo["id"])))}
-        except Exception as exc:
-            return _falha_banco(banco, exc)
+    app.state.ativar_lote = ativar_lote
 
     @app.get("/api/lotes/ativo")
     def ler_lote_ativo():
         return {"lote": app.state.estado.lote_ativo}
 
     @app.post("/api/lotes/ativo")
-    def escolher_lote_ativo(corpo: dict = Body(default={})):
-        """{"lote_id": 3} poe o lote em producao; {"lote_id": null} volta ao modo so local."""
-        corpo = corpo or {}
-        lote_id = corpo.get("lote_id")
-        if lote_id in (None, ""):
-            return {"lote": _definir_lote_ativo(None)}
-        banco, erro = _banco_pronto()
-        if erro:
-            return erro
-        try:
-            lote = banco.obter_lote(int(lote_id))
-            if lote is None:
-                return JSONResponse(status_code=404, content={"erro": "lote nao encontrado"})
-            if lote.get("status") == "concluido":
-                return JSONResponse(status_code=409, content={
-                    "erro": f"o lote {lote.get('codigo')} ja foi concluido; reabra antes de usar"})
-            if lote.get("status") == "aberto":
-                banco.atualizar_status_lote(int(lote_id), "em_inspecao")
-        except (TypeError, ValueError):
-            return JSONResponse(status_code=400, content={"erro": "lote_id deve ser um numero"})
-        except Exception as exc:
-            return _falha_banco(banco, exc)
-        return {"lote": _definir_lote_ativo(lote)}
-
-    @app.get("/api/lotes/{lote_id}")
-    def detalhe_lote(lote_id: int, limite: int = Query(30, ge=1, le=200)):
-        banco, erro = _banco_pronto()
-        if erro:
-            return erro
-        try:
-            lote = banco.obter_lote(lote_id)
-            if lote is None:
-                return JSONResponse(status_code=404, content={"erro": "lote nao encontrado"})
-            return {
-                "lote": _com_alerta(lote),
-                "defeitos": banco.defeitos_por_classe(lote_id),
-                "inspecoes": banco.ultimas_inspecoes(lote_id, limite),
-            }
-        except Exception as exc:
-            return _falha_banco(banco, exc)
-
-    @app.post("/api/lotes/{lote_id}/status")
-    def mudar_status_lote(lote_id: int, corpo: dict = Body(default={})):
-        banco, erro = _banco_pronto()
-        if erro:
-            return erro
-        status_novo = str((corpo or {}).get("status") or "").strip()
-        try:
-            if not banco.atualizar_status_lote(lote_id, status_novo):
-                return JSONResponse(status_code=404, content={"erro": "lote nao encontrado"})
-            ativo = app.state.estado.lote_ativo
-            if status_novo == "concluido" and ativo and int(ativo["id"]) == lote_id:
-                _definir_lote_ativo(None)  # lote fechado nao recebe mais pecas
-            return {"lote": _com_alerta(banco.obter_lote(lote_id))}
-        except Exception as exc:
-            return _falha_banco(banco, exc)
+    def parar_lote_ativo(corpo: dict = Body(default={})):
+        """Só para de gravar em lote; escolher a OP é feito pela Gestão."""
+        if (corpo or {}).get("lote_id") not in (None, ""):
+            return JSONResponse(status_code=400, content={"erro": "Escolha o lote pela lista de OPs."})
+        return {"lote": ativar_lote(None)}
 
     # ----------------------------------------------------------------- LLM
     @app.get("/api/llm/status")
@@ -1326,49 +1223,6 @@ def criar_app(cfg: Any = None) -> FastAPI:
         return resultado
 
     # ----------------------------------------------------------- relatorio
-    @app.post("/api/relatorio")
-    def relatorio(corpo: dict = Body(default={})):
-        corpo = corpo or {}
-        estatisticas = app.state.estado.estatisticas()
-        eventos = app.state.estado.eventos(limite=int(corpo.get("limite", 200) or 200))
-        usar_llm = bool(corpo.get("usar_llm", True)) and bool(cfg.llm.get("ativo", True))
-        if gerar_relatorio is None:
-            return {"erro": "modulo de relatorio indisponivel: "
-                            + IMPORTS_FALHOS.get("diagnosis", "")}
-        try:
-            resultado = gerar_relatorio(
-                app.state.cliente, estatisticas, eventos, usar_llm=usar_llm
-            ) or {}
-        except Exception as exc:
-            return {"erro": f"falha ao gerar o relatorio: {exc}"}
-        markdown = str(resultado.get("markdown", ""))
-        arquivo = ""
-        try:
-            pasta = garantir_pasta(cfg.app.pasta_relatorios)
-            destino = pasta / f"relatorio_{datetime.now():%Y%m%d_%H%M%S}.md"
-            destino.write_text(markdown, encoding="utf-8")
-            arquivo = str(destino)
-        except Exception:
-            arquivo = ""
-        return {
-            "markdown": markdown,
-            "arquivo": arquivo,
-            "fonte": resultado.get("fonte"),
-            "modelo": resultado.get("modelo"),
-        }
-
-    # ------------------------------------------------------------- treino
-    @app.get("/api/treino/historico")
-    def treino_historico():
-        historico = _ler_json(cfg.treino.historico)
-        metricas = _ler_json(Path(cfg.avaliacao.saida_dir) / "metricas.json")
-        if historico is None and metricas is None:
-            return {}
-        return {
-            "historico": historico or [],
-            "metricas": metricas or {},
-        }
-
     return app
 
 
@@ -1410,33 +1264,10 @@ class _PreditorAusente:
 # CLI
 # ---------------------------------------------------------------------------
 def main(argv: list[str] | None = None) -> None:
-    cfg = carregar_config()
-    parser = argparse.ArgumentParser(
-        prog="pontocerto-servidor",
-        description="Sobe a interface e a API do Ponto Certo.",
-    )
-    parser.add_argument("--host", default=str(cfg.app.get("host", "127.0.0.1")),
-                        help="endereco de escuta (padrao: %(default)s)")
-    parser.add_argument("--porta", type=int, default=int(cfg.app.get("porta", 8000)),
-                        help="porta TCP (padrao: %(default)s)")
-    parser.add_argument("--recarregar", action="store_true",
-                        help="recarrega o servidor quando o codigo mudar (desenvolvimento)")
-    args = parser.parse_args(argv)
+    """Sobe o sistema completo (inspeção + gestão + login)."""
+    from pontocerto.principal import main as principal
 
-    import uvicorn
-
-    print(f"Ponto Certo em http://{args.host}:{args.porta}  (Ctrl+C para encerrar)")
-    if args.recarregar:
-        uvicorn.run(
-            "pontocerto.app.server:criar_app",
-            factory=True,
-            host=args.host,
-            port=args.porta,
-            reload=True,
-            reload_dirs=[str(Path(__file__).resolve().parents[2])],
-        )
-    else:
-        uvicorn.run(criar_app(cfg), host=args.host, port=args.porta, log_level="info")
+    principal(argv)
 
 
 if __name__ == "__main__":

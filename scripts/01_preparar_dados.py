@@ -43,7 +43,7 @@ Possiveis causas e solucoes:
   3. O ambiente virtual nao esta ativo:
          .venv\\Scripts\\activate
 
-Rode 'python scripts/00_verificar_ambiente.py' para um diagnostico completo.
+Rode 'python scripts/verificar_ambiente.py' para um diagnostico completo.
 """
 
 

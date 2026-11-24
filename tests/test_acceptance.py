@@ -60,6 +60,10 @@ class Acceptance(unittest.TestCase):
         from pontocerto.app.sincronizador import Sincronizador
         ev.lote_id=1
         self.assertEqual(Sincronizador.instantaneo(ev)['origem'],'upload')
+        # Origens novas viram as duas que o banco aceita.
+        ev.origem='camera_aparelho';self.assertEqual(Sincronizador.instantaneo(ev)['origem'],'upload')
+        ev.origem='camera_servidor';self.assertEqual(Sincronizador.instantaneo(ev)['origem'],'ao_vivo')
+        ev.origem='upload'
         restored=EstadoSessao(cfg)
         self.assertEqual(restored.evento(ev.id).origem,'upload')
         self.assertEqual(len(restored.eventos(dia=date.today().isoformat(),defeitos=True)),1)
@@ -126,6 +130,8 @@ class Acceptance(unittest.TestCase):
             self.assertNotIn('data-pagina="treinamento"',html)
             self.assertNotIn('data-pagina="testar"',html)
             self.assertIn('historico-dia',html)
+            self.assertIn('href="/gestao#lotes"',html)
+            self.assertIn('id="foto-camera"',html)
             self.assertEqual(c.get('/manifest.webmanifest').status_code,200)
             image=io.BytesIO();Image.new('RGB',(224,224),'gray').save(image,format='PNG')
             response=c.post('/api/analisar',files={'arquivo':('teste.png',image.getvalue(),'image/png')})
@@ -147,4 +153,45 @@ class Acceptance(unittest.TestCase):
             pdf=c.get('/api/relatorios/pdf')
             self.assertTrue(pdf.content.startswith(b'%PDF'))
             self.assertEqual(c.get('/api/relatorios/resumo').json()['revisadas'],1)
+            # Foto da OP vai como formulário e não pode ser barrada como "Envie JSON".
+            op=c.post('/api/gestao/op/read',files={'arquivo':('op.png',image.getvalue(),'image/png')})
+            self.assertNotEqual(op.status_code,415)
+            # A origem real da captura fica registrada.
+            c.post('/api/analisar',files={'arquivo':('cam.png',image.getvalue(),'image/png')},data={'origem':'camera_aparelho'})
+            self.assertEqual(c.get('/api/eventos').json()['eventos'][0]['origem'],'camera_aparelho')
+            # Trocar a classe sempre grava "corrigida", mesmo que o pedido diga "confirmada".
+            last=c.get('/api/eventos').json()['eventos'][0]
+            other='crooked_seam' if last['classe_key']!='crooked_seam' else 'normal'
+            saved=c.post(f'/api/eventos/{last["id"]}/conferencia',json={'classe':other,'decisao':'confirmada'}).json()
+            self.assertEqual(saved['evento']['revisao_humana']['decisao'],'corrigida')
+            self.assertFalse(any(e['id']==last['id'] for e in c.get('/api/eventos?pendentes=true').json()['eventos']))
+            # Ajustes ficam gravados em disco para valer depois de reiniciar.
+            c.post('/api/ajustes',json={'meta_pecas':77})
+            self.assertTrue((self.root/'ajustes.json').exists())
+        with TestClient(app) as c:
+            c.post('/api/auth/login',json=body)
+            self.assertEqual(c.get('/api/ajustes').json()['meta_pecas'],77)
+            # Receber a OP: quantidade sai da grade e a conferência é salva junto.
+            hoje=date.today().isoformat();prazo=(date.today()+timedelta(days=10)).isoformat()
+            intake=c.post('/api/gestao/intake',json={'code':'OP-900','client':'Cliente','model':'Camiseta','fabric':'Malha',
+                'dueDate':prazo,'day':hoje,'grade':[{'name':'P','expected':60,'received':60},{'name':'M','expected':40,'received':38}],'supplies':[],'note':''})
+            self.assertEqual(intake.status_code,201,intake.text)
+            order=intake.json()['order']
+            self.assertEqual(order['quantity'],100)
+            self.assertEqual(intake.json()['receipt']['status'],'divergente')
+            self.assertEqual(c.post('/api/gestao/intake',json={'code':'op-900','client':'X','model':'Y','dueDate':prazo,'day':hoje,
+                'grade':[{'name':'P','expected':1,'received':1}]}).status_code,422)
+            # Previsão de entrega pelo ritmo, mesmo sem o modelo experimental.
+            analise=c.get(f'/api/gestao/orders/{order["id"]}/analysis').json()
+            self.assertTrue(analise['estimatedDeliveryDate'])
+            self.assertTrue(analise['suggestions'])
+            # Escolher o lote na inspeção funciona sem Supabase e marca as peças.
+            ativo=c.post(f'/api/gestao/orders/{order["id"]}/inspecionar',json={}).json()['lote']
+            self.assertEqual(ativo['codigo'],'OP-900');self.assertIsNone(ativo['id'])
+            c.post('/api/analisar',files={'arquivo':('lote.png',image.getvalue(),'image/png')})
+            self.assertEqual(c.get('/api/eventos').json()['eventos'][0]['lote_codigo'],'OP-900')
+            lote=next(l for l in c.get('/api/gestao/inspecao').json()['lotes'] if l['code']=='OP-900')
+            self.assertEqual(lote['inspecao']['inspecionadas'],1)
+            c.post('/api/lotes/ativo',json={'lote_id':None})
+            self.assertIsNone(c.get('/api/lotes/ativo').json()['lote'])
         # O modelo foi executado; a imagem sintética não comprova acurácia em costura.

@@ -37,3 +37,6 @@ artifacts/relatorios/relatorio_*.md
 
 # Fontes recebidas podem conter fotos de OPs e dados internos; ficam locais.
 docs/testes/fontes/*.pdf
+
+# Datasets baixados para treino (grandes, ficam so nesta maquina)
+dados/
