@@ -123,8 +123,14 @@ def credenciais_supabase() -> dict[str, str | None]:
 
     Esses valores sao segredos: quem os recebe nunca deve imprimi-los.
     """
+    db_url = variavel_env("SUPABASE_DB_URL")
+    if db_url and os.environ.get("PONTOCERTO_NUVEM", "").strip().lower() in ("1", "true", "sim", "yes"):
+        # Online (Vercel) cada cópia do servidor abre conexões próprias: o pooler de
+        # sessão (5432) aceita só 15 clientes. O de transação (6543) multiplexa e
+        # aguenta bem mais; o código já não usa prepared statements.
+        db_url = db_url.replace("pooler.supabase.com:5432/", "pooler.supabase.com:6543/")
     return {
-        "db_url": variavel_env("SUPABASE_DB_URL"),
+        "db_url": db_url,
         "url": variavel_env("SUPABASE_URL"),
         "secret_key": variavel_env("SUPABASE_SECRET_KEY"),
         "bucket": variavel_env("SUPABASE_BUCKET"),
