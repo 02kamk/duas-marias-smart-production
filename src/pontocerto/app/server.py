@@ -1032,12 +1032,17 @@ def criar_app(cfg: Any = None) -> FastAPI:
 
         leitura_ia = getattr(app.state, "leitura_ia", None)
         aviso = None
+        falha_ia = None
         if leitura_ia is not None and leitura_ia.disponivel:
             from starlette.concurrency import run_in_threadpool
             try:
                 predicao_dict, marcada, leitura = await run_in_threadpool(leitura_ia.ler, frame)
             except Exception as exc:
-                aviso = ("A leitura por IA falhou agora (" + str(exc)[:140] + "). "
+                import traceback
+                print("[leitura-ia] falhou:", repr(exc), file=sys.stderr, flush=True)
+                traceback.print_exc(file=sys.stderr)
+                falha_ia = str(exc)[:200]
+                aviso = ("A leitura por IA falhou agora (" + falha_ia[:140] + "). "
                          "Usei a leitura local, que erra bastante em fotos reais: confira a peça.")
             else:
                 evento = app.state.estado.registrar_evento(predicao_dict, frame, origem=origem)
@@ -1054,6 +1059,10 @@ def criar_app(cfg: Any = None) -> FastAPI:
 
         preditor = app.state.preditor
         if not getattr(preditor, "disponivel", False):
+            # Sem modelo local (online não há PyTorch): mostra o motivo real, não o erro do torch.
+            if aviso:
+                return {"erro": "A IA não conseguiu ler esta foto agora. Tente de novo em instantes."
+                                + (f" ({falha_ia})" if falha_ia else "")}
             return {"erro": getattr(preditor, "erro", None) or "Modelo nao carregado."}
 
         try:
