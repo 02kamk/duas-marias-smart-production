@@ -1,6 +1,0 @@
-/* A Gestão usa a mesma folha de estilo da Inspeção: /static/css/style.css
-   (src/pontocerto/app/static/css/style.css), ligada em gestao.html.
-   Aqui ficam só os ajustes que existem apenas nas telas em React. */
-.lote-nome { display: block; width: 100%; font: inherit; color: inherit; }
-.detalhe-vazio { align-self: start; }
-@media (max-width: 1100px) { .detalhe-vazio { display: none; } }

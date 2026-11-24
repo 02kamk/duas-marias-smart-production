@@ -5,23 +5,34 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#C1502E">
 <link rel="manifest" href="/manifest.webmanifest">
-<title>Entrar | Duas Marias</title>
+<title>Entrar | Ponto Certo</title>
+<link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
 <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
 <main class="entrar">
   <div class="entrar-caixa">
-    <p class="marca">Duas<span>Marias</span></p>
+    <p class="marca"><svg class="marca-icone" viewBox="0 0 34 34" width="30" height="30" aria-hidden="true" focusable="false"><rect width="34" height="34" rx="10" fill="var(--terracota)"/><path d="M9 17.5l5.5 5.5L25.5 11" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Ponto<span>Certo</span></span></p>
     <h1 id="title">Entrar</h1>
     <p id="help" class="texto-apoio" hidden></p>
     <form id="form" class="formulario">
       <label class="campo"><span class="campo-rotulo">E-mail</span><input id="email" class="entrada" type="email" autocomplete="username" required maxlength="254"></label>
-      <label class="campo"><span class="campo-rotulo">Senha</span><input id="password" class="entrada" type="password" autocomplete="current-password" required maxlength="128"></label>
-      <label class="check"><input id="ver-senha" type="checkbox"> Mostrar senha</label>
+      <label id="campo-senha" class="campo"><span class="campo-rotulo">Senha</span><input id="password" class="entrada" type="password" autocomplete="current-password" required maxlength="128"></label>
+      <label id="campo-senha2" class="campo" hidden><span class="campo-rotulo">Repita a senha</span><input id="password2" class="entrada" type="password" autocomplete="new-password" maxlength="128"></label>
+      <div class="entrar-linha">
+        <label id="campo-ver" class="check"><input id="ver-senha" type="checkbox"> Mostrar senha</label>
+        <button id="ir-esqueci" type="button" class="btn-link" data-modo="esqueci" hidden>Esqueci a senha?</button>
+      </div>
       <button id="submit" class="btn btn-principal btn-bloco">Entrar</button>
     </form>
     <p id="message" class="campo-erro" role="alert"></p>
-    <small id="esqueceu">Esqueceu a senha? Peça a alguém com acesso para redefinir em Ajustes › Contas.</small>
+    <small id="esqueceu" class="texto-apoio">Esqueceu a senha? Peça a alguém com acesso para redefinir em Ajustes › Contas.</small>
+    <p class="entrar-rodape">
+      <span id="ir-criar">Não tem conta? <button type="button" class="btn-link" data-modo="criar">Criar conta</button></span>
+      <span id="ir-entrar" hidden><span id="ir-entrar-texto">Já tem conta?</span> <button type="button" class="btn-link" data-modo="entrar">Entrar</button></span>
+    </p>
   </div>
 </main>
 <script src="/static/js/login.js"></script>

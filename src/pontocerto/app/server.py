@@ -346,6 +346,21 @@ class Motor:
         self._ultimo_evento: dict | None = None
         self._fps = 0.0
         self._erro: str | None = None
+        # Com a leitura por IA ligada, o modelo antigo não lê os quadros:
+        # a tela pega a foto quando a peça para e manda para /api/analisar.
+        self.leitura_ia: Any = None
+        self._so_imagem = False
+        self._checado_em = 0.0
+
+    def _modo_so_imagem(self) -> bool:
+        agora = time.monotonic()
+        if agora - self._checado_em > 2.0:
+            self._checado_em = agora
+            try:
+                self._so_imagem = bool(self.leitura_ia is not None and self.leitura_ia.disponivel)
+            except Exception:
+                self._so_imagem = False
+        return self._so_imagem
 
     # ---------------------------------------------------------------- ciclo
     def _novo_suavizador(self):
@@ -442,6 +457,8 @@ class Motor:
             if self.camera.erro == AVISO_IMAGEM_PRETA:
                 # Inferir em cima de preto so produz palpite: melhor avisar.
                 aviso = "Imagem preta - verifique o obturador da webcam"
+            elif self._modo_so_imagem():
+                pass  # leitura por IA: a página manda a foto quando a peça para
             elif not disponivel:
                 aviso = "Modelo nao carregado - treine em scripts/02_treinar.py"
             else:
@@ -487,10 +504,14 @@ class Motor:
                     self._erro = f"falha ao registrar evento: {exc}"
 
             try:
-                overlay = desenhar_overlay(
-                    frame, caixa, veredito_dict, mapa if self.gradcam else None,
-                    fps=self._fps, aviso=aviso,
-                )
+                if self._so_imagem and aviso is None:
+                    # Leitura por IA: imagem limpa, sem textos por cima (é ela que vai para a IA).
+                    overlay = frame
+                else:
+                    overlay = desenhar_overlay(
+                        frame, caixa, veredito_dict, mapa if self.gradcam else None,
+                        fps=self._fps, aviso=aviso,
+                    )
                 jpeg = _para_jpeg(overlay)
             except Exception as exc:
                 self._erro = f"falha no overlay: {exc}"
@@ -546,6 +567,15 @@ def _ler_json(caminho: str | Path) -> Any:
 def criar_app(cfg: Any = None) -> FastAPI:
     """Monta a aplicacao FastAPI completa."""
     cfg = cfg if cfg is not None else carregar_config()
+    from pontocerto import nuvem
+    NUVEM = nuvem.ativo()
+    if NUVEM:
+        # Na Vercel só /tmp aceita escrita e ele some: o que importa vai para o Supabase.
+        cfg.app.pasta_capturas = str(nuvem.PASTA_TEMP / "capturas")
+        cfg.app.pasta_relatorios = str(nuvem.PASTA_TEMP / "relatorios")
+        cfg.app.correcoes = str(nuvem.PASTA_TEMP / "correcoes.csv")
+        cfg.banco["lote_ativo"] = None
+        cfg.banco["pendentes"] = str(nuvem.PASTA_TEMP / "pendentes.jsonl")
     cfg_banco = cfg.get("banco") or {}
 
     # ---------------------------------------------------------- ajustes
@@ -564,7 +594,6 @@ def criar_app(cfg: Any = None) -> FastAPI:
             resumo = {
                 # id do lote no Supabase; None quando o banco não está configurado.
                 "id": int(lote["id"]) if lote.get("id") is not None else None,
-                "ordem_id": lote.get("ordem_id"),
                 "codigo": lote.get("codigo"),
                 "cliente": lote.get("cliente"),
                 "modelo_peca": lote.get("modelo_peca"),
@@ -597,9 +626,11 @@ def criar_app(cfg: Any = None) -> FastAPI:
         except Exception:
             pass  # sem internet: mantem o lote lembrado, o reenvio cuida depois
 
-    @asynccontextmanager
-    async def lifespan(app: FastAPI):
-        # --- subida -------------------------------------------------------
+    def subir(app: FastAPI) -> None:
+        """Prepara estado, modelo, IA e banco. Online roda já na criação do app."""
+        if getattr(app.state, "iniciado", False):
+            return
+        app.state.iniciado = True
         app.state.cfg = cfg
         app.state.erros_import = dict(IMPORTS_FALHOS)
 
@@ -636,28 +667,48 @@ def criar_app(cfg: Any = None) -> FastAPI:
                 app.state.banco = None
                 app.state.erros_import["db"] = f"{type(exc).__name__}: {exc}"
 
-        app.state.estado.lote_ativo = _ler_json(_arquivo_lote_ativo()) or None
+        if not NUVEM:
+            app.state.estado.lote_ativo = _ler_json(_arquivo_lote_ativo()) or None
         banco = app.state.banco
         if banco is not None and banco.configurado:
             if Sincronizador is not None:
                 try:
                     sinc = Sincronizador(cfg, banco, cfg.app.pasta_capturas)
                     app.state.estado.observador = sinc.enfileirar_evento
-                    sinc.iniciar()
+                    if NUVEM:
+                        sinc.sincrono = True  # sem tarefa de fundo: grava na hora
+                    else:
+                        sinc.iniciar()
                     app.state.sincronizador = sinc
                 except Exception as exc:
                     app.state.erros_import["sincronizador"] = f"{type(exc).__name__}: {exc}"
-            threading.Thread(target=_verificacao_inicial, name="banco-teste-inicial",
-                             daemon=True).start()
+            if not NUVEM:
+                threading.Thread(target=_verificacao_inicial, name="banco-teste-inicial",
+                                 daemon=True).start()
 
         app.state.motor = Motor(cfg, app.state.camera, app.state.preditor, app.state.estado)
-        salvos = _ler_json(_arquivo_ajustes())
+        from pontocerto.app.leitura_ia import LeituraIA
+        app.state.leitura_ia = LeituraIA(cfg, lambda: app.state.cliente,
+                                         Path(cfg.app.pasta_capturas).parent / "uso_ia.json", nuvem=NUVEM)
+        app.state.motor.leitura_ia = app.state.leitura_ia
+        if NUVEM:
+            try:
+                salvos = nuvem.ler("ajustes", None)
+            except Exception:
+                salvos = None
+        else:
+            salvos = _ler_json(_arquivo_ajustes())
         if isinstance(salvos, dict):
             try:
-                aplicar_ajustes(salvos, gravar=False)
+                aplicar_ajustes({k: v for k, v in salvos.items() if k != "meta_pecas" or not NUVEM}, gravar=False)
             except Exception:
                 pass
-        app.state.motor.iniciar()  # a camera NAO e aberta automaticamente
+        if not NUVEM:
+            app.state.motor.iniciar()  # a camera NAO e aberta automaticamente
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        subir(app)
         try:
             yield
         finally:
@@ -699,7 +750,8 @@ def criar_app(cfg: Any = None) -> FastAPI:
 
     pasta_capturas = garantir_pasta(cfg.app.pasta_capturas)
     garantir_pasta(cfg.app.pasta_relatorios)
-    garantir_pasta(PASTA_STATIC)
+    if not NUVEM:
+        garantir_pasta(PASTA_STATIC)
     app.mount("/static", StaticFiles(directory=str(PASTA_STATIC)), name="static")
 
     # Fotos sem cache no navegador: uma foto apagada pelo operador nao pode
@@ -711,6 +763,11 @@ def criar_app(cfg: Any = None) -> FastAPI:
         if not re.fullmatch(r"[A-Za-z0-9_\-]+\.jpg", nome):
             return JSONResponse(status_code=404, content={"erro": "foto nao encontrada"})
         arquivo = pasta_capturas / nome
+        if NUVEM and not arquivo.is_file():
+            dados = nuvem.baixar_foto(nome)
+            if not dados:
+                return JSONResponse(status_code=404, content={"erro": "foto nao encontrada"}, headers=SEM_CACHE)
+            return Response(dados, media_type="image/jpeg", headers=SEM_CACHE)
         if not arquivo.is_file():
             return JSONResponse(status_code=404, content={"erro": "foto nao encontrada"},
                                 headers=SEM_CACHE)
@@ -782,6 +839,7 @@ def criar_app(cfg: Any = None) -> FastAPI:
             "gradcam": bool(app.state.motor.gradcam),
             "meta_pecas": int(app.state.estado.meta_pecas),
             "tecido": app.state.motor.tecido,
+            "leitura_limite_diario": int(getattr(getattr(app.state, "leitura_ia", None), "limite_diario", 0)),
         }
 
     @app.post("/api/ajustes")
@@ -815,6 +873,13 @@ def criar_app(cfg: Any = None) -> FastAPI:
                 app.state.estado.definir_meta(int(corpo["meta_pecas"]))
             except (TypeError, ValueError):
                 pass
+        if corpo.get("leitura_limite_diario") is not None and getattr(app.state, "leitura_ia", None) is not None:
+            try:
+                limite = max(0, min(5000, int(corpo["leitura_limite_diario"])))
+                app.state.leitura_ia.limite_diario = limite
+                cfg.llm["leitura_limite_diario"] = limite
+            except (TypeError, ValueError):
+                pass
         if "tecido" in corpo:
             tecido = corpo["tecido"]
             app.state.motor.tecido = str(tecido) if tecido else None
@@ -823,6 +888,11 @@ def criar_app(cfg: Any = None) -> FastAPI:
         atuais = ler_ajustes()
         if gravar:
             # Guarda em disco para valer depois que o servidor reiniciar.
+            if NUVEM:
+                try:
+                    nuvem.gravar("ajustes", atuais)
+                except Exception:
+                    pass
             try:
                 arquivo = _arquivo_ajustes()
                 garantir_pasta(arquivo.parent)
@@ -834,6 +904,8 @@ def criar_app(cfg: Any = None) -> FastAPI:
     # ------------------------------------------------------------- camera
     @app.get("/api/camera/dispositivos")
     def dispositivos():
+        if NUVEM:
+            return {"dispositivos": []}  # online não existe "câmera do servidor"
         try:
             return {"dispositivos": listar_dispositivos(5)}
         except Exception as exc:
@@ -903,7 +975,17 @@ def criar_app(cfg: Any = None) -> FastAPI:
             "gradcam": instantaneo["gradcam"],
             "erro": instantaneo["erro"],
             "lote_ativo": app.state.estado.lote_ativo,
+            "leitura": _info_leitura(),
         }
+
+    def _info_leitura() -> dict:
+        leitura = getattr(app.state, "leitura_ia", None)
+        if leitura is None:
+            return {"modo": "local", "motivo": "leitura por IA indisponível"}
+        motivo = leitura.motivo_indisponivel()
+        cliente = getattr(app.state, "cliente", None)
+        return {"modo": "local" if motivo else "ia", "motivo": motivo,
+                "modelo": getattr(cliente, "modelo_visao", None), **leitura.uso()}
 
     @app.post("/api/gradcam")
     def alternar_gradcam(corpo: dict = Body(default={})):
@@ -947,6 +1029,28 @@ def criar_app(cfg: Any = None) -> FastAPI:
         if frame is None or frame.size == 0:
             return {"erro": "Nao foi possivel decodificar a imagem (envie JPG ou PNG)."}
 
+        leitura_ia = getattr(app.state, "leitura_ia", None)
+        aviso = None
+        if leitura_ia is not None and leitura_ia.disponivel:
+            from starlette.concurrency import run_in_threadpool
+            try:
+                predicao_dict, marcada, leitura = await run_in_threadpool(leitura_ia.ler, frame)
+            except Exception as exc:
+                aviso = ("A leitura por IA falhou agora (" + str(exc)[:140] + "). "
+                         "Usei a leitura local, que erra bastante em fotos reais: confira a peça.")
+            else:
+                evento = app.state.estado.registrar_evento(predicao_dict, frame, origem=origem)
+                return {
+                    "predicao": predicao_dict,
+                    "heatmap": _data_uri(marcada) if leitura.get("onde") else None,
+                    "imagem": _data_uri(frame),
+                    "evento_id": evento.id,
+                    "evento": evento.to_dict(),
+                    "fonte": "ia",
+                }
+        elif leitura_ia is not None and leitura_ia.ativa and getattr(app.state.cliente, "configurado", False):
+            aviso = leitura_ia.motivo_indisponivel() + " Usei a leitura local, que erra bastante em fotos reais."
+
         preditor = app.state.preditor
         if not getattr(preditor, "disponivel", False):
             return {"erro": getattr(preditor, "erro", None) or "Modelo nao carregado."}
@@ -972,6 +1076,8 @@ def criar_app(cfg: Any = None) -> FastAPI:
             "imagem": _data_uri(frame),
             "evento_id": evento.id,
             "evento": evento.to_dict(),
+            "fonte": "local",
+            "aviso": aviso,
         }
 
     # ------------------------------------------------------------ eventos
@@ -999,8 +1105,9 @@ def criar_app(cfg: Any = None) -> FastAPI:
         # A decisão sai da comparação com a sugestão: assim nunca grava
         # "confirmada" com uma classe diferente da que a IA sugeriu.
         decisao = 'confirmada' if classe == ev.classe_key else 'corrigida'
-        app.state.estado.revisar_humano(evento_id, classe, decisao, observacao, getattr(request.state, 'user', 'operador-local'))
-        return {'ok': True, 'evento': ev.to_dict()}
+        atualizado = app.state.estado.revisar_humano(evento_id, classe, decisao, observacao,
+                                                     getattr(request.state, 'user', 'operador-local'))
+        return {'ok': True, 'evento': (atualizado or ev).to_dict()}
 
     @app.get("/api/inspecoes/{evento_id}/foto", include_in_schema=False)
     def foto_inspecao(evento_id: str):
@@ -1056,6 +1163,29 @@ def criar_app(cfg: Any = None) -> FastAPI:
             except Exception as exc:
                 nuvem["erro"] = banco.mascarar(str(exc))
         return {"ok": True, "removida_local": bool(resultado), "nuvem": nuvem}
+
+    @app.delete("/api/eventos/{evento_id}")
+    def excluir_evento(evento_id: str):
+        """Exclui a peça de vez: histórico, números, foto e o registro no Supabase."""
+        ev = app.state.estado.excluir_evento(evento_id)
+        if ev is None:
+            return JSONResponse(status_code=404, content={"erro": "Peça não encontrada."})
+        motor = app.state.motor
+        with motor._lock:
+            if motor._ultimo_evento and motor._ultimo_evento.get("id") == evento_id:
+                motor._ultimo_evento = None
+        sinc = app.state.sincronizador
+        if sinc is not None:
+            sinc.esquecer(evento_id)
+        banco = app.state.banco
+        nuvem = {"tentou": False, "removida": False, "erro": None}
+        if banco is not None and banco.configurado and ev.lote_id is not None:
+            nuvem["tentou"] = True
+            try:
+                nuvem["removida"] = banco.excluir_inspecao(evento_id)
+            except Exception as exc:
+                nuvem["erro"] = banco.mascarar(str(exc))
+        return {"ok": True, "nuvem": nuvem}
 
     @app.post("/api/eventos/{evento_id}/diagnostico")
     def diagnostico_evento(evento_id: str, corpo: dict = Body(default={})):
@@ -1141,55 +1271,9 @@ def criar_app(cfg: Any = None) -> FastAPI:
         resultado["lote_ativo"] = app.state.estado.lote_ativo
         return resultado
 
-    # ------------------------------------------------------------ lote ativo
-    def _lote_no_banco(dados: dict) -> int | None:
-        """Garante o lote da OP no Supabase (pelo código) e devolve o id.
-
-        Sem banco configurado ou sem conexão devolve None: a inspeção continua
-        registrando o lote localmente, só não envia para o banco.
-        """
-        banco = app.state.banco
-        if banco is None or not banco.configurado:
-            return None
-        try:
-            codigo = str(dados["codigo"]).strip()
-            existente = next((l for l in banco.listar_lotes() if str(l.get("codigo")) == codigo), None)
-            if existente:
-                if existente.get("status") == "aberto":
-                    banco.atualizar_status_lote(int(existente["id"]), "em_inspecao")
-                return int(existente["id"])
-            nome = str(dados.get("cliente") or "Sem cliente").strip()
-            cliente = next((c for c in banco.listar_clientes() if str(c.get("nome")).casefold() == nome.casefold()), None)
-            if cliente is None:
-                cliente = banco.criar_cliente(nome)
-            novo = banco.criar_lote({
-                "cliente_id": cliente["id"], "codigo": codigo, "modelo_peca": dados.get("modelo_peca") or "-",
-                "tecido": dados.get("tecido"), "quantidade": dados.get("quantidade") or 1,
-                "prazo_entrega": dados.get("prazo_entrega"),
-            })
-            banco.atualizar_status_lote(int(novo["id"]), "em_inspecao")
-            return int(novo["id"])
-        except Exception:
-            return None
-
-    def ativar_lote(dados: dict | None) -> dict | None:
-        """Põe uma OP da Gestão em inspeção (None = parar de gravar em lote)."""
-        if not dados:
-            return _definir_lote_ativo(None)
-        return _definir_lote_ativo({**dados, "id": _lote_no_banco(dados)})
-
-    app.state.ativar_lote = ativar_lote
-
-    @app.get("/api/lotes/ativo")
-    def ler_lote_ativo():
-        return {"lote": app.state.estado.lote_ativo}
-
-    @app.post("/api/lotes/ativo")
-    def parar_lote_ativo(corpo: dict = Body(default={})):
-        """Só para de gravar em lote; escolher a OP é feito pela Gestão."""
-        if (corpo or {}).get("lote_id") not in (None, ""):
-            return JSONResponse(status_code=400, content={"erro": "Escolha o lote pela lista de OPs."})
-        return {"lote": ativar_lote(None)}
+    # ------------------------------------------------------------ lotes
+    from pontocerto.app.lotes import registrar as registrar_lotes
+    registrar_lotes(app, _definir_lote_ativo)
 
     # ----------------------------------------------------------------- LLM
     @app.get("/api/llm/status")
@@ -1223,6 +1307,9 @@ def criar_app(cfg: Any = None) -> FastAPI:
         return resultado
 
     # ----------------------------------------------------------- relatorio
+    # Online a subida roda já aqui: a Vercel pode não chamar o lifespan.
+    if NUVEM:
+        subir(app)
     return app
 
 

@@ -1,0 +1,10 @@
+# Tudo do servidor + o que é preciso para treinar e usar o modelo local (PyTorch).
+-r requirements.txt
+
+torch>=2.2
+torchvision>=0.17
+pandas>=2.2
+scikit-learn>=1.4
+matplotlib>=3.8
+tqdm>=4.66
+jinja2>=3.1

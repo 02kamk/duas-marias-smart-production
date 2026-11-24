@@ -11,10 +11,10 @@ create table if not exists public.lotes (
     id              bigint generated always as identity primary key,
     cliente_id      bigint not null references public.clientes(id) on delete restrict,
     codigo          text not null unique,               -- ex.: "L-2026-001"
-    modelo_peca     text not null,                      -- ex.: "Camiseta basica gola careca"
+    modelo_peca     text,                               -- ex.: "Camiseta basica gola careca" (opcional)
     tecido          text,                               -- ex.: "Algodao"
     quantidade      integer not null check (quantidade > 0),
-    prazo_entrega   date not null,
+    prazo_entrega   date,                               -- opcional
     limite_defeito  numeric(5,4) not null default 0.05  -- alerta quando a taxa passar disso (5%)
                     check (limite_defeito > 0 and limite_defeito < 1),
     status          text not null default 'aberto'
@@ -61,6 +61,10 @@ alter table public.inspecoes add constraint classes_validas check (
                        'thread_sagging','puckering','stain_damage','needle_mark','bobbin_pullup',
                        'overlapped_stitch','fabric_defect'))
 );
+
+-- Lote simples: so codigo, cliente e quantidade sao obrigatorios.
+alter table public.lotes alter column modelo_peca drop not null;
+alter table public.lotes alter column prazo_entrega drop not null;
 
 create index if not exists idx_inspecoes_lote_data on public.inspecoes (lote_id, criado_em);
 create index if not exists idx_lotes_cliente on public.lotes (cliente_id);

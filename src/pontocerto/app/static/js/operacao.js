@@ -1,6 +1,6 @@
 'use strict';
 // Partes operacionais fora da inspeção: aplicativo instalável, sair da conta,
-// menu "Mais" do celular e resumo dos relatórios.
+// menu "Mais" do celular e contas em Ajustes.
 document.addEventListener('DOMContentLoaded', () => {
   const $ = id => document.getElementById(id);
   let installPrompt = null;
@@ -49,10 +49,17 @@ document.addEventListener('DOMContentLoaded', () => {
   const avisar = (texto, tipo) => { if (window.PontoCerto) window.PontoCerto.toast(texto, tipo); };
   const REGRA_SENHA = 'A senha precisa de 8 caracteres ou mais, com maiúscula, minúscula, número e símbolo.';
 
-  function linhaConta(email, atual) {
+  function linhaConta(conta, atual, souAdmin) {
+    const email = conta.email;
     const linha = document.createElement('div'); linha.className = 'conta-linha';
-    const nome = document.createElement('span');
-    nome.textContent = email + (email === atual ? ' (você)' : '');
+    const nome = document.createElement('span'); nome.className = 'conta-nome';
+    const inicial = document.createElement('span'); inicial.className = 'avatar'; inicial.setAttribute('aria-hidden', 'true');
+    inicial.textContent = email.charAt(0).toUpperCase();
+    const textoEmail = document.createElement('span'); textoEmail.textContent = email;
+    nome.append(inicial, textoEmail);
+    if (email === atual) { const voce = document.createElement('small'); voce.className = 'etiqueta'; voce.textContent = 'você'; nome.append(voce); }
+    if (conta.admin) { const adm = document.createElement('small'); adm.className = 'etiqueta etiqueta-neutra'; adm.textContent = 'administrador'; nome.append(adm); }
+    if (!conta.aprovado) { const pend = document.createElement('small'); pend.className = 'etiqueta etiqueta-atencao'; pend.textContent = 'aguardando aprovação'; nome.append(pend); }
     const acoes = document.createElement('span'); acoes.className = 'linha-botoes';
     const area = document.createElement('div'); area.className = 'conta-form'; area.hidden = true;
 
@@ -79,9 +86,30 @@ document.addEventListener('DOMContentLoaded', () => {
       cancelar.onclick = () => { area.hidden = true; };
       area.append(campo, salvar, cancelar); area.hidden = false; senha.focus();
     };
-    acoes.append(redefinir);
+    // Conta nova: o administrador aprova ou recusa.
+    if (souAdmin && !conta.aprovado) {
+      const aprovar = document.createElement('button');
+      aprovar.type = 'button'; aprovar.className = 'btn btn-principal btn-pequeno'; aprovar.textContent = 'Aprovar';
+      aprovar.onclick = async () => {
+        aprovar.disabled = true;
+        try { await api('/api/auth/aprovar', { email }); avisar('Acesso aprovado. ' + email + ' já pode entrar.', 'ok'); listarContas(); }
+        catch (err) { avisar(err.message, 'erro'); aprovar.disabled = false; }
+      };
+      const recusar = document.createElement('button');
+      recusar.type = 'button'; recusar.className = 'btn btn-quieto btn-pequeno'; recusar.textContent = 'Recusar';
+      recusar.onclick = async () => {
+        recusar.disabled = true;
+        try { await api('/api/auth/remove', { email }); avisar('Pedido de acesso recusado.', 'ok'); listarContas(); }
+        catch (err) { avisar(err.message, 'erro'); recusar.disabled = false; }
+      };
+      acoes.append(aprovar, recusar);
+      linha.append(nome, acoes);
+      return linha;
+    }
+    // A própria senha se troca em Perfil › Meus dados; aqui é só para ajudar outra pessoa.
+    if (souAdmin && email !== atual) acoes.append(redefinir);
 
-    if (email !== atual) {
+    if (souAdmin && email !== atual) {
       const remover = document.createElement('button');
       remover.type = 'button'; remover.className = 'btn btn-quieto'; remover.textContent = 'Remover';
       remover.onclick = () => {
@@ -108,59 +136,13 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!host) return;
     try {
       const d = await api('/api/auth/users');
-      host.replaceChildren(...d.users.map(email => linhaConta(email, d.atual)));
+      const contas = (d.contas || d.users.map(email => ({ email, aprovado: true })))
+        .sort((a, b) => Number(a.aprovado) - Number(b.aprovado));
+      host.replaceChildren(...contas.map(c => linhaConta(c, d.atual, d.admin)));
     } catch (e) { host.textContent = e.message; }
   }
-  if ($('form-conta')) $('form-conta').addEventListener('submit', async e => {
-    e.preventDefault();
-    const botao = e.target.querySelector('button');
-    botao.disabled = true;
-    try {
-      await api('/api/auth/register', { email: $('conta-email').value, password: $('conta-senha').value });
-      e.target.reset();
-      if ($('nova-conta')) $('nova-conta').open = false;
-      listarContas();
-      avisar('Conta criada. Passe o e-mail e a senha inicial para a pessoa.', 'ok');
-    } catch (err) { avisar(err.message, 'erro'); } finally { botao.disabled = false; }
-  });
-  window.addEventListener('hashchange', () => { if (location.hash === '#ajustes') listarContas(); });
-  if (location.hash === '#ajustes') listarContas();
-
-  // Relatórios: atualiza sozinho ao abrir a página ou trocar o dia.
-  async function reportSummary() {
-    const dia = $('relatorio-dia');
-    if (!dia) return;
-    if (!dia.value) {
-      const d = new Date();
-      dia.value = [d.getFullYear(), String(d.getMonth() + 1).padStart(2, '0'), String(d.getDate()).padStart(2, '0')].join('-');
-    }
-    const suffix = '?dia=' + encodeURIComponent(dia.value);
-    $('relatorio-pdf').href = '/api/relatorios/pdf' + suffix;
-    try {
-      const data = await api('/api/relatorios/resumo' + suffix);
-      const host = $('relatorio-indicadores');
-      host.replaceChildren();
-      for (const [title, value] of [['Inspeções', data.total], ['Com defeito', data.defeitos], ['Conferidas', data.revisadas], ['Aguardando conferência', data.pendentes]]) {
-        const card = document.createElement('article');
-        const label = document.createElement('span'); label.textContent = title;
-        const num = document.createElement('strong'); num.textContent = value;
-        card.append(label, num); host.append(card);
-      }
-      const classes = $('relatorio-classes');
-      classes.replaceChildren();
-      if (!data.total) {
-        const p = document.createElement('p'); p.className = 'texto-apoio'; p.textContent = 'Nenhuma inspeção neste dia.';
-        classes.append(p);
-      }
-      for (const [label, count] of Object.entries(data.classes)) {
-        const row = document.createElement('p'); row.textContent = label + ': ' + count;
-        const bar = document.createElement('progress'); bar.max = Math.max(1, data.total); bar.value = count; bar.setAttribute('aria-label', label);
-        row.append(bar); classes.append(row);
-      }
-    } catch (e) { $('relatorio-indicadores').textContent = e.message; }
-  }
-  if ($('relatorio-dia')) $('relatorio-dia').onchange = reportSummary;
-  window.addEventListener('hashchange', () => { if (location.hash === '#relatorios') reportSummary(); });
-  if (location.hash === '#relatorios') reportSummary();
+  window.listarContas = listarContas;
+  // Perfil pode ter aberto direto na aba Ajustes antes deste arquivo terminar de carregar.
+  if ($('aba-ajustes') && !$('aba-ajustes').hidden) listarContas();
 
 });

@@ -1,4 +1,4 @@
-"""Sobe o sistema Duas Marias (inspeção + gestão, com login).
+"""Sobe o sistema Ponto Certo (inspeção + gestão, com login).
 
 Uso:
     python scripts/rodar.py                 # só neste computador

@@ -400,16 +400,16 @@ class BancoSupabase:
         )
 
     def criar_lote(self, dados: dict) -> dict:
-        """Cadastra um lote. Campos: cliente_id, codigo, modelo_peca, quantidade,
-        prazo_entrega (AAAA-MM-DD) obrigatorios; tecido, limite_defeito, observacoes opcionais."""
-        faltando = [c for c in ("cliente_id", "codigo", "modelo_peca", "quantidade", "prazo_entrega")
-                    if dados.get(c) in (None, "")]
+        """Cadastra um lote. Campos: cliente_id, codigo, quantidade obrigatorios;
+        modelo_peca, prazo_entrega (AAAA-MM-DD), tecido, limite_defeito, observacoes opcionais."""
+        faltando = [c for c in ("cliente_id", "codigo", "quantidade") if dados.get(c) in (None, "")]
         if faltando:
             raise ErroBanco("campos obrigatorios ausentes: " + ", ".join(faltando))
         try:
             quantidade = int(dados["quantidade"])
             cliente_id = int(dados["cliente_id"])
-            prazo = date.fromisoformat(str(dados["prazo_entrega"])[:10])
+            prazo = (date.fromisoformat(str(dados["prazo_entrega"])[:10])
+                     if dados.get("prazo_entrega") not in (None, "") else None)
         except (TypeError, ValueError):
             raise ErroBanco("quantidade/cliente_id devem ser numeros e prazo_entrega AAAA-MM-DD") from None
         if quantidade <= 0:
@@ -428,7 +428,7 @@ class BancoSupabase:
                 "insert into public.lotes (cliente_id, codigo, modelo_peca, tecido, quantidade, "
                 "prazo_entrega, limite_defeito, observacoes) "
                 "values (%s, %s, %s, %s, %s, %s, %s, %s) returning id",
-                (cliente_id, str(dados["codigo"]).strip(), str(dados["modelo_peca"]).strip(),
+                (cliente_id, str(dados["codigo"]).strip(), (str(dados.get("modelo_peca") or "").strip() or None),
                  (str(dados.get("tecido") or "").strip() or None), quantidade, prazo, limite,
                  (str(dados.get("observacoes") or "").strip() or None)),
                 contexto="falha ao cadastrar lote", buscar="uma",
@@ -619,6 +619,20 @@ class BancoSupabase:
             return False
         self.apagar_fotos([linha["imagem_path"]])
         self.atualizar_inspecao(str(evento_id), imagem_path=None)
+        return True
+
+    def excluir_inspecao(self, evento_id: str) -> bool:
+        """Apaga a inspeção do banco e a foto dela no bucket. False se não estava no banco."""
+        linha = self._executar(
+            "select imagem_path from public.inspecoes where evento_id = %s",
+            (str(evento_id),), contexto="falha ao procurar a inspecao", buscar="uma",
+        )
+        if not linha:
+            return False
+        if linha.get("imagem_path"):
+            self.apagar_fotos([linha["imagem_path"]])
+        self._executar("delete from public.inspecoes where evento_id = %s", (str(evento_id),),
+                       contexto="falha ao excluir a inspecao", buscar="nenhuma")
         return True
 
     def apagar_fotos(self, caminhos: list[str]) -> None:

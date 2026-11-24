@@ -70,6 +70,9 @@ class Sincronizador:
         self._thread: threading.Thread | None = None
         self._offline_ate = 0.0
         self._fotos_enviadas: set[str] = set()
+        self._excluidos: set[str] = set()
+        # Online não há tarefa de fundo: cada peça é gravada dentro do próprio pedido.
+        self.sincrono = False
 
         self.enviados = 0
         self.ultimo_erro: str | None = None
@@ -113,6 +116,9 @@ class Sincronizador:
         if getattr(evento, "lote_id", None) is None:
             return False
         item = self.instantaneo(evento)
+        if self.sincrono:
+            self._processar(item)
+            return True
         try:
             self._fila.put_nowait(item)
         except queue.Full:
@@ -203,9 +209,15 @@ class Sincronizador:
         self.ultimo_envio = datetime.now().isoformat(timespec="seconds")
         return True
 
+    def esquecer(self, evento_id: str) -> None:
+        """Peça excluída: o que ainda estiver na fila ou no arquivo não vai mais para o banco."""
+        self._excluidos.add(str(evento_id))
+
     def _enviar(self, item: dict) -> None:
         banco = self._banco
         evento_id = str(item["evento_id"])
+        if evento_id in self._excluidos:
+            return  # conta como enviado: sai da fila e do arquivo de pendentes
         lote_id = int(item["lote_id"])
 
         caminho = None

@@ -2,7 +2,7 @@
 
 Uso:
     python scripts/testar.py                # todos os testes
-    python scripts/testar.py management     # só tests/test_management.py
+    python scripts/testar.py acceptance     # só tests/test_acceptance.py
 """
 from pathlib import Path
 import sys

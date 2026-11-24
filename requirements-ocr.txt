@@ -1,2 +1,0 @@
-# Leitura local de OPs; confira os campos manualmente antes de cadastrar.
-rapidocr-onnxruntime==1.2.3

@@ -1,29 +1,23 @@
-# Nucleo de visao computacional
-torch>=2.2
-torchvision>=0.17
-opencv-python>=4.9
-numpy>=1.26
-pillow>=10.2
+# Servidor do Ponto Certo (é o que a Vercel instala).
+# Para treinar ou usar o modelo local, instale também requirements-treino.txt.
 
-# Dados, metricas e graficos
-pandas>=2.2
-scikit-learn>=1.4
-matplotlib>=3.8
-tqdm>=4.66
-pyyaml>=6.0
-
-# Aplicacao web (API + interface)
+# Aplicação web
 fastapi>=0.110
 uvicorn[standard]>=0.29
 python-multipart>=0.0.9
-jinja2>=3.1
+pyyaml>=6.0
 
-# Cliente do OpenRouter (API compativel com a da OpenAI)
+# Imagens (foto da peça, marcação do defeito)
+numpy>=1.26
+opencv-python-headless>=4.9
+pillow>=10.2
+
+# IA de visão (OpenRouter), Supabase Auth e Storage
 httpx>=0.27
 
-# Banco de dados (Supabase / PostgreSQL) - opcional, o sistema roda sem
+# Banco de dados (Supabase / PostgreSQL)
 psycopg[binary]>=3.2
 psycopg_pool>=3.2
 
-# Exportação dos relatórios operacionais em PDF
+# Relatórios em PDF
 reportlab>=4.2
