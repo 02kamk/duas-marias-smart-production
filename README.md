@@ -71,6 +71,8 @@ O sistema roda na Vercel em "modo online": sem disco permanente e sem tarefa de 
 2. Em **Settings › Environment Variables**, cadastre: `SUPABASE_DB_URL`, `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `SUPABASE_BUCKET`, `OPENROUTER_API_KEY` e `ADMIN_EMAILS` (e-mails de quem aprova contas novas, separados por vírgula). Sem `ADMIN_EMAILS`, qualquer pessoa na internet consegue criar conta e entrar.
 3. Faça o deploy. No Supabase, em **Authentication › URL Configuration**, cadastre `https://SEU-ENDERECO.vercel.app/redefinir-senha` em *Redirect URLs*.
 
+**Publicação automática:** a Vercel acompanha a `main` de [raffamichels/duas-marias-smart-production](https://github.com/raffamichels/duas-marias-smart-production), que é só um espelho da `main` deste repositório. A Action `espelho.yml` de lá (na branch `espelho`) copia a `main` a cada 30 minutos; para publicar na hora, rode `gh workflow run espelho.yml -R raffamichels/duas-marias-smart-production`. Não faça commits na `main` do espelho. Endereço: https://duas-marias-smart-production.vercel.app
+
 Contas novas ficam "aguardando aprovação" até um administrador aprovar em **Perfil › Ajustes › Contas**. No plano gratuito do Supabase, o projeto pausa depois de uma semana sem uso; é só reativar no painel.
 
 ## Testar
