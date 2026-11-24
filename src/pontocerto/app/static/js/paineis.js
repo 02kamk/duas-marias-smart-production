@@ -168,6 +168,7 @@
     $('relatorio-pdf').href = '/api/relatorios/pdf' + qs;
     let r;
     try { r = await api('/api/relatorios/resumo' + qs); } catch (e) { avisar(e.message, 'erro'); return; }
+    $('rel-escopo').hidden = r.escopo !== 'equipe';
     $('rel-total').textContent = num(r.total);
     $('rel-aprovadas').textContent = num(r.aprovadas);
     $('rel-defeitos').textContent = num(r.defeitos);

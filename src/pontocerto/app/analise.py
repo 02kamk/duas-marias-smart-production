@@ -270,7 +270,12 @@ def registrar(app: FastAPI) -> None:
         nome_m = next((m["nome"] for m in r["opcoes"]["maquinas"] if m["chave"] == maquina), None)
         dec = lambda v: f"{v:.1f}".replace(".", ",")
         ritmo = lambda v: f"{dec(v)}/h" if v is not None else "—"
-        secoes = [{
+        secoes = []
+        if 2 <= len(r["por_dia"]) <= 63:
+            secoes.append({"titulo": "Produção por dia", "grafico_dias": [
+                (date.fromisoformat(d["data"]).strftime("%d/%m"), d["total"] - d["defeitos"], d["defeitos"])
+                for d in r["por_dia"]]})
+        secoes += [{
             "titulo": "Por pessoa",
             "texto": "Ritmo = peças por hora de trabalho (pausas de mais de 15 minutos não contam).",
             "tabela": {"colunas": ["Pessoa", "Peças", "Ritmo", "Com defeito", "Dias", "Máquina mais usada"],
@@ -295,7 +300,7 @@ def registrar(app: FastAPI) -> None:
         dados = relatorio(
             rotulo="Análise da equipe", sobretitulo="Produtividade e qualidade",
             titulo="Análise da equipe", subtitulo=f"Período de {periodo}",
-            ficha=[("Período", periodo), ("Pessoa", nome_u or "Todas"), ("Máquina", nome_m or "Todas"),
+            ficha=[("Pessoa", nome_u or "Todas"), ("Máquina", nome_m or "Todas"),
                    ("Horas de trabalho", f'{dec(t["horas_ativas"])} h')],
             indicadores=[("Peças", numero(t["inspecionadas"]), None),
                          ("Ritmo", ritmo(t["pecas_por_hora"]), "peças por hora"),

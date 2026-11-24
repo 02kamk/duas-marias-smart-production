@@ -69,77 +69,68 @@ def _br(d: date) -> str:
     return d.strftime("%d/%m/%Y")
 
 
+def numero_txt(n: int) -> str:
+    return "—" if not n else f"{n:,}".replace(",", ".")
+
+
 def registrar(app: FastAPI) -> None:
     from pontocerto.app.maquinas import quem
 
-    def eventos(de: date, ate: date, request: Request):
-        """Só as peças da conta que pede (cada pessoa vê as próprias)."""
+    def eventos(de: date, ate: date, request: Request, equipe: bool = False):
+        """Peças da conta que pede; com `equipe`, o administrador recebe as de todas as contas."""
         email, admin = quem(app, request)
-        return app.state.estado.eventos_periodo(de.isoformat(), ate.isoformat(), email, admin)
+        return app.state.estado.eventos_periodo(de.isoformat(), ate.isoformat(), email, admin,
+                                                todos=bool(equipe and admin))
+
+    def nomes(request: Request):
+        """email -> nome da pessoa (o começo do e-mail quando ela não pôs nome)."""
+        contas = getattr(app.state, "accounts", None)
+        try:
+            perfis = contas.perfis() if contas is not None else {}
+        except Exception:
+            perfis = {}
+
+        def nome_de(email):
+            if not email:
+                return "Sem conta"
+            return (perfis.get(email) or {}).get("nome") or email.split("@")[0]
+        return nome_de
 
     @app.get("/api/relatorios/resumo")
     def resumo(request: Request, de: date | None = None, ate: date | None = None, dia: date | None = None):
         de, ate = _periodo(de, ate, dia)
-        return {"de": de.isoformat(), "ate": ate.isoformat(), **resumir(eventos(de, ate, request))}
+        _, admin = quem(app, request)
+        return {"de": de.isoformat(), "ate": ate.isoformat(),
+                "escopo": "equipe" if admin and getattr(app.state, "accounts", None) else "conta",
+                **resumir(eventos(de, ate, request, equipe=True))}
 
     @app.get("/api/relatorios/pdf")
     def pdf(request: Request, de: date | None = None, ate: date | None = None, dia: date | None = None):
-        from pontocerto.app.pdf import numero, pct, pecas, relatorio
+        from pontocerto.app.pdf import relatorio
+        from pontocerto.app.relatorio_pdf import NOTA, conteudo
         de, ate = _periodo(de, ate, dia)
-        lista = eventos(de, ate, request)
-        r = resumir(lista)
+        email, admin = quem(app, request)
+        nome_de = nomes(request)
+        equipe = bool(admin and getattr(app.state, "accounts", None))
+        c = conteudo(eventos(de, ate, request, equipe=True), nome_de, de=de, ate=ate)
         periodo = _br(de) if de == ate else f"{_br(de)} a {_br(ate)}"
-        lotes = [l["codigo"] for l in r["por_lote"] if l["codigo"]]
-        secoes = [{
-            "titulo": "Defeitos por tipo",
-            "texto": "Participação de cada tipo no total de peças com defeito.",
-            "barras": [(d["nome"], d["parcela"], f'{pecas(d["quantidade"])} · {pct(d["parcela"])}')
-                       for d in r["defeitos_por_tipo"]],
-            "vazio": "Nenhum defeito no período." if r["total"] else "Nenhuma peça inspecionada no período.",
-        }]
-        if r["por_lote"]:
-            secoes.append({"titulo": "Por lote", "tabela": {
-                "colunas": ["Lote", "Inspecionadas", "Com defeito", "% com defeito"],
-                "linhas": [[l["codigo"] or "Sem lote", numero(l["inspecionadas"]), numero(l["defeitos"]), pct(l["taxa_defeito"])]
-                           for l in r["por_lote"]],
-                "larguras": [0.4, 0.2, 0.2, 0.2], "direita": (1, 2, 3)}})
-        if len(r["por_dia"]) > 1:
-            secoes.append({"titulo": "Por dia", "tabela": {
-                "colunas": ["Dia", "Inspecionadas", "Com defeito", "% com defeito"],
-                "linhas": [[_br(date.fromisoformat(d["data"])), numero(d["total"]), numero(d["defeitos"]),
-                            pct(d["defeitos"] / d["total"] if d["total"] else 0)] for d in r["por_dia"]],
-                "larguras": [0.4, 0.2, 0.2, 0.2], "direita": (1, 2, 3)}})
-        com_defeito = [e for e in lista if e.classe_final != "normal"]
-        if com_defeito:
-            def situacao(e):
-                if e.revisao_humana:
-                    return "Corrigida" if (e.revisao_humana.get("decisao") == "corrigida") else "Confirmada"
-                return "Aguardando conferência" if e.precisa_revisao else "Automática"
-            secoes.append({"titulo": "Peças com defeito",
-                           "texto": pecas(len(com_defeito)) + (", mostrando as 300 mais recentes." if len(com_defeito) > 300 else "."),
-                           "tabela": {
-                "colunas": ["Data e hora", "Lote", "Defeito", "Conferência"],
-                "linhas": [[datetime.fromtimestamp(e.timestamp).strftime("%d/%m/%Y %H:%M"), e.lote_codigo or "Sem lote",
-                            _nome(e.classe_final), situacao(e)] for e in com_defeito[:300]],
-                "larguras": [0.22, 0.2, 0.33, 0.25]}})
         dados = relatorio(
-            rotulo="Relatório de inspeções",
+            rotulo="Relatório de inspeções · " + periodo,
             sobretitulo="Relatório de qualidade",
             titulo="Inspeções de costura",
-            subtitulo=f"Período de {periodo}",
-            ficha=[("Período", periodo), ("Lotes no período", ", ".join(lotes[:6]) + ("..." if len(lotes) > 6 else "") or "Sem lote"),
-                   ("Peças conferidas por uma pessoa", f'{numero(r["conferidas"])} (corrigidas: {numero(r["corrigidas"])})'),
-                   ("Aguardando conferência", numero(r["pendentes"]))],
-            indicadores=[("Inspecionadas", numero(r["total"]), None),
-                         ("Aprovadas", numero(r["aprovadas"]), pct(1 - r["taxa_defeito"]) if r["total"] else None),
-                         ("Com defeito", numero(r["defeitos"]), pct(r["taxa_defeito"]) if r["total"] else None),
-                         ("Conferidas", numero(r["conferidas"]), None)],
-            secoes=secoes,
-            nota='Cada peça foi fotografada e lida por um modelo de inteligência artificial de visão, que indica se há defeito de costura ou de tecido e qual é. Peças com defeito ou com leitura incerta passam por conferência humana; quando a pessoa corrigiu a leitura, vale a classe corrigida. Os percentuais são calculados sobre as peças inspecionadas no período e não substituem a inspeção final do cliente.',
+            subtitulo=(f"Período de {periodo}" if de != ate else f"Dia {periodo}")
+                      + (" · toda a equipe" if equipe else (f" · {nome_de(email)}" if email else "")),
+            ficha=[("Pessoas", numero_txt(c["pessoas"])),
+                   ("Máquinas", numero_txt(c["maquinas"])), ("Lotes", numero_txt(c["lotes"]))],
+            indicadores=c["indicadores"],
+            secoes=c["secoes"],
+            nota=NOTA,
         )
         nome = f"inspecoes-{de.isoformat()}" + ("" if de == ate else f"-a-{ate.isoformat()}")
         return Response(dados, media_type="application/pdf",
                         headers={"Content-Disposition": f'attachment; filename="{nome}.pdf"'})
+
+    app.state.nomes_pessoas = nomes
 
     @app.get("/api/perfil/atividade")
     def minha_atividade(request: Request):

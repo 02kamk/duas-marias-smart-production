@@ -108,6 +108,22 @@ class ContasEMaquinasTest(unittest.TestCase):
             self.assertEqual(c.get('/api/analise', params={'usuario': 'ana@example.com'}).json()['totais']['inspecionadas'], 1)
             self.assertEqual(c.get('/api/analise', params={'maquina': m2['id']}).json()['totais']['inspecionadas'], 2)
             self.assertTrue(c.get('/api/analise/pdf').content.startswith(b'%PDF'))
+            # O relatório do administrador cobre a equipe e diz quem fez e em qual máquina.
+            self.assertEqual(c.get('/api/relatorios/resumo').json()['total'], 3)
+            self.assertTrue(c.get('/api/relatorios/pdf').content.startswith(b'%PDF'))
+            from pontocerto.app.relatorio_pdf import conteudo
+            todos = c.app.state.estado.eventos_periodo('0000-01-01', '9999-12-31', todos=True)
+            partes = conteudo(todos, lambda e: (e or '').split('@')[0], de=date.today(), ate=date.today())
+            titulos = [s.get('titulo') for s in partes['secoes']]
+            self.assertIn('Por pessoa', titulos)
+            maquinas = partes['secoes'][[i for i, s in enumerate(partes['secoes']) if 'colunas' in s][0]]['colunas'][1]
+            self.assertEqual({l[0] for l in maquinas['tabela']['linhas']}, {'Overloque 01', 'Reta 03'})
+            pessoas = next(s for s in partes['secoes'] if s.get('titulo') == 'Por pessoa')['tabela']['linhas']
+            self.assertEqual({l[0] for l in pessoas}, {'ana', 'bia'})
+            defeito = next((s for s in partes['secoes'] if s.get('titulo') == 'Peças com defeito'), None)
+            if defeito:  # a leitura local da foto cinza pode não achar defeito
+                self.assertIn('Pessoa', defeito['tabela']['colunas'])
+                self.assertIn('Máquina', defeito['tabela']['colunas'])
 
             # --- remover a máquina não apaga o nome dela das peças
             self.assertEqual(c.delete(f'/api/maquinas/{m1["id"]}').status_code, 200)
