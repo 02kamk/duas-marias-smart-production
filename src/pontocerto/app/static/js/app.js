@@ -448,12 +448,12 @@
         var modelo = (d && d.modelo) || {};
         var llm = (d && d.llm) || {};
 
-        if (!modelo.carregado) {
-          toast(
-            "A IA de inspeção não está disponível neste servidor. Fale com o responsável." +
-            (modelo.erro ? " (" + modelo.erro + ")" : ""),
-            "aviso"
-          );
+        // Online (e com OPENROUTER_API_KEY) quem lê as peças é a IA de visão; o modelo
+        // local é só reserva. Só avisa quando não há nenhuma das duas leituras.
+        var leitura = (d && d.leitura) || {};
+        if (leitura.modo !== "ia" && !modelo.carregado) {
+          toast("A leitura das peças está indisponível neste servidor." +
+            (leitura.motivo ? " " + leitura.motivo : " Fale com o responsável."), "aviso");
         }
         atualizarChipCamera((d && d.camera) || {});
       })
