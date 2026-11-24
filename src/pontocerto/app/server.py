@@ -809,6 +809,7 @@ def criar_app(cfg: Any = None) -> FastAPI:
                 "metricas": meta.get("metricas") or {},
             },
             "camera": app.state.camera.info(),
+            "leitura": _info_leitura(),
             "llm": {
                 "configurado": bool(getattr(cliente, "configurado", False)),
                 "modelo": str(cfg.llm.get("modelo_visao", "")) if cliente is not None else None,
