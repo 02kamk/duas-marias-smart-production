@@ -85,7 +85,8 @@ class Evento:
         return {
             "id": self.id,
             "timestamp": self.timestamp,
-            "hora": self.hora,
+            # Sempre do instante da peça: o texto gravado pode ter sido feito em outro fuso.
+            "hora": datetime.fromtimestamp(self.timestamp).strftime("%H:%M:%S"),
             "classe_idx": int(self.classe_idx),
             "classe_key": self.classe_key,
             "nome": self.nome,
