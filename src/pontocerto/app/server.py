@@ -712,6 +712,10 @@ def criar_app(cfg: Any = None) -> FastAPI:
         app.state.motor.leitura_ia = app.state.leitura_ia
         if NUVEM:
             try:
+                nuvem.corrigir_datas_fuso()  # uma vez: dias gravados em UTC antes do ajuste de fuso
+            except Exception:
+                pass
+            try:
                 salvos = nuvem.ler("ajustes", None)
             except Exception:
                 salvos = None

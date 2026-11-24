@@ -179,6 +179,25 @@ def somar_uso_ia(dia: str, custo: float) -> dict:
     return linha[0]
 
 
+def corrigir_datas_fuso() -> int:
+    """Recalcula o dia (coluna `data`) das peças no horário de Brasília. Roda uma vez só.
+
+    Até 25/11/2026 o servidor online gravava o dia em UTC: peças depois das 21h
+    caíam no dia seguinte. O instante de cada peça (`timestamp`) está certo e não
+    muda; só o dia usado nos filtros é refeito a partir dele.
+    """
+    if ler("fuso_datas", None, cache_s=0) == "-03":
+        return 0
+    with conexao() as db:
+        cur = db.execute(
+            "update public.pc_eventos set data = to_char((to_timestamp(\"timestamp\") at time zone 'UTC') "
+            "- interval '3 hours', 'YYYY-MM-DD') where data <> to_char((to_timestamp(\"timestamp\") "
+            "at time zone 'UTC') - interval '3 hours', 'YYYY-MM-DD')")
+        n = cur.rowcount or 0
+    gravar("fuso_datas", "-03")
+    return n
+
+
 # ------------------------------------------------------------------ fotos
 def _storage():
     from pontocerto.config import credenciais_supabase

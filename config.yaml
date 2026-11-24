@@ -81,10 +81,11 @@ llm:
   ativo: true
   provedor: "openrouter"
   base_url: "https://openrouter.ai/api/v1"
-  # Leitura das peças: Claude Haiku 5.5 acertou as fotos reais de teste (nov/2026),
-  # ~US$0,47 a cada 1000 peças e ~4,5 s por leitura.
-  modelo_visao: "anthropic/claude-haiku-5.5"
-  modelo_texto: "anthropic/claude-haiku-5.5"
+  # Em teste (25/11/2026): Claude Sonnet 5.5, ~20x o preço do Haiku 5.5 (estimativa:
+  # ~US$9 a cada 1000 peças). Para voltar, use "anthropic/claude-haiku-5.5" nas duas
+  # linhas: ele acertou as fotos reais de teste por ~US$0,47 a cada 1000 peças.
+  modelo_visao: "anthropic/claude-sonnet-5.5"
+  modelo_texto: "anthropic/claude-sonnet-5.5"
   leitura_ia: true                 # a IA de visão lê cada foto (o modelo local vira apoio)
   leitura_limite_diario: 400       # teto de leituras por IA por dia (controle de gasto)
   timeout_s: 45
