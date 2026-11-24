@@ -11,9 +11,11 @@
 <link rel="icon" href="/favicon.ico" sizes="any">
 <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
 <link rel="stylesheet" href="/static/css/style.css">
+<script src="/static/js/seletor.js" defer></script>
 <script src="/static/js/app.js" defer></script>
 <script src="/static/js/operacao.js" defer></script>
 <script src="/static/js/paineis.js" defer></script>
+<script src="/static/js/equipe.js" defer></script>
 </head>
 <body>
 
@@ -106,14 +108,10 @@
   <section id="pagina-ao-vivo" class="pagina" aria-label="Inspecionar">
     <div class="pagina-cabecalho">
       <h1>Inspecionar</h1>
-      <div class="pagina-acoes">
-        <label class="campo campo-inline" for="sel-lote">
-          <span class="campo-rotulo">Lote</span>
-          <select id="sel-lote" class="entrada">
-            <option value="">Sem lote</option>
-          </select>
-        </label>
-      </div>
+    </div>
+    <div class="contexto" role="group" aria-label="Para onde vão as próximas peças">
+      <div id="seletor-lote"></div>
+      <div id="seletor-maquina"></div>
     </div>
     <p id="aviso-sem-lote" class="aviso aviso-atencao" hidden>Nenhum lote escolhido. As peças inspecionadas ficam no histórico sem OP.</p>
 
@@ -473,6 +471,7 @@
     <div class="segmentado abas-perfil" role="tablist" aria-label="Perfil">
       <button id="aba-btn-dados" type="button" role="tab" aria-selected="true" aria-controls="aba-dados" class="ativo" data-aba="dados">Meus dados</button>
       <button id="aba-btn-ajustes" type="button" role="tab" aria-selected="false" aria-controls="aba-ajustes" data-aba="ajustes">Ajustes</button>
+      <button id="aba-btn-analise" type="button" role="tab" aria-selected="false" aria-controls="aba-analise" data-aba="analise" hidden>Análise da equipe</button>
     </div>
 
     <div id="aba-dados" role="tabpanel" aria-labelledby="aba-btn-dados">
@@ -577,6 +576,31 @@
           </div>
         </form>
 
+        <section id="bloco-maquinas" class="bloco" aria-labelledby="titulo-maquinas" hidden>
+          <div class="bloco-cabecalho">
+            <div>
+              <h2 id="titulo-maquinas">Máquinas</h2>
+              <p class="texto-apoio">Cada pessoa escolhe a sua na tela Inspecionar, e cada peça guarda a máquina em que foi feita.</p>
+            </div>
+            <button id="btn-nova-maquina" class="btn btn-secundario btn-pequeno" type="button">Adicionar máquina</button>
+          </div>
+          <form id="form-maquina" class="maquina-form" hidden novalidate>
+            <label class="campo"><span class="campo-rotulo">Nome</span>
+              <input id="maquina-nome" class="entrada" maxlength="60" required placeholder="Ex.: Overloque 03" autocomplete="off"></label>
+            <label class="campo"><span class="campo-rotulo">Tipo <small class="texto-apoio">(opcional)</small></span>
+              <input id="maquina-tipo" class="entrada" maxlength="40" list="tipos-maquina" placeholder="Ex.: Overloque" autocomplete="off"></label>
+            <label class="campo"><span class="campo-rotulo">Setor <small class="texto-apoio">(opcional)</small></span>
+              <input id="maquina-setor" class="entrada" maxlength="40" placeholder="Ex.: Fechamento" autocomplete="off"></label>
+            <datalist id="tipos-maquina"></datalist>
+            <p id="maquina-erro" class="campo-erro" role="alert"></p>
+            <div class="linha-botoes">
+              <button class="btn btn-principal btn-pequeno" type="submit">Salvar máquina</button>
+              <button id="maquina-cancelar" class="btn btn-quieto" type="button">Cancelar</button>
+            </div>
+          </form>
+          <ul id="lista-maquinas" class="maquinas-lista"></ul>
+        </section>
+
         <div class="bloco">
           <div>
             <h2>Contas</h2>
@@ -609,6 +633,80 @@
 
       </aside>
     </div>
+    </div>
+
+    <div id="aba-analise" role="tabpanel" aria-labelledby="aba-btn-analise" class="analise" hidden>
+      <div class="analise-filtros">
+        <div class="analise-filtros-linha">
+        <div class="segmentado" role="group" aria-label="Período">
+          <button type="button" data-analise-dias="6" aria-pressed="true">7 dias</button>
+          <button type="button" data-analise-dias="29" aria-pressed="false">30 dias</button>
+          <button type="button" data-analise-dias="89" aria-pressed="false">90 dias</button>
+        </div>
+        <label class="campo campo-inline"><span class="campo-rotulo">De</span><input id="analise-de" class="entrada" type="date"></label>
+        <label class="campo campo-inline"><span class="campo-rotulo">Até</span><input id="analise-ate" class="entrada" type="date"></label>
+        </div>
+        <div class="analise-filtros-linha">
+        <div id="filtro-usuario"></div>
+        <div id="filtro-maquina"></div>
+        <a id="analise-pdf" class="btn btn-secundario btn-pequeno analise-pdf" href="/api/analise/pdf" download>Baixar PDF</a>
+        </div>
+      </div>
+
+      <section id="analise-foco" class="bloco analise-foco" aria-live="polite" hidden></section>
+
+      <dl class="resumo" aria-label="Números do período" aria-live="polite">
+        <div><dt>Peças inspecionadas</dt><dd id="an-total">0</dd></div>
+        <div><dt>Ritmo, em peças por hora</dt><dd id="an-ritmo">—</dd></div>
+        <div><dt>Com defeito</dt><dd><span id="an-taxa">0%</span> <small id="an-defeitos" class="resumo-pct"></small></dd></div>
+        <div><dt>Acerto da IA nas conferidas</dt><dd><span id="an-acerto">—</span> <small id="an-conferidas" class="resumo-pct"></small></dd></div>
+      </dl>
+
+      <section class="bloco" aria-labelledby="titulo-an-dias">
+        <div class="bloco-cabecalho">
+          <h2 id="titulo-an-dias">Produção por dia</h2>
+          <ul class="legenda" aria-label="Legenda">
+            <li><span class="legenda-marca marca-aprovada"></span>Aprovadas</li>
+            <li><span class="legenda-marca marca-defeito"></span>Com defeito</li>
+          </ul>
+        </div>
+        <div id="an-dias" class="grafico"></div>
+        <p id="an-melhor-dia" class="texto-apoio"></p>
+      </section>
+
+      <section class="bloco bloco-tabela" aria-labelledby="titulo-an-equipe">
+        <div class="bloco-cabecalho">
+          <div>
+            <h2 id="titulo-an-equipe">Equipe</h2>
+            <p class="texto-apoio">Toque em uma pessoa para ver só os números dela.</p>
+          </div>
+        </div>
+        <div id="an-equipe"></div>
+      </section>
+
+      <section class="bloco bloco-tabela" aria-labelledby="titulo-an-maquinas">
+        <div class="bloco-cabecalho">
+          <div>
+            <h2 id="titulo-an-maquinas">Máquinas</h2>
+            <p class="texto-apoio">Toque em uma máquina para ver só os números dela.</p>
+          </div>
+        </div>
+        <div id="an-maquinas"></div>
+      </section>
+
+      <div class="grade-duas">
+        <section class="bloco" aria-labelledby="titulo-an-horas">
+          <div>
+            <h2 id="titulo-an-horas">Horário de produção</h2>
+            <p class="texto-apoio">Peças por hora do dia, somando o período.</p>
+          </div>
+          <div id="an-horas" class="grafico grafico-baixo"></div>
+        </section>
+        <section class="bloco" aria-labelledby="titulo-an-tipos">
+          <h2 id="titulo-an-tipos">Defeitos por tipo</h2>
+          <div id="an-tipos"></div>
+        </section>
+      </div>
     </div>
   </section>
 

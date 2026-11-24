@@ -79,6 +79,9 @@
     });
     document.querySelectorAll('[data-perfil-nome]').forEach(n => { n.textContent = perfil.nome || 'Seu perfil'; });
     document.querySelectorAll('[data-perfil-email]').forEach(n => { n.textContent = perfil.email; });
+    // Análise da equipe: só para administradores.
+    const abaAnalise = $('aba-btn-analise');
+    if (abaAnalise) abaAnalise.hidden = !perfil.admin;
   }
 
   const perfilPronto = api('/api/perfil').then(p => { perfil = p; pintarPerfil(); return p; }).catch(() => null);
@@ -329,18 +332,21 @@
   /* --- Ligação com app.js -------------------------------------------------- */
 
   function mostrarAba(nome) {
-    const ajustes = nome === 'ajustes';
+    if (nome === 'analise' && !(perfil && perfil.admin)) nome = 'dados';
     document.querySelectorAll('.abas-perfil [data-aba]').forEach(b => {
       const ativa = b.dataset.aba === nome;
       b.classList.toggle('ativo', ativa);
       b.setAttribute('aria-selected', String(ativa));
     });
-    $('aba-dados').hidden = ajustes;
-    $('aba-ajustes').hidden = !ajustes;
-    if (ajustes) {
+    $('aba-dados').hidden = nome !== 'dados';
+    $('aba-ajustes').hidden = nome !== 'ajustes';
+    $('aba-analise').hidden = nome !== 'analise';
+    if (nome === 'ajustes') {
       if (window.PontoCerto && window.PontoCerto.carregarAjustes) window.PontoCerto.carregarAjustes();
       if (window.listarContas) window.listarContas();
+      if (window.Equipe) window.Equipe.maquinas();
     }
+    if (nome === 'analise' && window.Equipe) window.Equipe.analise();
   }
   document.querySelectorAll('.abas-perfil [data-aba]').forEach(b => b.addEventListener('click', () => mostrarAba(b.dataset.aba)));
 
@@ -349,7 +355,8 @@
     const aba = (estado && estado.abaPerfil) || 'dados';
     if (estado) estado.abaPerfil = null;
     if (location.hash === '#ajustes') history.replaceState(null, '', '#perfil');
-    mostrarAba(aba);
+    // A aba da análise depende de saber se a pessoa é administradora.
+    if (aba === 'analise') perfilPronto.then(() => mostrarAba(aba)); else mostrarAba(aba);
     telaPerfil();
     carregarAtividade();
   }

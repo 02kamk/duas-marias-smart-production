@@ -164,7 +164,7 @@ def _testar_perfil(teste, c):
     c.post('/api/auth/register', json=ana)
     teste.assertEqual(c.get('/api/perfil').status_code, 401)
     c.post('/api/auth/login', json=ana)
-    teste.assertEqual(c.get('/api/perfil').json(), {'email': 'ana@example.com', 'nome': '', 'avatar': None})
+    teste.assertEqual(c.get('/api/perfil').json(), {'email': 'ana@example.com', 'nome': '', 'avatar': None, 'admin': True})
     salvo = c.post('/api/perfil', json={'nome': '  Ana   Souza ', 'avatar': FOTO}).json()
     teste.assertEqual((salvo['nome'], salvo['avatar']), ('Ana Souza', FOTO))
     teste.assertEqual(c.get('/api/perfil').json()['nome'], 'Ana Souza')

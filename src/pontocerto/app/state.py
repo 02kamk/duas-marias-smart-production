@@ -54,6 +54,20 @@ class Evento:
     lote_codigo: str | None = None   # None: evento so local, nao vai para o banco
     origem: str = 'ao_vivo'
     revisao_humana: dict | None = None
+    autor: str | None = None          # conta que registrou a peça (só ela vê a foto)
+    maquina_id: str | None = None     # máquina escolhida por quem inspecionou
+    maquina_nome: str | None = None   # nome gravado na hora: continua valendo se a máquina sair
+
+    def visivel_para(self, email: str | None, admin: bool = False) -> bool:
+        """Cada conta vê só as próprias peças. Peças antigas, sem dono, ficam com os administradores.
+
+        Sem login (email None, como nos testes do servidor puro) tudo é visível.
+        """
+        if not email:
+            return True
+        if self.autor:
+            return self.autor.casefold() == email.casefold()
+        return bool(admin)
 
     @property
     def precisa_revisao(self) -> bool:
@@ -91,6 +105,9 @@ class Evento:
             "precisa_revisao": self.precisa_revisao,
             "lote_id": self.lote_id,
             "lote_codigo": self.lote_codigo,
+            "autor": self.autor,
+            "maquina_id": self.maquina_id,
+            "maquina_nome": self.maquina_nome,
         }
 
 
@@ -122,8 +139,8 @@ class EstadoSessao:
         # Online (Vercel): histórico, ajustes e lote ativo no Supabase; nada em memória entre pedidos.
         self._nuvem = nuvem.ativo()
         self._meta_local = int(app.get("meta_pecas", META_PECAS_PADRAO))
-        # Lote em producao ({"id": ..., "codigo": ...}) carimbado em cada evento novo.
-        self._lote_local: dict | None = None
+        # Lote em produção de cada conta ({email: {"id", "codigo", ...}}), carimbado nas peças dela.
+        self._lotes_locais: dict[str, dict] = {}
         # Chamado (fora do lock) sempre que um evento nasce ou muda. O servidor
         # liga aqui o sincronizador do banco; deve ser rapido e nunca estourar.
         self.observador: Callable[[Evento], None] | None = None
@@ -170,19 +187,46 @@ class EstadoSessao:
             from pontocerto import nuvem
             nuvem.gravar("meta_pecas", int(valor))
 
-    @property
-    def lote_ativo(self) -> dict | None:
+    # Cada conta escolhe o próprio lote (como a máquina). Chave "" = sem login.
+    def lotes_ativos(self) -> dict[str, dict]:
         if self._nuvem:
             from pontocerto import nuvem
-            return nuvem.ler("lote_ativo", None, cache_s=1.0) or None
-        return self._lote_local
+            return dict(nuvem.ler("lotes_ativos", {}, cache_s=1.0) or {})
+        return dict(self._lotes_locais)
+
+    def _gravar_lotes(self, lotes: dict[str, dict]) -> None:
+        self._lotes_locais = dict(lotes)
+        if self._nuvem:
+            from pontocerto import nuvem
+            nuvem.gravar("lotes_ativos", self._lotes_locais)
+
+    def lote_de(self, email: str | None) -> dict | None:
+        return self.lotes_ativos().get((email or "").casefold()) or None
+
+    def definir_lote(self, email: str | None, lote: dict | None) -> None:
+        lotes = self.lotes_ativos()
+        chave = (email or "").casefold()
+        if lote:
+            lotes[chave] = lote
+        else:
+            lotes.pop(chave, None)
+        self._gravar_lotes(lotes)
+
+    def soltar_lote(self, lote_id: int) -> None:
+        """Ninguém continua inspecionando um lote que foi concluído."""
+        lotes = self.lotes_ativos()
+        restantes = {k: v for k, v in lotes.items() if not (v and v.get("id") == lote_id)}
+        if len(restantes) != len(lotes):
+            self._gravar_lotes(restantes)
+
+    @property
+    def lote_ativo(self) -> dict | None:
+        """Lote de quem usa sem login (testes e servidor sem contas)."""
+        return self.lote_de(None)
 
     @lote_ativo.setter
     def lote_ativo(self, valor: dict | None) -> None:
-        self._lote_local = valor
-        if self._nuvem:
-            from pontocerto import nuvem
-            nuvem.gravar("lote_ativo", valor)
+        self.definir_lote(None, valor)
 
     @contextmanager
     def _connect(self):
@@ -204,6 +248,8 @@ class EstadoSessao:
         frame_bgr: np.ndarray | None = None,
         tecido: str | None = None,
         origem: str = 'ao_vivo',
+        autor: str | None = None,
+        maquina: dict | None = None,
     ) -> Evento:
         """Cria o evento, salva o JPG da captura e atualiza as estatisticas."""
         agora = time.time()
@@ -220,7 +266,7 @@ class EstadoSessao:
 
         evento_id = uuid.uuid4().hex[:12]
         imagem_url = self._salvar_captura(evento_id, frame_bgr)
-        lote = self.lote_ativo
+        lote = self.lote_de(autor)
 
         evento = Evento(
             id=evento_id,
@@ -237,6 +283,9 @@ class EstadoSessao:
             lote_id=int(lote["id"]) if lote and lote.get("id") is not None else None,
             lote_codigo=str(lote.get("codigo") or "") if lote else None,
             revisao_llm=predicao_dict.get("leitura"),
+            autor=(str(autor).casefold() if autor else None),
+            maquina_id=(str(maquina["id"]) if maquina and maquina.get("id") else None),
+            maquina_nome=(str(maquina.get("nome") or "") or None) if maquina else None,
         )
 
         with self._lock:
@@ -356,15 +405,16 @@ class EstadoSessao:
 
     # ----------------------------------------------------------------- leitura
 
-    def eventos(self, limite: int = 60, classe: str | None = None, dia: str | None = None, defeitos: bool = False, pendentes: bool = False) -> list[dict]:
-        """Eventos mais recentes primeiro, opcionalmente filtrados por classe."""
+    def eventos(self, limite: int = 60, classe: str | None = None, dia: str | None = None, defeitos: bool = False,
+                pendentes: bool = False, usuario: str | None = None, admin: bool = False) -> list[dict]:
+        """Eventos mais recentes primeiro, só os que `usuario` pode ver, com filtros opcionais."""
         limite = max(1, int(limite))
         with self._connect() as db:
             if dia:
                 rows = db.execute('SELECT payload FROM eventos WHERE data=? ORDER BY timestamp DESC', (dia,)).fetchall()
             else:
                 rows = db.execute('SELECT payload FROM eventos ORDER BY timestamp DESC').fetchall()
-        itens = [Evento(**json.loads(row[0])) for row in rows]
+        itens = [e for e in (Evento(**json.loads(row[0])) for row in rows) if e.visivel_para(usuario, admin)]
         if classe:
             classe = str(classe).strip()
             itens = [e for e in itens if e.classe_final == classe]
@@ -468,17 +518,22 @@ class EstadoSessao:
 
     # ------------------------------------------------------------ estatisticas
 
-    def eventos_periodo(self, de: str, ate: str) -> list["Evento"]:
-        """Eventos entre duas datas (AAAA-MM-DD, inclusive), mais recentes primeiro."""
+    def eventos_periodo(self, de: str, ate: str, usuario: str | None = None, admin: bool = False,
+                        todos: bool = False) -> list["Evento"]:
+        """Eventos entre duas datas (AAAA-MM-DD, inclusive), mais recentes primeiro.
+
+        Sem `todos`, só as peças que `usuario` pode ver (a análise do administrador usa todos=True).
+        """
         with self._connect() as db:
             rows = db.execute('SELECT payload FROM eventos WHERE data BETWEEN ? AND ? ORDER BY timestamp DESC',
                               (de, ate)).fetchall()
-        return [Evento(**json.loads(row[0])) for row in rows]
+        itens = [Evento(**json.loads(row[0])) for row in rows]
+        return itens if todos else [e for e in itens if e.visivel_para(usuario, admin)]
 
-    def estatisticas(self) -> dict:
-        """Números de hoje, pela classe que vale (a corrigida na conferência, se houver)."""
+    def estatisticas(self, usuario: str | None = None, admin: bool = False) -> dict:
+        """Números de hoje de quem pergunta, pela classe que vale (a corrigida, se houver)."""
         hoje = datetime.now().date().isoformat()
-        eventos = self.eventos_periodo(hoje, hoje)
+        eventos = self.eventos_periodo(hoje, hoje, usuario, admin)
         total = len(eventos)
         aprovadas = sum(e.classe_final == "normal" for e in eventos)
         reprovadas = total - aprovadas

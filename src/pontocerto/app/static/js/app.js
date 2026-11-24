@@ -271,6 +271,13 @@
     }
   }
 
+  /** "Lote OP-12 · Overloque 01": onde a peça foi feita. */
+  function loteEMaquina(ev) {
+    var partes = [ev && ev.lote_codigo ? "Lote " + ev.lote_codigo : "Sem lote"];
+    if (ev && ev.maquina_nome) partes.push(ev.maquina_nome);
+    return partes.join(" · ");
+  }
+
   function nomeDaClasse(chave) {
     var info = App.porChave[chave];
     if (info && info.nome) return info.nome;
@@ -413,6 +420,7 @@
     if (pagina === "ao-vivo") {
       iniciarPolling();
       carregarLotes();
+      carregarMaquinas();
       carregarRecentes();
     } else if (pagina === "conferir") {
       carregarFila();
@@ -1341,7 +1349,7 @@
     var leitura = p.leitura || {};
     setTexto($("teste-explicacao"), daIA ? (leitura.explicacao || "") : "");
     mostrar($("teste-explicacao"), daIA && !!leitura.explicacao);
-    setTexto($("resultado-lote"), ev.lote_codigo ? "Lote " + ev.lote_codigo : "Sem lote");
+    setTexto($("resultado-lote"), loteEMaquina(ev));
     setTexto($("resultado-ordem"), (NOMES_ORIGEM[ev.origem] || "Foto enviada") + (ev.hora ? " · " + horaCurta(ev) : ""));
     habilitar($("ver-mapa"), !!d.heatmap);
 
@@ -1588,7 +1596,8 @@
         '" aria-label="' + esc(nome + " às " + horaCurta(ev)) + '">' +
         '<span class="h-foto"><img class="miniatura" src="' + esc(ev.imagem || PIXEL_VAZIO) + '" alt="" loading="lazy"></span>' +
         '<span class="h-nome"><strong>' + esc(nome) + "</strong></span>" +
-        '<span class="h-lote">' + esc(ev.lote_codigo || "Sem lote") + "</span>" +
+        '<span class="h-lote">' + esc(ev.lote_codigo || "Sem lote") +
+          (ev.maquina_nome ? "<small>" + esc(ev.maquina_nome) + "</small>" : "") + "</span>" +
         '<span class="h-hora num">' + esc(horaCurta(ev)) + "</span>" +
         '<span class="h-origem">' + esc(NOMES_ORIGEM[ev.origem] || "Câmera ao vivo") + "</span>" +
         '<span class="h-situacao"><span class="estado ' + classeDoEstado(ev) + '">' + esc(situacaoConferencia(ev)) + "</span></span>" +
@@ -1675,7 +1684,7 @@
     caixa.classList.toggle("resultado-incerto", !falha);
     setTexto($("fila-classe"), falha ? (ev.nome || nomeDaClasse(ev.classe_key)) : "Leitura incerta: parece normal");
     setTexto($("fila-confianca"), "A IA tem " + formatarPercentual(ev.confianca, 0) + " de certeza");
-    setTexto($("fila-lote"), ev.lote_codigo ? "Lote " + ev.lote_codigo : "Sem lote");
+    setTexto($("fila-lote"), loteEMaquina(ev));
     setTexto($("fila-hora"), (ev.data ? ev.data.split("-").reverse().slice(0, 2).join("/") + " " : "") + horaCurta(ev));
     $("fila-pular").onclick = function () { fila.puladas[ev.id] = true; mostrarProximaDaFila(); };
     // Depois de conferir, passa sozinha para a próxima.
@@ -1698,7 +1707,7 @@
     setTexto($("modal-classe"), ev.nome_final || ev.nome || nomeDaClasse(ev.classe_key));
     setTexto($("modal-confianca"), "IA: " + formatarPercentual(ev.confianca, 0) + " de certeza");
     setTexto($("modal-hora"), (ev.data ? ev.data.split("-").reverse().join("/") + " " : "") + horaCurta(ev));
-    setTexto($("modal-lote"), ev.lote_codigo ? "Lote " + ev.lote_codigo : "Sem lote");
+    setTexto($("modal-lote"), loteEMaquina(ev));
 
     montarConferencia($("modal-conferencia"), ev, function (salvo) {
       setTexto($("modal-classe"), salvo.nome_final);
@@ -2092,20 +2101,86 @@
 
   /* --- Lote em inspeção (seletor da tela Inspecionar) ------------------- */
 
+  /* Ícones dos seletores da tela Inspecionar. */
+  var ICONE_LOTE = SVG_ABRE + '<path d="M3.5 7.5 12 3l8.5 4.5L12 12z"/><path d="m3.5 12 8.5 4.5 8.5-4.5"/><path d="m3.5 16.5 8.5 4.5 8.5-4.5"/></svg>';
+  var ICONE_MAQUINA = SVG_ABRE + '<path d="M4 19.5h16"/><path d="M6 19.5V9.5a2 2 0 0 1 2-2h9.5a2 2 0 0 1 2 2v3H13"/><path d="M13 12.5v4"/><path d="M11.5 16.5h3"/><path d="M9 7.5V4.5h5"/></svg>';
+
+  function opcaoDoLote(l) {
+    var qtd = numero(l.quantidade, 0), feitas = numero(l.inspecionadas, 0);
+    return {
+      valor: String(l.id),
+      titulo: l.codigo,
+      sub: [l.cliente, l.modelo_peca].filter(Boolean).join(" · "),
+      meta: qtd ? numBR(feitas) + " de " + numBR(qtd) : null,
+      progresso: qtd ? feitas / qtd : null
+    };
+  }
+
+  function prepararSeletores() {
+    if (!window.Seletor) return;
+    if ($("seletor-lote") && !App.seletorLote) {
+      App.seletorLote = window.Seletor($("seletor-lote"), {
+        rotulo: "Lote",
+        icone: ICONE_LOTE,
+        vazio: { titulo: "Sem lote", sub: "As peças ficam fora de qualquer pedido" },
+        rodape: { texto: "Ver e criar lotes", href: "/#lotes" },
+        semOpcoes: "Nenhum lote em aberto.",
+        aoEscolher: function (v) { return v ? usarLote(v) : pararLote(); }
+      });
+    }
+    if ($("seletor-maquina") && !App.seletorMaquina) {
+      App.seletorMaquina = window.Seletor($("seletor-maquina"), {
+        rotulo: "Máquina",
+        icone: ICONE_MAQUINA,
+        vazio: { titulo: "Sem máquina", sub: "As peças não ficam ligadas a um equipamento" },
+        semOpcoes: "Nenhuma máquina cadastrada ainda.",
+        aoEscolher: usarMaquina
+      });
+    }
+  }
+
   function renderChipLote(lote) {
     App.lotes.ativo = lote || null;
-    var sel = $("sel-lote");
-    if (sel) {
+    var s = App.seletorLote;
+    if (s) {
       var id = lote && lote.id != null ? String(lote.id) : "";
       // O lote ativo pode não estar na lista (ex.: sem internet agora).
-      if (id && !sel.querySelector('option[value="' + id.replace(/"/g, "") + '"]')) {
-        var opt = criar("option", null, lote.codigo + (lote.cliente ? " · " + lote.cliente : ""));
-        opt.value = id;
-        sel.appendChild(opt);
-      }
-      if (document.activeElement !== sel) sel.value = id;
+      var lista = App.lotes.lista.slice();
+      if (id && !lista.some(function (l) { return String(l.id) === id; })) lista.unshift(lote);
+      s.opcoes(lista.map(opcaoDoLote));
+      s.valor(id);
     }
     mostrar($("aviso-sem-lote"), !lote && App.lotes.lista.length > 0);
+  }
+
+  /* --- Máquina de quem está inspecionando -------------------------------- */
+
+  function carregarMaquinas() {
+    prepararSeletores();
+    var s = App.seletorMaquina;
+    if (!s) return Promise.resolve();
+    return fetchJSON("/api/maquinas")
+      .then(function (d) {
+        s.opcoes((d.maquinas || []).map(function (m) {
+          return { valor: m.id, titulo: m.nome, sub: [m.tipo, m.setor].filter(Boolean).join(" · ") };
+        }));
+        s.valor(d.ativa ? d.ativa.id : "");
+        s.semOpcoes(d.admin ? "Nenhuma máquina cadastrada ainda." : "Nenhuma máquina cadastrada. Peça a um administrador para cadastrar.");
+        s.rodape(d.admin ? { texto: "Cadastrar e editar máquinas", href: "/#ajustes" } : null);
+      })
+      .catch(function () {});
+  }
+
+  function usarMaquina(id) {
+    return postJSON("/api/maquinas/ativa", { id: id || null })
+      .then(function (d) {
+        toast(d.maquina ? "Inspecionando na " + d.maquina.nome + "." : "As próximas peças ficam sem máquina.", d.maquina ? "ok" : "info");
+      })
+      .catch(function (e) {
+        toast("Não consegui escolher a máquina: " + e.message, "erro");
+        carregarMaquinas();
+        throw e;
+      });
   }
 
   function carregarLotes() {
@@ -2122,12 +2197,6 @@
   }
 
   function renderLotes() {
-    var sel = $("sel-lote");
-    if (!sel) return;
-    var html = '<option value="">Sem lote</option>' + App.lotes.lista.map(function (l) {
-      return '<option value="' + esc(l.id) + '">' + esc(l.codigo) + " · " + esc(l.cliente) + "</option>";
-    }).join("");
-    setHTML(sel, html, "sel-lote");
     renderChipLote(App.lotes.ativo);
   }
 
@@ -2425,10 +2494,6 @@
     ligar($("historico-dia"), "change", carregarHistorico);
     ligar($("historico-modo"), "change", function (e) { mudarModoHistorico(e.target.value); });
     ligar($("historico-tipo"), "change", function (e) { filtrarHistorico(e.target.value); });
-    ligar($("sel-lote"), "change", function (e) {
-      if (e.target.value) usarLote(e.target.value).catch(function () {});
-      else pararLote();
-    });
 
     /* --- Lotes ---------------------------------------------------------- */
     ligar($("btn-novo-lote"), "click", abrirFormLote);
@@ -2510,6 +2575,7 @@
     setInterval(atualizarPendentes, 30000);
     atualizarChipCamera({ ativa: false });
     renderVeredito({ estado: "aquecendo" }, null);
+    prepararSeletores();
     renderChipLote(null);
     iniciarMonitorBanco();
 

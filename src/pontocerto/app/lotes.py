@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Callable
 
-from fastapi import Body, FastAPI, Query
+from fastapi import Body, FastAPI, Query, Request
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
@@ -60,8 +60,20 @@ def _lote_publico(linha: dict) -> dict:
     }
 
 
-def registrar(app: FastAPI, definir_lote_ativo: Callable[[dict | None], dict | None]) -> None:
-    """Rotas /api/lotes. `definir_lote_ativo` troca o lote que recebe as próximas peças."""
+def registrar(app: FastAPI, definir_lote_ativo: Callable[..., dict | None],
+              soltar_lote: Callable[[int], None] | None = None) -> None:
+    """Rotas /api/lotes. Cada conta escolhe o lote que recebe as próximas peças dela.
+
+    `definir_lote_ativo(lote, email)` troca o lote de uma conta; `soltar_lote(id)` tira
+    um lote concluído de todas as contas.
+    """
+    from pontocerto.app.maquinas import quem
+
+    def email_de(request: Request):
+        return quem(app, request)[0]
+
+    def ativo_de(request: Request):
+        return app.state.estado.lote_de(email_de(request))
 
     def banco_ou_erro():
         banco = getattr(app.state, "banco", None)
@@ -73,24 +85,24 @@ def registrar(app: FastAPI, definir_lote_ativo: Callable[[dict | None], dict | N
         mensagem = banco.mascarar(str(exc)) if hasattr(banco, "mascarar") else "falha no banco"
         return _erro(502, f"Não foi possível falar com o Supabase: {mensagem}")
 
-    def ativo_id():
-        lote = app.state.estado.lote_ativo
+    def ativo_id(request: Request):
+        lote = ativo_de(request)
         return lote.get("id") if lote else None
 
     @app.get("/api/lotes")
-    def listar(todos: bool = Query(False, description="inclui os lotes concluídos")):
+    def listar(request: Request, todos: bool = Query(False, description="inclui os lotes concluídos")):
         banco = getattr(app.state, "banco", None)
         if banco is None or not banco.configurado:
-            return {"disponivel": False, "erro": SEM_BANCO, "lotes": [], "ativo": app.state.estado.lote_ativo}
+            return {"disponivel": False, "erro": SEM_BANCO, "lotes": [], "ativo": ativo_de(request)}
         try:
             linhas = banco.listar_lotes()
         except Exception:
             return {"disponivel": False, "erro": "Sem conexão com o Supabase agora. Tente de novo em instantes.",
-                    "lotes": [], "ativo": app.state.estado.lote_ativo}
+                    "lotes": [], "ativo": ativo_de(request)}
         lotes = [_lote_publico(l) for l in linhas]
         if not todos:
             lotes = [l for l in lotes if not l["concluido"]]
-        return {"disponivel": True, "lotes": lotes, "ativo": app.state.estado.lote_ativo}
+        return {"disponivel": True, "lotes": lotes, "ativo": ativo_de(request)}
 
     @app.post("/api/lotes", status_code=201)
     def criar(corpo: dict = Body(...)):
@@ -115,8 +127,8 @@ def registrar(app: FastAPI, definir_lote_ativo: Callable[[dict | None], dict | N
             return falha(banco, exc)
 
     @app.get("/api/lotes/ativo")
-    def ler_ativo():
-        return {"lote": app.state.estado.lote_ativo}
+    def ler_ativo(request: Request):
+        return {"lote": ativo_de(request)}
 
     @app.get("/api/lotes/clientes")
     def clientes():
@@ -129,7 +141,7 @@ def registrar(app: FastAPI, definir_lote_ativo: Callable[[dict | None], dict | N
             return {"clientes": []}
 
     @app.get("/api/lotes/{lote_id}")
-    def detalhe(lote_id: int):
+    def detalhe(lote_id: int, request: Request):
         banco, erro = banco_ou_erro()
         if erro:
             return erro
@@ -148,11 +160,11 @@ def registrar(app: FastAPI, definir_lote_ativo: Callable[[dict | None], dict | N
         except Exception as exc:
             return falha(banco, exc)
         lote = _lote_publico(linha)
-        lote["ativo"] = ativo_id() == lote["id"]
+        lote["ativo"] = ativo_id(request) == lote["id"]
         return {"lote": lote, "defeitos": defeitos, "recentes": recentes}
 
     @app.post("/api/lotes/{lote_id}/inspecionar")
-    def inspecionar(lote_id: int):
+    def inspecionar(lote_id: int, request: Request):
         banco, erro = banco_ou_erro()
         if erro:
             return erro
@@ -168,12 +180,12 @@ def registrar(app: FastAPI, definir_lote_ativo: Callable[[dict | None], dict | N
             return falha(banco, exc)
         return {"lote": definir_lote_ativo({
             "id": int(linha["id"]), "codigo": linha.get("codigo"), "cliente": linha.get("cliente"),
-            "modelo_peca": linha.get("modelo_peca"), "quantidade": linha.get("quantidade")})}
+            "modelo_peca": linha.get("modelo_peca"), "quantidade": linha.get("quantidade")}, email_de(request))}
 
     @app.post("/api/lotes/ativo")
-    def parar():
-        """As próximas peças ficam sem lote."""
-        return {"lote": definir_lote_ativo(None)}
+    def parar(request: Request):
+        """As próximas peças desta conta ficam sem lote."""
+        return {"lote": definir_lote_ativo(None, email_de(request))}
 
     def _mudar_status(lote_id: int, status: str):
         banco, erro = banco_ou_erro()
@@ -185,8 +197,11 @@ def registrar(app: FastAPI, definir_lote_ativo: Callable[[dict | None], dict | N
             linha = banco.obter_lote(lote_id)
         except Exception as exc:
             return falha(banco, exc)
-        if status == "concluido" and ativo_id() == lote_id:
-            definir_lote_ativo(None)
+        if status == "concluido":
+            if soltar_lote is not None:
+                soltar_lote(lote_id)
+            else:
+                app.state.estado.soltar_lote(lote_id)
         return {"lote": _lote_publico(linha)}
 
     @app.post("/api/lotes/{lote_id}/concluir")
