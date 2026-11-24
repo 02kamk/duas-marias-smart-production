@@ -213,7 +213,7 @@ def registrar(app: FastAPI, definir_lote_ativo: Callable[..., dict | None],
         return _mudar_status(lote_id, "em_inspecao")
 
     @app.get("/api/lotes/{lote_id}/pdf")
-    def pdf(lote_id: int):
+    def pdf(lote_id: int, request: Request):
         banco, erro = banco_ou_erro()
         if erro:
             return erro
@@ -221,53 +221,50 @@ def registrar(app: FastAPI, definir_lote_ativo: Callable[..., dict | None],
             linha = banco.obter_lote(lote_id)
             if not linha:
                 return _erro(404, "Lote não encontrado.")
-            contagem = banco.defeitos_por_classe(lote_id)
-            ultimas = banco.ultimas_inspecoes(lote_id, 300)
+            ultimas = banco.ultimas_inspecoes(lote_id, 500)
         except Exception as exc:
             return falha(banco, exc)
-        from datetime import datetime
+        from datetime import date, datetime
+        from types import SimpleNamespace
 
-        from pontocerto.app.pdf import numero, pct, pecas, relatorio
+        from pontocerto.app.pdf import numero, pct, relatorio
+        from pontocerto.app.relatorio_pdf import NOTA, conteudo
         lote = _lote_publico(linha)
-        base = max(1, lote["inspecionadas"])
-        defeitos = [(d["classe_final"], int(d["quantidade"])) for d in contagem if d["classe_final"] != "normal"]
-        total_def = sum(q for _, q in defeitos) or 1
 
-        def quando(v):
-            try:
-                return datetime.fromisoformat(str(v)).astimezone().strftime("%d/%m/%Y %H:%M")
-            except ValueError:
-                return str(v)[:16]
-
-        com_defeito = [i for i in ultimas if not i.get("aprovada")]
-        secoes = [{
-            "titulo": "Defeitos por tipo",
-            "texto": "Peças de cada tipo e a porcentagem sobre as peças inspecionadas no lote.",
-            "barras": [(_nome_classe(c), q / total_def, f"{pecas(q)} · {pct(q / base)}")
-                       for c, q in defeitos],
-            "vazio": "Nenhum defeito encontrado." if lote["inspecionadas"] else "Nenhuma peça inspecionada neste lote ainda.",
-        }]
-        if com_defeito:
-            secoes.append({"titulo": "Peças com defeito", "tabela": {
-                "colunas": ["Data e hora", "Defeito", "Conferência"],
-                "linhas": [[quando(i["criado_em"]), _nome_classe(i["classe_final"]),
-                            "Corrigida" if i.get("classe_confirmada") and i["classe_confirmada"] != i.get("classe_predita")
-                            else ("Confirmada" if i.get("classe_confirmada") else "Pela IA")] for i in com_defeito],
-                "larguras": [0.3, 0.42, 0.28]}})
-        andamento = f'{numero(lote["inspecionadas"])} de {numero(lote["quantidade"])} peças ({pct(min(1, lote["inspecionadas"] / max(1, lote["quantidade"])))})'
+        # As peças do lote com quem inspecionou e em qual máquina (histórico do app).
+        eventos = [e for e in app.state.estado.eventos_periodo("0000-01-01", "9999-12-31", todos=True)
+                   if e.lote_id == lote_id]
+        if not eventos:
+            # Peças gravadas por outro computador: o banco tem a peça, sem pessoa e máquina.
+            def peca(i):
+                try:
+                    ts = datetime.fromisoformat(str(i["criado_em"])).timestamp()
+                except ValueError:
+                    ts = 0.0
+                return SimpleNamespace(timestamp=ts, classe_final=i["classe_final"], autor=None, maquina_nome=None,
+                                       lote_codigo=lote["codigo"], precisa_revisao=False,
+                                       revisao_humana=({"decisao": "corrigida" if i["classe_confirmada"] != i["classe_predita"]
+                                                        else "confirmada"} if i.get("classe_confirmada") else None))
+            eventos = [peca(i) for i in ultimas]
+        nomes = getattr(app.state, "nomes_pessoas", None)
+        nome_de = nomes(request) if nomes else (lambda e: (e or "Sem conta").split("@")[0])
+        datas = [date.fromtimestamp(e.timestamp) for e in eventos if e.timestamp]
+        c = conteudo(eventos, nome_de, de=min(datas) if datas else None, ate=max(datas) if datas else None,
+                     mostrar_lotes=False)
+        andamento = f'{numero(lote["inspecionadas"])} de {numero(lote["quantidade"])} ({pct(min(1, lote["inspecionadas"] / max(1, lote["quantidade"])))})'
+        indicadores = c["indicadores"]
+        indicadores[0] = ("Inspecionadas", numero(lote["inspecionadas"]), f'de {numero(lote["quantidade"])} do lote')
         dados = relatorio(
             rotulo=f'Qualidade do lote {lote["codigo"]}',
             sobretitulo="Relatório de qualidade do lote",
             titulo=f'Lote {lote["codigo"]}',
             subtitulo=lote["cliente"] + (f' · {lote["modelo_peca"]}' if lote["modelo_peca"] else ""),
-            ficha=[("Cliente", lote["cliente"]), ("Peça", lote["modelo_peca"] or "—"),
-                   ("Quantidade do lote", numero(lote["quantidade"]) + " peças"), ("Inspecionadas", andamento),
-                   ("Situação", "Concluído" if lote["concluido"] else "Em aberto")],
-            indicadores=[("Inspecionadas", numero(lote["inspecionadas"]), f'de {numero(lote["quantidade"])}'),
-                         ("Aprovadas", numero(lote["aprovadas"]), pct(lote["aprovadas"] / base) if lote["inspecionadas"] else None),
-                         ("Com defeito", numero(lote["reprovadas"]), pct(lote["taxa_defeito"]) if lote["inspecionadas"] else None)],
-            secoes=secoes,
-            nota='Cada peça foi fotografada e lida por um modelo de inteligência artificial de visão, que indica se há defeito de costura ou de tecido e qual é. Peças com defeito ou com leitura incerta passam por conferência humana; quando a pessoa corrigiu a leitura, vale a classe corrigida. Os percentuais são calculados sobre as peças inspecionadas no período e não substituem a inspeção final do cliente.',
+            ficha=[("Cliente", lote["cliente"]), ("Andamento", andamento),
+                   ("Situação", "Concluído" if lote["concluido"] else "Em aberto"),
+                   ("Pessoas · máquinas", f'{c["pessoas"]} · {c["maquinas"]}')],
+            indicadores=indicadores,
+            secoes=c["secoes"],
+            nota=NOTA,
         )
         nome = ''.join(ch if ch.isalnum() or ch in '-_' else '-' for ch in str(lote["codigo"]))
         return Response(dados, media_type='application/pdf',

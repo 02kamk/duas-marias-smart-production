@@ -152,24 +152,87 @@ class _Barra(Flowable):
             c.roundRect(0, 0, max(self.height, self.width * self.fracao), self.height, self.height / 2, stroke=0, fill=1)
 
 
-def _ficha(itens):
-    """Dados do relatório em duas colunas de pares rótulo/valor."""
-    celulas = [[_p(r, E_ROTULO), _p(v, E_VALOR)] for r, v in itens if v not in (None, "")]
-    if len(celulas) % 2:
-        celulas.append(["", ""])
-    linhas = [[a[0], b[0]] for a, b in zip(celulas[0::2], celulas[1::2])]
-    valores = [[a[1], b[1]] for a, b in zip(celulas[0::2], celulas[1::2])]
-    dados = []
-    for r, v in zip(linhas, valores):
-        dados += [r, v]
-    t = Table(dados, colWidths=[LARGURA / 2] * 2)
-    estilo = [("BACKGROUND", (0, 0), (-1, -1), OSSO), ("LEFTPADDING", (0, 0), (-1, -1), 12),
-              ("TOPPADDING", (0, 0), (-1, -1), 1), ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
-              ("ROUNDEDCORNERS", [6, 6, 6, 6])]
-    for i in range(0, len(dados), 2):
-        estilo += [("TOPPADDING", (0, i), (-1, i), 9 if i == 0 else 7), ("BOTTOMPADDING", (0, i + 1), (-1, i + 1), 9 if i + 2 >= len(dados) else 3)]
+
+
+APROVADA = colors.HexColor("#B9AA9C")
+
+
+class _GraficoDias(Flowable):
+    """Barras por dia: aprovadas embaixo, com defeito em cima, grade discreta e legenda."""
+
+    def __init__(self, itens, largura: float = LARGURA, altura: float = 36 * mm):
+        super().__init__()
+        self.itens = list(itens)  # [(rótulo, aprovadas, defeitos)]
+        self.width, self.height = largura, altura
+
+    def draw(self):
+        c = self.canv
+        esq, base, topo_livre = 22, 14, 14
+        w, h = self.width - esq, self.height - base - topo_livre
+        maximo = max([a + d for _, a, d in self.itens] + [1])
+        bruto = maximo / 3
+        mag = 10 ** max(0, len(str(int(bruto))) - 1)
+        passo = next(p * mag for p in (1, 2, 2.5, 5, 10) if p * mag >= bruto)
+        teto = max(passo, -(-maximo // passo) * passo)
+        c.setFont(TEXTO, 6.5)
+        v = 0
+        while v <= teto + 1e-9:
+            y = base + h * v / teto
+            c.setStrokeColor(LINHA if v else colors.HexColor("#CFC2B6"))
+            c.setLineWidth(0.5 if v else 0.7)
+            c.setDash(1.5, 2.5) if v else c.setDash()
+            c.line(esq, y, self.width, y)
+            c.setFillColor(GRAFITE)
+            c.drawRightString(esq - 5, y - 2.2, numero(v))
+            v += passo
+        c.setDash()
+        n = max(1, len(self.itens))
+        fatia = w / n
+        larg = max(1.5, min(16, fatia * 0.62))
+        cada = max(1, -(-n // max(1, int(w // 34))))
+        for i, (rotulo, aprov, defe) in enumerate(self.itens):
+            x = esq + fatia * i + (fatia - larg) / 2
+            ha, hd = h * aprov / teto, h * defe / teto
+            if ha:
+                c.setFillColor(APROVADA)
+                c.rect(x, base, larg, ha, stroke=0, fill=1)
+            if hd:
+                c.setFillColor(DEFEITO)
+                c.rect(x, base + ha + (0.8 if ha else 0), larg, hd, stroke=0, fill=1)
+            if i % cada == 0:
+                c.setFillColor(GRAFITE)
+                c.drawCentredString(x + larg / 2, base - 9, rotulo)
+        # legenda
+        c.setFont(TEXTO, 7)
+        x = self.width
+        for nome, cor in (("Com defeito", DEFEITO), ("Aprovadas", APROVADA)):
+            tw = pdfmetrics.stringWidth(nome, TEXTO, 7)
+            x -= tw
+            c.setFillColor(GRAFITE)
+            c.drawString(x, self.height - 7, nome)
+            x -= 9
+            c.setFillColor(cor)
+            c.roundRect(x, self.height - 7.5, 6, 6, 1.5, stroke=0, fill=1)
+            x -= 12
+
+
+def _meta(itens):
+    """Linha fina com os dados do relatório: rótulo pequeno em cima, valor embaixo."""
+    itens = [(r, v) for r, v in itens if v not in (None, "")]
+    if not itens:
+        return Spacer(1, 0)
+    celulas = [[_p(r, E_ROTULO), Spacer(1, 1), _p(v, E_VALOR)] for r, v in itens]
+    t = Table([celulas], colWidths=[LARGURA / len(celulas)] * len(celulas))
+    estilo = [("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 0),
+              ("RIGHTPADDING", (0, 0), (-1, -1), 10), ("TOPPADDING", (0, 0), (-1, -1), 8),
+              ("BOTTOMPADDING", (0, 0), (-1, -1), 8), ("LINEABOVE", (0, 0), (-1, 0), 0.6, LINHA),
+              ("LINEBELOW", (0, 0), (-1, 0), 0.6, LINHA)]
     t.setStyle(TableStyle(estilo))
     return t
+
+
+def _ficha(itens):
+    return _meta(itens)
 
 
 def _indicadores(itens):
@@ -181,7 +244,7 @@ def _indicadores(itens):
             bloco.append(_p(detalhe, E_NUMERO_DETALHE))
         celulas.append(bloco)
     t = Table([celulas], colWidths=[LARGURA / len(celulas)] * len(celulas))
-    estilo = [("BOX", (0, 0), (-1, -1), 0.6, LINHA), ("VALIGN", (0, 0), (-1, -1), "TOP"),
+    estilo = [("BACKGROUND", (0, 0), (-1, -1), OSSO), ("VALIGN", (0, 0), (-1, -1), "TOP"),
               ("LEFTPADDING", (0, 0), (-1, -1), 12), ("TOPPADDING", (0, 0), (-1, -1), 11),
               ("BOTTOMPADDING", (0, 0), (-1, -1), 11), ("ROUNDEDCORNERS", [6, 6, 6, 6])]
     for i in range(1, len(celulas)):
@@ -190,34 +253,94 @@ def _indicadores(itens):
     return t
 
 
-def _barras(itens, vazio):
+E_DESTAQUE = _estilo("destaque", fontSize=9.3, leading=13.5)
+E_DESTAQUE_TITULO = _estilo("destaque_t", fontName=NEGRITO, fontSize=8, leading=10, textColor=TERRACOTA)
+
+
+def _destaques(frases, largura=LARGURA):
+    """Caixa com o que merece atenção, em frases curtas (aceita <b>negrito</b>)."""
+    corpo = [_p("O QUE MERECE ATENÇÃO", E_DESTAQUE_TITULO), Spacer(1, 4)]
+    for f in frases:
+        corpo.append(Paragraph("•&nbsp;&nbsp;" + f, E_DESTAQUE))
+        corpo.append(Spacer(1, 2))
+    t = Table([[corpo]], colWidths=[largura])
+    t.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), TERRACOTA_TINTA), ("LEFTPADDING", (0, 0), (-1, -1), 14),
+                           ("RIGHTPADDING", (0, 0), (-1, -1), 14), ("TOPPADDING", (0, 0), (-1, -1), 10),
+                           ("BOTTOMPADDING", (0, 0), (-1, -1), 8), ("LINEBEFORE", (0, 0), (0, -1), 3, TERRACOTA),
+                           ("ROUNDEDCORNERS", [4, 4, 4, 4])]))
+    return t
+
+
+def _barras(itens, vazio, largura=LARGURA):
     if not itens:
         return _p(vazio, E_PEQUENO)
-    largura_barra = LARGURA * 0.42
+    estreito = largura < LARGURA * 0.7
+    if estreito:
+        # Meia largura: rótulo e número em cima, barra embaixo.
+        dados = []
+        for rotulo, fracao, valor in itens:
+            dados.append([_p(rotulo, E_CELULA), _p(valor, E_CELULA_D)])
+            dados.append([_Barra(fracao, largura, altura=4), ""])
+        t = Table(dados, colWidths=[largura * 0.62, largura * 0.38])
+        estilo = [("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                  ("RIGHTPADDING", (0, 0), (-1, -1), 0), ("TOPPADDING", (0, 0), (-1, -1), 1),
+                  ("BOTTOMPADDING", (0, 0), (-1, -1), 1)]
+        for i in range(1, len(dados), 2):
+            estilo += [("SPAN", (0, i), (1, i)), ("BOTTOMPADDING", (0, i), (-1, i), 5)]
+        t.setStyle(TableStyle(estilo))
+        return t
+    largura_barra = largura * 0.42
     dados = [[_p(rotulo, E_CELULA), _Barra(fracao, largura_barra), _p(valor, E_CELULA_D)]
              for rotulo, fracao, valor in itens]
-    t = Table(dados, colWidths=[LARGURA * 0.34, largura_barra + 10, LARGURA * 0.24 - 10])
+    t = Table(dados, colWidths=[largura * 0.34, largura_barra + 10, largura * 0.24 - 10])
     t.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("LEFTPADDING", (0, 0), (-1, -1), 0),
                            ("RIGHTPADDING", (0, 0), (-1, -1), 0), ("TOPPADDING", (0, 0), (-1, -1), 5),
                            ("BOTTOMPADDING", (0, 0), (-1, -1), 5), ("LINEBELOW", (0, 0), (-1, -2), 0.4, LINHA)]))
     return t
 
 
-def _tabela(colunas, linhas, larguras=None, direita=(), vazio="Nada no período."):
+E_CELULA_P = _estilo("celula_p", fontSize=7.8, leading=10)
+E_CELULA_PD = _estilo("celula_pd", fontSize=7.8, leading=10, alignment=TA_RIGHT)
+E_CELULA_DEF = _estilo("celula_def", fontName=NEGRITO, fontSize=8.8, leading=11.5, textColor=DEFEITO, alignment=TA_RIGHT)
+
+
+def _tabela(colunas, linhas, larguras=None, direita=(), vazio="Nada no período.", largura=LARGURA,
+            compacta=False, alerta=None):
+    """Tabela com cabeçalho repetido a cada página. `alerta`: {(linha, coluna)} pintadas de vermelho."""
     if not linhas:
         return _p(vazio, E_PEQUENO)
     larguras = larguras or [1 / len(colunas)] * len(colunas)
+    normal, normal_d = (E_CELULA_P, E_CELULA_PD) if compacta else (E_CELULA, E_CELULA_D)
+    alerta = set(map(tuple, alerta or ()))
     cab = [_p(c, E_CABECA_D if i in direita else E_CABECA) for i, c in enumerate(colunas)]
-    corpo = [[_p(v, E_CELULA_D if i in direita else E_CELULA) for i, v in enumerate(l)] for l in linhas]
-    t = Table([cab] + corpo, colWidths=[LARGURA * f for f in larguras], repeatRows=1)
-    estilo = [("BACKGROUND", (0, 0), (-1, 0), AREIA), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-              ("TOPPADDING", (0, 0), (-1, -1), 6), ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
-              ("LEFTPADDING", (0, 0), (-1, -1), 8), ("RIGHTPADDING", (0, 0), (-1, -1), 8),
-              ("LINEBELOW", (0, 1), (-1, -1), 0.4, LINHA)]
-    for i in range(2, len(corpo) + 1, 2):
-        estilo.append(("BACKGROUND", (0, i), (-1, i), OSSO))
+    corpo = [[_p(v, E_CELULA_DEF if (j, i) in alerta else (normal_d if i in direita else normal))
+              for i, v in enumerate(l)] for j, l in enumerate(linhas)]
+    t = Table([cab] + corpo, colWidths=[largura * f for f in larguras], repeatRows=1)
+    pad = 4 if compacta else 6
+    estilo = [("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("LINEBELOW", (0, 0), (-1, 0), 0.8, colors.HexColor("#CFC2B6")),
+              ("TOPPADDING", (0, 0), (-1, -1), pad), ("BOTTOMPADDING", (0, 0), (-1, -1), pad),
+              ("LEFTPADDING", (0, 0), (-1, -1), 6), ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+              ("LEFTPADDING", (0, 0), (0, -1), 0), ("RIGHTPADDING", (-1, 0), (-1, -1), 0),
+              ("LINEBELOW", (0, 1), (-1, -2), 0.4, LINHA)]
     t.setStyle(TableStyle(estilo))
     return t
+
+
+def _secao(secao, largura=LARGURA):
+    """Título (+ texto) e o corpo de uma seção, como lista de flowables."""
+    vazio = secao.get("vazio", "Nada no período.")
+    if "barras" in secao:
+        corpo = _barras(secao["barras"], vazio, largura)
+    elif "grafico_dias" in secao:
+        corpo = _GraficoDias(secao["grafico_dias"], largura)
+    elif "destaques" in secao:
+        corpo = _destaques(secao["destaques"], largura)
+    else:
+        corpo = _tabela(vazio=vazio, largura=largura, **secao["tabela"])
+    cabeca = [_p(secao["titulo"], E_SECAO)] if secao.get("titulo") else []
+    if secao.get("texto"):
+        cabeca += [_p(secao["texto"], E_PEQUENO), Spacer(1, 6)]
+    return cabeca, corpo
 
 
 def relatorio(*, rotulo: str, sobretitulo: str, titulo: str, subtitulo: str, ficha, indicadores,
@@ -225,7 +348,9 @@ def relatorio(*, rotulo: str, sobretitulo: str, titulo: str, subtitulo: str, fic
     """Monta o PDF.
 
     ficha: [(rótulo, valor)] · indicadores: [(rótulo, valor, detalhe|None)]
-    secoes: [{"titulo", "barras": [(rótulo, fração, texto)] | "tabela": {"colunas", "linhas", "larguras", "direita"}, "vazio"}]
+    secoes: [{"titulo", "texto"?, uma de: "barras": [(rótulo, fração, texto)] | "tabela": {...}
+              | "grafico_dias": [(rótulo, aprovadas, defeitos)] | "destaques": [frase],
+              "vazio"?}] ou {"colunas": [seção, seção]} para duas lado a lado.
     """
     stream = io.BytesIO()
     doc = BaseDocTemplate(stream, pagesize=A4, leftMargin=MARGEM, rightMargin=MARGEM,
@@ -233,20 +358,26 @@ def relatorio(*, rotulo: str, sobretitulo: str, titulo: str, subtitulo: str, fic
                           author="Ponto Certo")
     doc.addPageTemplates([PageTemplate(id="pagina", frames=[Frame(MARGEM, 22 * mm, LARGURA, A4[1] - 52 * mm, id="f",
                                                                     leftPadding=0, rightPadding=0, topPadding=0, bottomPadding=0)])])
-    gerado = datetime.now().strftime("%d/%m/%Y às %H:%M")
-    historia = [_p(sobretitulo.upper(), E_SOBRETITULO), Spacer(1, 4), _p(titulo, E_TITULO), Spacer(1, 4),
-                _p(subtitulo, E_SUBTITULO), Spacer(1, 14), _ficha(list(ficha) + [("Gerado em", gerado)]),
-                Spacer(1, 14), _indicadores(indicadores), Spacer(1, 20)]
+    gerado = datetime.now().strftime("%d/%m/%Y %H:%M")
+    historia = [_p(sobretitulo.upper(), E_SOBRETITULO), Spacer(1, 4), _p(titulo, E_TITULO), Spacer(1, 3),
+                _p(subtitulo, E_SUBTITULO), Spacer(1, 12), _meta(list(ficha) + [("Gerado em", gerado)]),
+                Spacer(1, 12), _indicadores(indicadores), Spacer(1, 16)]
     for secao in secoes:
-        corpo = (_barras(secao["barras"], secao.get("vazio", "Nada no período."))
-                 if "barras" in secao else _tabela(vazio=secao.get("vazio", "Nada no período."), **secao["tabela"]))
-        cabeca = [_p(secao["titulo"], E_SECAO)]
-        if secao.get("texto"):
-            cabeca += [_p(secao["texto"], E_PEQUENO), Spacer(1, 6)]
-        if "barras" in secao:
-            historia += [KeepTogether(cabeca + [corpo]), Spacer(1, 18)]
+        if "colunas" in secao:
+            vao = 8 * mm
+            meia = (LARGURA - vao) / 2
+            partes = [_secao(s, meia) for s in secao["colunas"]]
+            t = Table([[cab + [corpo] for cab, corpo in partes]], colWidths=[meia + vao, meia])
+            t.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                                   ("RIGHTPADDING", (0, 0), (0, -1), vao), ("RIGHTPADDING", (1, 0), (1, -1), 0),
+                                   ("TOPPADDING", (0, 0), (-1, -1), 0), ("BOTTOMPADDING", (0, 0), (-1, -1), 0)]))
+            historia += [t, Spacer(1, 16)]
+            continue
+        cabeca, corpo = _secao(secao)
+        if "tabela" in secao and len(secao["tabela"].get("linhas") or []) > 12:
+            historia += cabeca + [corpo, Spacer(1, 16)]
         else:
-            historia += cabeca + [corpo, Spacer(1, 18)]
+            historia += [KeepTogether(cabeca + [corpo]), Spacer(1, 16)]
     linha = Table([[""]], colWidths=[LARGURA], rowHeights=[1])
     linha.setStyle(TableStyle([("LINEABOVE", (0, 0), (-1, -1), 0.6, LINHA)]))
     historia += [KeepTogether([linha, Spacer(1, 6), _p("Sobre este relatório", _estilo("ns", fontName=NEGRITO, fontSize=8.5, textColor=TINTA)),
