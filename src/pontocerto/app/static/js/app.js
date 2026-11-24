@@ -402,7 +402,11 @@
   }
 
   function aoSairDaPagina(pagina) {
-    if (pagina === "ao-vivo") pararPolling();
+    if (pagina === "ao-vivo") {
+      pararPolling();
+      // A câmera do aparelho não fica presa quando a pessoa sai da tela.
+      if (App.cameraNavegador && App.cameraAtiva) desligarCameraNavegador();
+    }
   }
 
   function aoEntrarNaPagina(pagina) {
@@ -462,6 +466,93 @@
       });
   }
 
+  /* --- Câmera do navegador: online (Vercel) o servidor não tem câmera --- */
+
+  function navegadorTemCamera() {
+    return !!(window.isSecureContext && navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+  }
+
+  function listarCamerasNavegador() {
+    var sel = $("sel-camera");
+    if (!sel || !navigator.mediaDevices.enumerateDevices) return Promise.resolve();
+    return navigator.mediaDevices.enumerateDevices().then(function (lista) {
+      var cams = lista.filter(function (d) { return d.kind === "videoinput"; });
+      var atual = sel.value;
+      sel.innerHTML = "";
+      var auto = criar("option", null, "Câmera de trás (padrão)");
+      auto.value = "";
+      sel.appendChild(auto);
+      cams.forEach(function (c, i) {
+        var opt = criar("option", null, c.label || ("Câmera " + (i + 1)));
+        opt.value = c.deviceId;
+        sel.appendChild(opt);
+      });
+      sel.value = atual && sel.querySelector('option[value="' + atual.replace(/"/g, "") + '"]') ? atual : "";
+      habilitar(sel, true);
+    }).catch(function () {});
+  }
+
+  function ativarModoNavegador() {
+    App.cameraNavegador = true;
+    var bloco = $("bloco-camera");
+    if (bloco) bloco.classList.add("camera-navegador");
+    setTexto($("camera-explicacao"), "Usa a câmera deste aparelho. Segure a peça parada na frente dela e a IA lê sozinha.");
+    mostrar(bloco, true);
+    return listarCamerasNavegador();
+  }
+
+  function ligarCameraNavegador() {
+    var btn = $("btn-camera");
+    var sel = $("sel-camera");
+    var video = $("video-navegador");
+    var pedido = { width: { ideal: 1920 }, height: { ideal: 1080 } };
+    if (sel && sel.value) pedido.deviceId = { exact: sel.value };
+    else pedido.facingMode = { ideal: "environment" };
+    habilitar(btn, false);
+    return navigator.mediaDevices.getUserMedia({ video: pedido, audio: false })
+      .then(function (stream) {
+        habilitar(btn, true);
+        App.streamNavegador = stream;
+        video.srcObject = stream;
+        video.hidden = false;
+        return video.play().catch(function () {}).then(function () {
+          var t = stream.getVideoTracks()[0];
+          var cfgT = (t && t.getSettings) ? t.getSettings() : {};
+          atualizarChipCamera({ ativa: true, indice: "do aparelho", largura: cfgT.width || video.videoWidth, altura: cfgT.height || video.videoHeight });
+          listarCamerasNavegador();  // depois da permissão os nomes das câmeras aparecem
+          if (App.leituraModo === "ia") iniciarAuto();
+          toast("Câmera ligada.", "ok");
+        });
+      })
+      .catch(function (e) {
+        habilitar(btn, true);
+        var msg = e && e.name === "NotAllowedError" ? "O navegador não deixou usar a câmera. Libere o acesso no cadeado da barra de endereço."
+          : e && e.name === "NotFoundError" ? "Nenhuma câmera encontrada neste aparelho."
+          : "Não consegui ligar a câmera: " + ((e && e.message) || e);
+        toast(msg, "erro");
+      });
+  }
+
+  function desligarCameraNavegador() {
+    var video = $("video-navegador");
+    if (App.streamNavegador) App.streamNavegador.getTracks().forEach(function (t) { t.stop(); });
+    App.streamNavegador = null;
+    if (video) { video.srcObject = null; video.hidden = true; }
+    pararAuto();
+    atualizarChipCamera({ ativa: false });
+    return Promise.resolve();
+  }
+
+  /** De onde sai a imagem da câmera: <video> do navegador ou <img> do servidor. */
+  function fonteCamera() {
+    if (App.cameraNavegador) {
+      var v = $("video-navegador");
+      return v && v.videoWidth ? { el: v, largura: v.videoWidth, altura: v.videoHeight } : null;
+    }
+    var img = $("video-ao-vivo");
+    return img && img.naturalWidth ? { el: img, largura: img.naturalWidth, altura: img.naturalHeight } : null;
+  }
+
   function carregarDispositivos() {
     var sel = $("sel-camera");
     if (!sel) return Promise.resolve();
@@ -469,6 +560,7 @@
       .then(function (d) {
         var lista = (d && d.dispositivos) || [];
         sel.innerHTML = "";
+        if (!lista.length && navegadorTemCamera()) return ativarModoNavegador();
         mostrar($("bloco-camera"), lista.length > 0);
         if (!lista.length) {
           var vazia = criar("option", null, "Nenhuma câmera encontrada");
@@ -587,6 +679,11 @@
   }
 
   function alternarCamera() {
+    if (App.cameraNavegador) {
+      if (App.cameraAtiva) desligarCameraNavegador();
+      else ligarCameraNavegador();
+      return;
+    }
     if (App.cameraAtiva) desligarCamera();
     else ligarCamera();
   }
@@ -612,17 +709,17 @@
    * O resultado abre na pagina Testar, que ja sabe exibir predicao e heatmap.
    */
   function capturarQuadro(automatico) {
-    var img = $("video-ao-vivo");
-    if (!App.cameraAtiva || !img || !img.naturalWidth) {
+    var fonte = fonteCamera();
+    if (!App.cameraAtiva || !fonte) {
       toast("Ligue a câmera antes de analisar.", "aviso");
       return Promise.reject(new Error("câmera desligada"));
     }
     var btn = $("btn-capturar");
     var canvas = document.createElement("canvas");
-    canvas.width = img.naturalWidth;
-    canvas.height = img.naturalHeight;
+    canvas.width = fonte.largura;
+    canvas.height = fonte.altura;
     try {
-      canvas.getContext("2d").drawImage(img, 0, 0);
+      canvas.getContext("2d").drawImage(fonte.el, 0, 0, fonte.largura, fonte.altura);
     } catch (e) {
       toast("Não consegui capturar a imagem.", "erro");
       return;
@@ -638,7 +735,7 @@
           return;
         }
         var arquivo = new File([blob], "captura.jpg", { type: "image/jpeg" });
-        enviarParaAnalise(arquivo, "camera_servidor", { semRolar: !!automatico })
+        enviarParaAnalise(arquivo, App.cameraNavegador ? "camera_aparelho" : "camera_servidor", { semRolar: !!automatico })
           .then(function (d) { botaoCarregando(btn, false); fimVideo(); resolver(d); })
           .catch(function (e) { botaoCarregando(btn, false); fimVideo(); rejeitar(e); });
       }, "image/jpeg", 0.92);
@@ -703,9 +800,10 @@
 
   function passoAuto() {
     if (App.leituraModo !== "ia" || !App.cameraAtiva || App.pagina !== "ao-vivo") return;
-    var img = $("video-ao-vivo");
+    var fonte = fonteCamera();
     var ligado = $("auto-ler") && $("auto-ler").checked;
-    if (!img || !img.naturalWidth || Auto.ocupado) return;
+    if (!fonte || Auto.ocupado) return;
+    var img = fonte.el;
     if (!ligado) { textoAuto("Leitura por IA", "Toque em “Analisar esta peça” para ler."); return; }
     if (!Auto.canvas) { Auto.canvas = document.createElement("canvas"); Auto.canvas.width = 40; Auto.canvas.height = 30; }
     var ctx = Auto.canvas.getContext("2d", { willReadFrequently: true });
@@ -779,7 +877,7 @@
     if (!App.poll.ativo) return;
     // Rápido só com a câmera do computador ligada; sem ela, os números mudam
     // só quando alguém fotografa (e online cada consulta conta no plano grátis).
-    if (!App.cameraAtiva) ms = Math.max(ms, document.hidden ? 60000 : 10000);
+    if (!App.cameraAtiva || App.cameraNavegador) ms = Math.max(ms, document.hidden ? 60000 : 10000);
     App.poll.timer = setTimeout(cicloStatus, ms);
   }
 
@@ -834,7 +932,7 @@
     }
     renderEstatisticas(stats);
 
-    if (d.camera) atualizarChipCamera(d.camera);
+    if (d.camera && !App.cameraNavegador) atualizarChipCamera(d.camera);
     if ("lote_ativo" in d) renderChipLote(d.lote_ativo);
 
     var fps = $("fps");
@@ -2258,9 +2356,9 @@
     ligar($("btn-camera"), "click", alternarCamera);
     ligar($("sel-camera"), "change", function () {
       // Trocar de dispositivo com a camera ligada exige reabrir o stream.
-      if (App.cameraAtiva) {
-        desligarCamera().then(ligarCamera);
-      }
+      if (!App.cameraAtiva) return;
+      if (App.cameraNavegador) desligarCameraNavegador().then(ligarCameraNavegador);
+      else desligarCamera().then(ligarCamera);
     });
     ligar($("toggle-gradcam"), "change", function (e) { alternarGradcam(e.target.checked); });
     ligar($("btn-capturar"), "click", function () { capturarQuadro(false).catch(function () {}); });

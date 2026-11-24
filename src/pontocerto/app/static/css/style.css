@@ -624,7 +624,8 @@ body.modal-aberto { overflow: hidden; }
   .resultado-rodape { padding: 0 16px 16px; }
   .captura { grid-template-columns: minmax(0, 1fr); }
   .resultado-corpo { grid-template-columns: minmax(0, 1fr); padding: 16px; }
-  .bloco-camera { display: none; }
+  /* No celular só aparece a câmera do próprio aparelho (a do servidor não faz sentido aqui). */
+  .bloco-camera:not(.camera-navegador) { display: none; }
   .campos, .campos.dois { grid-template-columns: minmax(0, 1fr); }
   .bloco { padding: 20px; }
 
