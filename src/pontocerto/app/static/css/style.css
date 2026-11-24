@@ -15,6 +15,7 @@
      03. Casca e menu         08. Inspecionar               13. Gestão
      04. Botões               09. Conferir e histórico      14. Entrar
      05. Formulários          10. Detalhe da peça           15. Telas pequenas
+     (13 agora: seletor, máquinas e análise da equipe)
    ========================================================================== */
 
 /* ==========================================================================
@@ -554,6 +555,186 @@ body.modal-aberto { overflow: hidden; }
 
 .conta-form { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; width: 100%; }
 .conta-form .campo { flex: 1; min-width: 180px; }
+
+/* ==========================================================================
+   13. SELETOR, MÁQUINAS E ANÁLISE DA EQUIPE
+   ========================================================================== */
+
+/* Seletor: cartão com ícone, rótulo e valor; abre uma lista própria. */
+.contexto { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: -8px; }
+.seletor { position: relative; min-width: 0; }
+.seletor-gatilho {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 14px;
+  width: 100%; min-height: 76px; padding: 12px 18px 12px 12px; text-align: left;
+  background: var(--branco); border: 1.5px solid transparent; border-radius: var(--raio-grande);
+  transition: border-color .15s ease, background-color .15s ease;
+}
+.seletor-gatilho:hover { border-color: var(--linha-forte); }
+.seletor.aberto .seletor-gatilho { border-color: var(--tinta); }
+.seletor-icone {
+  width: 48px; height: 48px; border-radius: 14px; display: grid; place-items: center;
+  background: var(--areia); color: var(--grafite); transition: background-color .2s ease, color .2s ease;
+}
+.seletor-icone svg { width: 24px; height: 24px; }
+.seletor-escolhido .seletor-icone { background: var(--terracota); color: var(--branco); }
+.seletor-textos { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+.seletor-rotulo { font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--grafite); }
+.seletor-valor { font-family: var(--fonte-titulo); font-size: 20px; font-weight: 700; letter-spacing: -.02em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 2px; }
+.seletor:not(.seletor-escolhido) .seletor-valor { color: var(--grafite); font-weight: 600; }
+.seletor-sub { font-size: 13px; color: var(--grafite); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.seletor-seta { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; color: var(--tinta); background: var(--osso); transition: transform .2s ease, background-color .15s ease; }
+.seletor-seta svg { width: 18px; height: 18px; }
+.seletor.aberto .seletor-seta { transform: rotate(180deg); background: var(--tinta); color: var(--branco); }
+.seletor.ocupado .seletor-gatilho { cursor: progress; opacity: .7; }
+.seletor.desabilitado .seletor-gatilho { opacity: .5; cursor: default; }
+
+.seletor-painel {
+  position: absolute; z-index: 30; top: calc(100% + 8px); left: 0; right: 0; min-width: 280px;
+  background: var(--branco); border-radius: 18px; box-shadow: var(--sombra-flutuante), 0 0 0 1px var(--linha);
+  padding: 6px; display: flex; flex-direction: column;
+  animation: seletor-abre .14s ease-out;
+}
+.seletor.para-cima .seletor-painel { top: auto; bottom: calc(100% + 8px); }
+@keyframes seletor-abre { from { opacity: 0; transform: translateY(-4px); } }
+.seletor-busca { display: flex; align-items: center; gap: 8px; margin: 4px 4px 6px; padding: 0 12px; height: 40px; border-radius: var(--pilula); background: var(--osso); color: var(--grafite); }
+.seletor-busca svg { width: 18px; height: 18px; flex: none; }
+.seletor-busca input { flex: 1; min-width: 0; border: 0; background: none; outline: none; font-size: 15px; color: var(--tinta); }
+.seletor-lista { max-height: 320px; overflow-y: auto; outline: none; display: flex; flex-direction: column; gap: 2px; }
+.seletor-opcao { display: grid; grid-template-columns: minmax(0, 1fr) 22px; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; cursor: pointer; }
+.seletor-opcao.foco { background: var(--osso); }
+.seletor-opcao[aria-selected="true"] { background: var(--terracota-tinta); }
+.seletor-opcao-corpo { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.seletor-opcao-linha { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.seletor-opcao-titulo { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.seletor-opcao-meta { font-size: 13px; color: var(--grafite); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.seletor-opcao-sub { font-size: 13px; color: var(--grafite); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.seletor-opcao-vazia .seletor-opcao-titulo { font-weight: 500; }
+.seletor-opcao-vazia { border-bottom: 1px solid var(--linha); border-radius: 12px 12px 4px 4px; margin-bottom: 2px; }
+.seletor-trilho { display: block; height: 4px; margin-top: 6px; border-radius: var(--pilula); background: var(--areia); overflow: hidden; }
+.seletor-trilho i { display: block; height: 100%; border-radius: var(--pilula); background: var(--terracota); }
+.seletor-marca { color: var(--terracota); display: grid; place-items: center; }
+.seletor-marca svg { width: 20px; height: 20px; }
+.seletor-aviso { padding: 14px 12px; font-size: 14px; color: var(--grafite); }
+.seletor-rodape { border-top: 1px solid var(--linha); margin-top: 6px; padding: 10px 12px 6px; }
+.seletor-rodape a { font-size: 14px; font-weight: 600; color: var(--terracota-escuro); text-decoration: none; }
+.seletor-rodape a:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+/* Versão compacta (filtros da análise): pílula de uma linha. */
+.seletor-compacto .seletor-gatilho { min-height: 46px; padding: 4px 6px 4px 6px; gap: 10px; border-radius: var(--pilula); border-color: var(--linha); }
+.seletor-compacto .seletor-icone { width: 34px; height: 34px; border-radius: 50%; }
+.seletor-compacto .seletor-icone svg { width: 18px; height: 18px; }
+.seletor-compacto .seletor-textos { flex-direction: row; align-items: baseline; gap: 6px; }
+.seletor-compacto .seletor-rotulo { font-size: 13px; letter-spacing: 0; text-transform: none; font-weight: 500; }
+.seletor-compacto .seletor-valor { font-family: var(--fonte); font-size: 15px; font-weight: 600; letter-spacing: 0; margin: 0; }
+.seletor-compacto .seletor-sub { display: none; }
+.seletor-compacto .seletor-seta { width: 28px; height: 28px; background: none; }
+.seletor-compacto.aberto .seletor-seta { background: none; color: var(--tinta); }
+.seletor-compacto .seletor-painel { right: auto; width: max(100%, 300px); }
+
+/* Máquinas (Ajustes) */
+.maquinas-lista { display: flex; flex-direction: column; }
+.maquina-item { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; align-items: center; gap: 14px; padding: 12px 0; border-top: 1px solid var(--linha); }
+.maquina-icone { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; background: var(--terracota-tinta); color: var(--terracota-escuro); flex: none; }
+.maquina-icone svg { width: 22px; height: 22px; }
+.maquina-icone-vazia { background: var(--areia); color: var(--grafite); }
+.maquina-texto { display: flex; flex-direction: column; min-width: 0; }
+.maquina-texto strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.maquina-texto small { font-size: 13px; }
+.maquina-confirmar { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; padding: 12px 16px; border-radius: var(--raio); background: var(--defeito-tinta); color: var(--defeito); font-size: 14px; }
+.maquinas-vazio { display: flex; flex-direction: column; gap: 4px; padding: 24px; text-align: center; border: 1.5px dashed var(--linha-forte); border-radius: var(--raio-grande); color: var(--grafite); font-size: 14px; }
+.maquinas-vazio strong { color: var(--tinta); font-size: 15px; }
+.maquina-form { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr); gap: 12px 16px; padding: 18px; border-radius: var(--raio-grande); background: var(--osso); }
+.maquina-form .campo-erro, .maquina-form .linha-botoes { grid-column: 1 / -1; }
+.maquina-form .campo-erro:empty { display: none; }
+
+/* Análise da equipe */
+.analise { display: flex; flex-direction: column; gap: 24px; }
+.analise.carregando .resumo, .analise.carregando .bloco { opacity: .6; transition: opacity .2s ease; }
+.analise-filtros { display: flex; flex-direction: column; gap: 10px; }
+.analise-filtros-linha { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; }
+.analise-filtros .campo-inline .entrada { min-width: 0; width: 150px; }
+.analise-filtros .seletor { min-width: 220px; }
+.analise-pdf { margin-left: auto; }
+.analise .resumo dt small { font-size: 13px; }
+
+.analise-foco { gap: 20px; }
+.foco-topo { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.foco-topo h2 { font-size: 26px; }
+.foco-topo .avatar-grande { width: 64px; height: 64px; font-size: 22px; }
+.foco-limpar { margin-left: auto; }
+.foco-fatos { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 0; }
+.foco-fatos > div { padding: 12px 14px; background: var(--osso); border-radius: var(--raio); min-width: 0; }
+.foco-fatos dt { font-size: 13px; color: var(--grafite); }
+.foco-fatos dd { margin: 2px 0 0; font-weight: 600; font-size: 15px; }
+
+.legenda { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--grafite); }
+.legenda li { display: inline-flex; align-items: center; gap: 6px; }
+.legenda-marca { width: 12px; height: 12px; border-radius: 3px; }
+.marca-aprovada { background: #B9AA9C; }
+.marca-defeito { background: var(--defeito); }
+
+.grafico { min-height: 220px; }
+.grafico-baixo { min-height: 200px; }
+.grafico svg { display: block; width: 100%; height: auto; overflow: visible; }
+.grafico .grade { stroke: var(--linha); stroke-width: 1; stroke-dasharray: 2 4; }
+.grafico .eixo { stroke: var(--linha-forte); stroke-width: 1; }
+.grafico .rotulo-eixo { font: 500 11px var(--fonte); fill: var(--grafite); font-variant-numeric: tabular-nums; }
+.grafico .barra-aprovada { fill: #B9AA9C; }
+.grafico .barra-defeito { fill: var(--defeito); }
+.grafico .barra-marca { fill: var(--terracota); }
+.grafico .alvo { fill: var(--tinta); fill-opacity: 0; cursor: default; outline: none; }
+.grafico .alvo.ativo { fill-opacity: .05; }
+.grafico-dica {
+  position: absolute; z-index: 95; pointer-events: none; display: flex; flex-direction: column; gap: 1px;
+  padding: 10px 14px; border-radius: 12px; background: var(--tinta); color: var(--branco);
+  font-size: 13px; box-shadow: var(--sombra-flutuante); white-space: nowrap;
+}
+.grafico-dica strong { font-size: 13px; margin-bottom: 2px; text-transform: capitalize; }
+.grafico-dica span { color: rgba(255, 255, 255, .82); font-variant-numeric: tabular-nums; }
+
+.bloco-tabela { padding-bottom: 12px; }
+.tabela-analise th { font-weight: 500; border-bottom-color: var(--linha); padding-top: 0; }
+.tabela-analise td { padding-block: 12px; }
+.tabela-analise th:first-child, .tabela-analise td:first-child { padding-left: 0; }
+.tabela-analise th:last-child, .tabela-analise td:last-child { padding-right: 0; }
+.linha-filtro { cursor: pointer; transition: background-color .12s ease; }
+.linha-filtro:hover td { background: var(--osso); }
+.linha-filtro:focus-visible { outline: 2px solid var(--terracota-escuro); outline-offset: -2px; }
+.linha-filtro.selecionada td { background: var(--terracota-tinta); }
+.pessoa { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.pessoa .maquina-icone { width: 38px; height: 38px; border-radius: 11px; }
+.pessoa .maquina-icone svg { width: 19px; height: 19px; }
+.pessoa-texto { display: flex; flex-direction: column; min-width: 0; line-height: 1.3; }
+.pessoa-texto strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 240px; }
+.pessoa-texto small { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 240px; }
+.mini-barra { display: block; width: 64px; height: 4px; margin: 6px 0 0 auto; border-radius: var(--pilula); background: var(--areia); overflow: hidden; }
+.mini-barra i { display: block; height: 100%; background: var(--tinta); border-radius: var(--pilula); }
+.taxa-alta { color: var(--defeito); font-weight: 600; }
+.vazio-tabela { padding: 8px 0 12px; }
+.historico .h-lote small { font-size: 12px; color: var(--grafite); }
+
+@media (max-width: 1100px) {
+  .foco-fatos { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 860px) {
+  .contexto { grid-template-columns: minmax(0, 1fr); gap: 8px; margin-top: -12px; }
+  .seletor-gatilho { min-height: 68px; }
+  .seletor-icone { width: 42px; height: 42px; }
+  .seletor-valor { font-size: 18px; }
+  .maquina-form { grid-template-columns: minmax(0, 1fr); }
+  .maquina-item { grid-template-columns: 40px minmax(0, 1fr); }
+  .maquina-item .linha-botoes { grid-column: 2; margin-left: -12px; }
+  .analise-filtros .seletor, .analise-filtros .segmentado { width: 100%; }
+  .analise-filtros .segmentado button { flex: 1; }
+  .analise-filtros .campo-inline { flex: 1; min-width: 140px; }
+  .analise-filtros .campo-inline .entrada { width: 100%; }
+  .seletor-compacto .seletor-painel { width: 100%; }
+  .analise-pdf { margin-left: 0; width: 100%; }
+  .foco-limpar { margin-left: 0; }
+  .tabela-analise.tabela-fichas tr { padding-inline: 0; }
+  .tabela-analise.tabela-fichas td:first-child { padding-left: 0; }
+  .tabela-analise .mini-barra { display: none; }
+}
 
 /* ==========================================================================
    14. ENTRAR

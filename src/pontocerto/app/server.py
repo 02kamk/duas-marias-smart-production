@@ -333,6 +333,9 @@ class Motor:
         self.preditor = preditor
         self.estado = estado
         self.tecido: str | None = None
+        # Quem ligou a câmera do computador e em qual máquina: vão em cada peça vista por ela.
+        self.autor: str | None = None
+        self.maquina: dict | None = None
         self.gradcam = bool(cfg.inferencia.get("gradcam", True))
 
         self._lock = threading.Lock()
@@ -496,7 +499,8 @@ class Motor:
             if veredito_dict and veredito_dict.get("novo_evento") and predicao_dict:
                 try:
                     evento = self.estado.registrar_evento(
-                        predicao_dict, frame_bgr=recorte, tecido=self.tecido
+                        predicao_dict, frame_bgr=recorte, tecido=self.tecido,
+                        autor=self.autor, maquina=self.maquina,
                     )
                     with self._lock:
                         self._ultimo_evento = evento.to_dict()
@@ -587,8 +591,23 @@ def criar_app(cfg: Any = None) -> FastAPI:
         caminho = cfg_banco.get("lote_ativo")
         return Path(caminho) if caminho else None
 
-    def _definir_lote_ativo(lote: dict | None) -> dict | None:
-        """Troca o lote em producao (None = so local) e lembra dele em disco."""
+    def _lembrar_lotes() -> None:
+        """Guarda em disco o lote de cada conta, para valer depois de reiniciar."""
+        arquivo = _arquivo_lote_ativo()
+        if arquivo is None:
+            return
+        try:
+            lotes = app.state.estado.lotes_ativos()
+            if not lotes:
+                arquivo.unlink(missing_ok=True)
+            else:
+                garantir_pasta(arquivo.parent)
+                arquivo.write_text(json.dumps({"por_conta": lotes}, ensure_ascii=False), encoding="utf-8")
+        except Exception:
+            pass
+
+    def _definir_lote_ativo(lote: dict | None, email: str | None = None) -> dict | None:
+        """Troca o lote em produção da conta `email` (None = sem lote) e lembra dele em disco."""
         resumo = None
         if lote:
             resumo = {
@@ -600,29 +619,26 @@ def criar_app(cfg: Any = None) -> FastAPI:
                 "tecido": lote.get("tecido"),
                 "quantidade": lote.get("quantidade"),
             }
-        app.state.estado.lote_ativo = resumo
-        arquivo = _arquivo_lote_ativo()
-        if arquivo is not None:
-            try:
-                if resumo is None:
-                    arquivo.unlink(missing_ok=True)
-                else:
-                    garantir_pasta(arquivo.parent)
-                    arquivo.write_text(json.dumps(resumo, ensure_ascii=False), encoding="utf-8")
-            except Exception:
-                pass
+        app.state.estado.definir_lote(email, resumo)
+        _lembrar_lotes()
         return resumo
+
+    def _soltar_lote(lote_id: int) -> None:
+        app.state.estado.soltar_lote(lote_id)
+        _lembrar_lotes()
 
     def _verificacao_inicial() -> None:
         """Testa o banco e confere se o lote lembrado ainda pode receber pecas."""
         banco = app.state.banco
         try:
             banco.status(forcar=True)
-            lote = app.state.estado.lote_ativo
-            if lote and lote.get("id") is not None and banco.disponivel:
-                atual = banco.obter_lote(int(lote["id"]))
+            ids = {l["id"] for l in app.state.estado.lotes_ativos().values() if l and l.get("id") is not None}
+            for lote_id in ids:
+                if not banco.disponivel:
+                    break
+                atual = banco.obter_lote(int(lote_id))
                 if not atual or atual.get("status") == "concluido":
-                    _definir_lote_ativo(None)
+                    _soltar_lote(int(lote_id))
         except Exception:
             pass  # sem internet: mantem o lote lembrado, o reenvio cuida depois
 
@@ -668,7 +684,10 @@ def criar_app(cfg: Any = None) -> FastAPI:
                 app.state.erros_import["db"] = f"{type(exc).__name__}: {exc}"
 
         if not NUVEM:
-            app.state.estado.lote_ativo = _ler_json(_arquivo_lote_ativo()) or None
+            guardado = _ler_json(_arquivo_lote_ativo()) or {}
+            # Arquivo antigo guardava um lote só, para todos: vira o lote de quem usa sem login.
+            lotes = guardado.get("por_conta") if "por_conta" in guardado else ({"": guardado} if guardado.get("codigo") else {})
+            app.state.estado._gravar_lotes(lotes or {})
         banco = app.state.banco
         if banco is not None and banco.configurado:
             if Sincronizador is not None:
@@ -750,6 +769,24 @@ def criar_app(cfg: Any = None) -> FastAPI:
 
     pasta_capturas = garantir_pasta(cfg.app.pasta_capturas)
     garantir_pasta(cfg.app.pasta_relatorios)
+
+    # ------------------------------------------------------- máquinas e dono
+    from pontocerto.app.maquinas import Maquinas, quem as _quem, registrar as registrar_maquinas
+    app.state.maquinas = Maquinas(Path(cfg.app.pasta_capturas).parent / "maquinas.json", nuvem=NUVEM)
+    registrar_maquinas(app, app.state.maquinas)
+
+    def _quem_pede(request: Request) -> tuple[str | None, bool]:
+        return _quem(app, request)
+
+    def _evento_visivel(evento_id: str, request: Request):
+        """A peça, se quem pede pode vê-la; None também quando ela é de outra conta."""
+        ev = app.state.estado.evento(evento_id)
+        if ev is None:
+            return None
+        email, admin = _quem_pede(request)
+        return ev if ev.visivel_para(email, admin) else None
+
+    NAO_ACHADA = {"erro": "Peça não encontrada."}
     if not NUVEM:
         garantir_pasta(PASTA_STATIC)
     app.mount("/static", StaticFiles(directory=str(PASTA_STATIC)), name="static")
@@ -759,9 +796,12 @@ def criar_app(cfg: Any = None) -> FastAPI:
     SEM_CACHE = {"Cache-Control": "no-store, private", "Pragma": "no-cache"}
 
     @app.get("/capturas/{nome}", include_in_schema=False)
-    def captura_local(nome: str):
+    def captura_local(nome: str, request: Request):
         if not re.fullmatch(r"[A-Za-z0-9_\-]+\.jpg", nome):
             return JSONResponse(status_code=404, content={"erro": "foto nao encontrada"})
+        # A foto é só de quem a tirou: outra conta recebe 404, como se ela não existisse.
+        if _evento_visivel(nome[:-4], request) is None:
+            return JSONResponse(status_code=404, content={"erro": "foto nao encontrada"}, headers=SEM_CACHE)
         arquivo = pasta_capturas / nome
         if NUVEM and not arquivo.is_file():
             dados = nuvem.baixar_foto(nome)
@@ -913,8 +953,11 @@ def criar_app(cfg: Any = None) -> FastAPI:
             return {"dispositivos": [], "erro": str(exc)}
 
     @app.post("/api/camera/iniciar")
-    def camera_iniciar(corpo: dict = Body(default={})):
+    def camera_iniciar(request: Request, corpo: dict = Body(default={})):
         corpo = corpo or {}
+        email, _ = _quem_pede(request)
+        app.state.motor.autor = email
+        app.state.motor.maquina = app.state.maquinas.ativa(email)
         indice = corpo.get("indice")
         try:
             indice = int(indice) if indice is not None else None
@@ -964,18 +1007,22 @@ def criar_app(cfg: Any = None) -> FastAPI:
 
     # ------------------------------------------------------------- status
     @app.get("/api/status")
-    def status():
+    def status(request: Request):
         instantaneo = app.state.motor.instantaneo()
+        email, admin = _quem_pede(request)
+        ultimo = instantaneo["ultimo_evento"]
+        if ultimo and email and (ultimo.get("autor") or "") != email and not (admin and not ultimo.get("autor")):
+            ultimo = None  # a última peça da câmera é de outra conta
         return {
             "veredito": instantaneo["veredito"],
             "predicao": instantaneo["predicao"],
-            "estatisticas": app.state.estado.estatisticas(),
-            "ultimo_evento": instantaneo["ultimo_evento"],
+            "estatisticas": app.state.estado.estatisticas(email, admin),
+            "ultimo_evento": ultimo,
             "camera": app.state.camera.info(),
             "fps": instantaneo["fps"],
             "gradcam": instantaneo["gradcam"],
             "erro": instantaneo["erro"],
-            "lote_ativo": app.state.estado.lote_ativo,
+            "lote_ativo": app.state.estado.lote_de(email),
             "leitura": _info_leitura(),
         }
 
@@ -1000,7 +1047,9 @@ def criar_app(cfg: Any = None) -> FastAPI:
 
     # ----------------------------------------------------------- analisar
     @app.post("/api/analisar")
-    async def analisar(arquivo: UploadFile = File(...), origem: str = Form("upload")):
+    async def analisar(request: Request, arquivo: UploadFile = File(...), origem: str = Form("upload")):
+        autor, _ = _quem_pede(request)
+        maquina = app.state.maquinas.ativa(autor)
         if origem not in ("upload", "camera_aparelho", "camera_servidor"):
             origem = "upload"
         dados = b""
@@ -1045,7 +1094,8 @@ def criar_app(cfg: Any = None) -> FastAPI:
                 aviso = ("A leitura por IA falhou agora (" + falha_ia[:140] + "). "
                          "Usei a leitura local, que erra bastante em fotos reais: confira a peça.")
             else:
-                evento = app.state.estado.registrar_evento(predicao_dict, frame, origem=origem)
+                evento = app.state.estado.registrar_evento(predicao_dict, frame, origem=origem,
+                                                         autor=autor, maquina=maquina)
                 return {
                     "predicao": predicao_dict,
                     "heatmap": _data_uri(marcada) if leitura.get("onde") else None,
@@ -1079,7 +1129,8 @@ def criar_app(cfg: Any = None) -> FastAPI:
         else:
             heat = frame
 
-        evento = app.state.estado.registrar_evento(predicao_dict, frame, origem=origem)
+        evento = app.state.estado.registrar_evento(predicao_dict, frame, origem=origem,
+                                                         autor=autor, maquina=maquina)
         return {
             "predicao": predicao_dict,
             "heatmap": _data_uri(heat),
@@ -1092,20 +1143,22 @@ def criar_app(cfg: Any = None) -> FastAPI:
 
     # ------------------------------------------------------------ eventos
     @app.get("/api/eventos")
-    def listar_eventos(limite: int = Query(60, ge=1, le=500), classe: str | None = None, dia: str | None = None, defeitos: bool = False, pendentes: bool = False):
+    def listar_eventos(request: Request, limite: int = Query(60, ge=1, le=500), classe: str | None = None, dia: str | None = None, defeitos: bool = False, pendentes: bool = False):
+        email, admin = _quem_pede(request)
         if dia:
             try:
                 datetime.strptime(dia, '%Y-%m-%d')
             except ValueError:
                 return JSONResponse(status_code=422, content={'erro': 'Data inválida.'})
         return {
-            "eventos": app.state.estado.eventos(limite=limite, classe=classe, dia=dia, defeitos=defeitos, pendentes=pendentes),
-            "estatisticas": app.state.estado.estatisticas(),
+            "eventos": app.state.estado.eventos(limite=limite, classe=classe, dia=dia, defeitos=defeitos,
+                                                pendentes=pendentes, usuario=email, admin=admin),
+            "estatisticas": app.state.estado.estatisticas(email, admin),
         }
 
     @app.post('/api/eventos/{evento_id}/conferencia')
     def conferencia(evento_id: str, request: Request, corpo: dict = Body(...)):
-        ev = app.state.estado.evento(evento_id)
+        ev = _evento_visivel(evento_id, request)
         if ev is None:
             return JSONResponse(status_code=404, content={'erro': 'Evento não encontrado.'})
         classe = str(corpo.get('classe', ''))
@@ -1120,12 +1173,14 @@ def criar_app(cfg: Any = None) -> FastAPI:
         return {'ok': True, 'evento': (atualizado or ev).to_dict()}
 
     @app.get("/api/inspecoes/{evento_id}/foto", include_in_schema=False)
-    def foto_inspecao(evento_id: str):
+    def foto_inspecao(evento_id: str, request: Request):
         """Foto de uma inspecao gravada no Supabase, servida pelo proprio app.
 
         O navegador nunca recebe link direto do Storage: cada pedido consulta o
         banco, entao uma foto apagada fica inacessivel imediatamente.
         """
+        if _evento_visivel(evento_id, request) is None:
+            return JSONResponse(status_code=404, content={"erro": "foto nao encontrada"}, headers=SEM_CACHE)
         banco = app.state.banco
         if banco is None or not banco.configurado:
             return JSONResponse(status_code=503, content={"erro": "banco desconectado"},
@@ -1141,11 +1196,13 @@ def criar_app(cfg: Any = None) -> FastAPI:
         return Response(content=conteudo, media_type="image/jpeg", headers=SEM_CACHE)
 
     @app.delete("/api/eventos/{evento_id}/foto")
-    def remover_foto(evento_id: str):
+    def remover_foto(evento_id: str, request: Request):
         """Apaga a foto de um evento (disco local e, se houver, bucket do Supabase).
 
         O evento continua no historico e nas estatisticas: so a imagem some.
         """
+        if _evento_visivel(evento_id, request) is None:
+            return JSONResponse(status_code=404, content=NAO_ACHADA)
         try:
             resultado = app.state.estado.remover_captura(evento_id)
         except OSError as exc:
@@ -1175,8 +1232,10 @@ def criar_app(cfg: Any = None) -> FastAPI:
         return {"ok": True, "removida_local": bool(resultado), "nuvem": nuvem}
 
     @app.delete("/api/eventos/{evento_id}")
-    def excluir_evento(evento_id: str):
+    def excluir_evento(evento_id: str, request: Request):
         """Exclui a peça de vez: histórico, números, foto e o registro no Supabase."""
+        if _evento_visivel(evento_id, request) is None:
+            return JSONResponse(status_code=404, content=NAO_ACHADA)
         ev = app.state.estado.excluir_evento(evento_id)
         if ev is None:
             return JSONResponse(status_code=404, content={"erro": "Peça não encontrada."})
@@ -1198,9 +1257,9 @@ def criar_app(cfg: Any = None) -> FastAPI:
         return {"ok": True, "nuvem": nuvem}
 
     @app.post("/api/eventos/{evento_id}/diagnostico")
-    def diagnostico_evento(evento_id: str, corpo: dict = Body(default={})):
+    def diagnostico_evento(evento_id: str, request: Request, corpo: dict = Body(default={})):
         corpo = corpo or {}
-        evento = app.state.estado.evento(evento_id)
+        evento = _evento_visivel(evento_id, request)
         if evento is None:
             return {"erro": "evento nao encontrado"}
         if diagnosticar is None:
@@ -1221,8 +1280,8 @@ def criar_app(cfg: Any = None) -> FastAPI:
         return {"diagnostico": resultado}
 
     @app.post("/api/eventos/{evento_id}/revisao")
-    def revisao_evento(evento_id: str):
-        evento = app.state.estado.evento(evento_id)
+    def revisao_evento(evento_id: str, request: Request):
+        evento = _evento_visivel(evento_id, request)
         if evento is None:
             return {"erro": "evento nao encontrado"}
         if revisar_predicao is None:
@@ -1257,7 +1316,7 @@ def criar_app(cfg: Any = None) -> FastAPI:
 
     # --------------------------------------------------------------- banco
     @app.get("/api/db/status")
-    def db_status(forcar: bool = Query(False, description="ignora o cache e testa agora")):
+    def db_status(request: Request, forcar: bool = Query(False, description="ignora o cache e testa agora")):
         """Banco conectado?, motivo do erro (sem segredo) e pendencias na fila."""
         banco = app.state.banco
         if banco is None:
@@ -1278,12 +1337,12 @@ def criar_app(cfg: Any = None) -> FastAPI:
             forcar=forcar, pendentes=sinc.contar_pendentes() if sinc is not None else None,
         )
         resultado["sincronizacao"] = sinc.estado() if sinc is not None else None
-        resultado["lote_ativo"] = app.state.estado.lote_ativo
+        resultado["lote_ativo"] = app.state.estado.lote_de(_quem_pede(request)[0])
         return resultado
 
     # ------------------------------------------------------------ lotes
     from pontocerto.app.lotes import registrar as registrar_lotes
-    registrar_lotes(app, _definir_lote_ativo)
+    registrar_lotes(app, _definir_lote_ativo, _soltar_lote)
 
     # ----------------------------------------------------------------- LLM
     @app.get("/api/llm/status")

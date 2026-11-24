@@ -70,19 +70,23 @@ def _br(d: date) -> str:
 
 
 def registrar(app: FastAPI) -> None:
-    def eventos(de: date, ate: date):
-        return app.state.estado.eventos_periodo(de.isoformat(), ate.isoformat())
+    from pontocerto.app.maquinas import quem
+
+    def eventos(de: date, ate: date, request: Request):
+        """Só as peças da conta que pede (cada pessoa vê as próprias)."""
+        email, admin = quem(app, request)
+        return app.state.estado.eventos_periodo(de.isoformat(), ate.isoformat(), email, admin)
 
     @app.get("/api/relatorios/resumo")
-    def resumo(de: date | None = None, ate: date | None = None, dia: date | None = None):
+    def resumo(request: Request, de: date | None = None, ate: date | None = None, dia: date | None = None):
         de, ate = _periodo(de, ate, dia)
-        return {"de": de.isoformat(), "ate": ate.isoformat(), **resumir(eventos(de, ate))}
+        return {"de": de.isoformat(), "ate": ate.isoformat(), **resumir(eventos(de, ate, request))}
 
     @app.get("/api/relatorios/pdf")
-    def pdf(de: date | None = None, ate: date | None = None, dia: date | None = None):
+    def pdf(request: Request, de: date | None = None, ate: date | None = None, dia: date | None = None):
         from pontocerto.app.pdf import numero, pct, pecas, relatorio
         de, ate = _periodo(de, ate, dia)
-        lista = eventos(de, ate)
+        lista = eventos(de, ate, request)
         r = resumir(lista)
         periodo = _br(de) if de == ate else f"{_br(de)} a {_br(ate)}"
         lotes = [l["codigo"] for l in r["por_lote"] if l["codigo"]]
@@ -140,14 +144,15 @@ def registrar(app: FastAPI) -> None:
     @app.get("/api/perfil/atividade")
     def minha_atividade(request: Request):
         """Conferências feitas pela pessoa logada."""
-        todos = app.state.estado.eventos_periodo("0000-01-01", "9999-12-31")
+        email, admin = quem(app, request)
+        todos = app.state.estado.eventos_periodo("0000-01-01", "9999-12-31", email, admin)
         return atividade(todos, str(request.state.user or "").casefold())
 
     @app.get("/api/inicio")
-    def inicio():
+    def inicio(request: Request):
         """Hoje (pela classe que vale) e os lotes em aberto, para a tela Início."""
         hoje = date.today()
-        r = resumir(eventos(hoje, hoje))
+        r = resumir(eventos(hoje, hoje, request))
         lotes, erro = [], None
         banco = getattr(app.state, "banco", None)
         if banco is not None and banco.configurado:
@@ -157,7 +162,7 @@ def registrar(app: FastAPI) -> None:
             except Exception:
                 erro = "Sem conexão com o Supabase agora."
         return {"hoje": {"data": hoje.isoformat(), **r}, "lotes": lotes[:6], "total_lotes": len(lotes),
-                "lote_ativo": app.state.estado.lote_ativo, "erro_lotes": erro}
+                "lote_ativo": app.state.estado.lote_de(quem(app, request)[0]), "erro_lotes": erro}
 
 
 def atividade(eventos, email: str, agora: float | None = None) -> dict:

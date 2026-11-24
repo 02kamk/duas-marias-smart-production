@@ -134,6 +134,12 @@ class ContasLocais:
         with self.accounts.db() as db:
             return bool(db.execute('UPDATE users SET nome=?, avatar=? WHERE email=?', (nome, avatar, email)).rowcount)
 
+    def perfis(self):
+        """Nome e foto de todas as contas, numa consulta só (usado na análise da equipe)."""
+        with self.accounts.db() as db:
+            return {r[0]: {'nome': r[1] or '', 'avatar': r[2]}
+                    for r in db.execute('SELECT email, nome, avatar FROM users').fetchall()}
+
 
 class ContasSupabaseAuth:
     """Contas no Supabase Auth, pela API REST (GoTrue) com a chave secreta do servidor.
@@ -213,6 +219,14 @@ class ContasSupabaseAuth:
 
     def emails(self):
         return sorted((u.get('email') or '').casefold() for u in self._usuarios() if u.get('email'))
+
+    def perfis(self):
+        saida = {}
+        for u in self._usuarios():
+            if u.get('email'):
+                meta = u.get('user_metadata') or {}
+                saida[u['email'].casefold()] = {'nome': str(meta.get('nome') or ''), 'avatar': meta.get('avatar') or None}
+        return saida
 
     @staticmethod
     def _aprovado(u):
@@ -392,12 +406,22 @@ class Accounts:
         self._perfis[email] = (time.time(), dados)
         return dados
 
+    def perfis(self):
+        """{email: {nome, avatar}} de todas as contas; guardado por 60 s."""
+        guardado = self._perfis.get('*todas*')
+        if guardado and time.time() - guardado[0] < 60:
+            return guardado[1]
+        dados = self.contas.perfis()
+        self._perfis['*todas*'] = (time.time(), dados)
+        return dados
+
     def salvar_perfil(self, email, perfil):
         nome = ' '.join(perfil.nome.split())
         avatar = _validar_avatar(perfil.avatar)
         if not self.contas.salvar_perfil(email, nome, avatar):
             raise HTTPException(404, 'Conta não encontrada.')
         self._perfis.pop(email, None)
+        self._perfis.pop('*todas*', None)
         return self.perfil(email)
 
     def trocar_propria_senha(self, email, troca, token_atual):
@@ -565,11 +589,11 @@ def secure(app, root, supabase=None, transport=None, admins=None):
 
     @app.get('/api/perfil')
     def ver_perfil(request: Request):
-        return accounts.perfil(request.state.user)
+        return {**accounts.perfil(request.state.user), 'admin': accounts.eh_admin(request.state.user)}
 
     @app.post('/api/perfil')
     def salvar_perfil(body: Perfil, request: Request):
-        return accounts.salvar_perfil(request.state.user, body)
+        return {**accounts.salvar_perfil(request.state.user, body), 'admin': accounts.eh_admin(request.state.user)}
 
     @app.post('/api/perfil/senha')
     def trocar_propria_senha(body: TrocaSenha, request: Request):

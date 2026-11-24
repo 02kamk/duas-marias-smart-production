@@ -10,6 +10,8 @@ STATIC=Path(__file__).parent/'static'
 def extend(app,root=ROOT,supabase=None,admins=None):
     from .relatorios import registrar as registrar_relatorios
     registrar_relatorios(app)
+    from .analise import registrar as registrar_analise
+    registrar_analise(app)
 
     @app.get('/manifest.webmanifest',include_in_schema=False)
     def manifest():
