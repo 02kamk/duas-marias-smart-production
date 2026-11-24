@@ -184,8 +184,8 @@
     <section id="bloco-camera" class="bloco bloco-camera" aria-labelledby="titulo-camera" hidden>
       <div class="bloco-cabecalho">
         <div>
-          <h2 id="titulo-camera">Câmera deste computador</h2>
-          <p class="texto-apoio">Para inspecionar em sequência: a leitura acontece quando a peça fica parada.</p>
+          <h2 id="titulo-camera">Câmera ao vivo</h2>
+          <p id="camera-explicacao" class="texto-apoio">Para inspecionar em sequência: a leitura acontece quando a peça fica parada.</p>
         </div>
         <div class="linha-botoes">
           <span id="chip-camera" class="estado estado-neutro">Câmera desligada</span>
@@ -198,6 +198,7 @@
         <div>
           <div id="video-wrap" class="video-wrap">
             <img id="video-ao-vivo" class="video-img" alt="Imagem da câmera de inspeção" hidden>
+            <video id="video-navegador" class="video-img" playsinline muted autoplay hidden aria-label="Imagem da câmera de inspeção"></video>
             <p id="video-vazio" class="video-vazio">Câmera desligada. Cada peça vista é registrada no histórico.</p>
             <span id="video-pill" class="video-pill" hidden><span class="pill-ponto" aria-hidden="true"></span>AO VIVO</span>
             <div class="analisando" id="video-lendo" data-analisando hidden>
