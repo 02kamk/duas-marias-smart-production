@@ -8,6 +8,7 @@ com uma foto de exemplo de cada tipo tirada do conjunto de treino.
 from __future__ import annotations
 
 import base64
+import sys
 import time
 from pathlib import Path
 from typing import Any
@@ -60,7 +61,7 @@ Regras:
 - Se aprovada, classe = "normal" e onde = null.
 - "onde" é a caixa do defeito na FOTO DA PEÇA, em frações de 0 a 1: x e y do canto superior esquerdo, largura e altura.
 - "confianca" de 0 a 1.
-- "explicacao": uma frase curta em português, para quem está na linha de produção (sem termos técnicos em inglês).
+- "explicacao": UMA frase curta (no máximo 25 palavras) em português, para quem está na linha de produção (sem termos técnicos em inglês). Se houver vários problemas, cite só o mais importante.
 Responda só com o JSON."""
 
 
@@ -154,20 +155,31 @@ def ler_peca(cliente: Any, frame_bgr: np.ndarray, modelo: str | None = None) -> 
     conteudo = [{"type": "text", "text": texto}] + ([_url(quadro)] if quadro else []) + [_url(preparar_foto(frame_bgr))]
     mensagens = [{"role": "user", "content": conteudo}]
     inicio = time.perf_counter()
-    try:
-        resposta = cliente.chat(mensagens, modelo=modelo or cliente.modelo_visao, json_schema=ESQUEMA,
-                                max_tokens=400, temperatura=0.1)
-    except ErroOpenRouter as exc:
-        if exc.status not in (400, 404, 422):
-            raise
-        # Alguns modelos não aceitam json_schema: pede o JSON no texto.
-        resposta = cliente.chat(mensagens, modelo=modelo or cliente.modelo_visao, max_tokens=400, temperatura=0.1)
-    dados = extrair_primeiro_json(resposta.texto)
+    custo = 0.0
+    dados = None
+    resposta = None
+    # Até duas tentativas: a resposta pode vir cortada (texto longo demais) ou fora do formato.
+    for tentativa in (1, 2):
+        try:
+            resposta = cliente.chat(mensagens, modelo=modelo or cliente.modelo_visao, json_schema=ESQUEMA,
+                                    max_tokens=1500, temperatura=0.1)
+        except ErroOpenRouter as exc:
+            if exc.status not in (400, 404, 422):
+                raise
+            # Alguns modelos não aceitam json_schema: pede o JSON no texto.
+            resposta = cliente.chat(mensagens, modelo=modelo or cliente.modelo_visao, max_tokens=1500, temperatura=0.1)
+        custo += float(((resposta.bruto or {}).get("usage") or {}).get("cost") or 0.0)
+        dados = extrair_primeiro_json(resposta.texto)
+        if dados is not None:
+            break
+        # Fica nos logs do servidor (sem segredos) para entender o que veio.
+        motivo = ((resposta.bruto or {}).get("choices") or [{}])[0].get("finish_reason")
+        print(f"[leitura-ia] tentativa {tentativa}: resposta sem JSON válido (fim={motivo}): "
+              f"{(resposta.texto or '')[:300]!r}", file=sys.stderr, flush=True)
     if dados is None:
-        raise ErroOpenRouter("a IA não devolveu uma leitura válida. Tente de novo.")
-    uso = (resposta.bruto or {}).get("usage") or {}
+        raise ErroOpenRouter("a IA não devolveu uma leitura válida duas vezes seguidas. Tente de novo.")
     leitura = _normalizar(dados)
     leitura.update({"modelo": resposta.modelo or modelo, "ms": round((time.perf_counter() - inicio) * 1000),
                     "tokens_entrada": resposta.tokens_entrada, "tokens_saida": resposta.tokens_saida,
-                    "custo_usd": float(uso.get("cost") or 0.0)})
+                    "custo_usd": custo})
     return leitura
