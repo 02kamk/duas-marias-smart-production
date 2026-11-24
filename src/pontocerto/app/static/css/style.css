@@ -313,7 +313,8 @@ progress::-moz-progress-bar { background: var(--tinta); }
 .resultado-topo { display: flex; justify-content: space-between; gap: 12px; padding: 18px 28px 0; font-size: 14px; color: var(--grafite); }
 .resultado-corpo { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: 28px; padding: 18px 28px 24px; }
 .resultado-midia { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
-.resultado-foto { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: var(--raio); background: var(--areia); }
+/* A foto aparece inteira (em pé ou deitada): a caixa do defeito pode estar em qualquer canto. */
+.resultado-foto { display: block; width: 100%; height: auto; max-height: min(70vh, 620px); min-height: 180px; object-fit: contain; border-radius: var(--raio); background: var(--areia); }
 .foto-palco { position: relative; width: 100%; }
 .leitura-ia { margin: 0; padding: 14px 18px; background: var(--terracota-tinta); color: var(--barro); border-radius: var(--raio); font-size: 15px; }
 .leitura-ia::before { content: "O que a IA viu"; display: block; font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--terracota-escuro); margin-bottom: 4px; }
@@ -562,6 +563,9 @@ body.modal-aberto { overflow: hidden; }
 
 /* Seletor: cartão com ícone, rótulo e valor; abre uma lista própria. */
 .contexto { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: -8px; }
+/* Lote e máquina sempre da mesma altura, com ou sem a linha de detalhe. */
+.contexto .seletor { display: flex; }
+.contexto .seletor-gatilho { height: 100%; }
 .seletor { position: relative; min-width: 0; }
 .seletor-gatilho {
   display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 14px;
