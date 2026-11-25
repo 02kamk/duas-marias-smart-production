@@ -1,17 +1,21 @@
 let modo='entrar', recuperacao=false;
 const el=id=>document.querySelector('#'+id);
 const telas={
-  entrar:{titulo:'Entrar',botao:'Entrar',ajuda:''},
+  entrar:{titulo:'Entrar',botao:'Entrar',ajuda:'',
+    arte:'Que bom ter você de volta.',apoio:'Entre para registrar e conferir as peças da produção, ponto por ponto.'},
   criar:{titulo:'Criar conta',botao:'Criar conta e entrar',
-    ajuda:'A senha precisa de 8 caracteres ou mais, com maiúscula, minúscula, número e símbolo.'},
+    ajuda:'A senha precisa de 8 caracteres ou mais, com maiúscula, minúscula, número e símbolo.',
+    arte:'Vamos alinhavar sua conta.',apoio:'Depois de criada, um administrador libera o seu acesso.'},
   esqueci:{titulo:'Redefinir a senha',botao:'Enviar link por e-mail',
-    ajuda:'Digite seu e-mail. Se ele tiver conta, chega um link para criar uma senha nova.'},
+    ajuda:'Digite seu e-mail. Se ele tiver conta, chega um link para criar uma senha nova.',
+    arte:'Linha solta? A gente arremata.',apoio:'Mandamos um link para você criar uma senha nova.'},
 };
 
 function trocarModo(novo){
   modo=novo;
   const t=telas[modo], criar=modo==='criar', esqueci=modo==='esqueci';
   el('title').textContent=t.titulo;
+  el('arte-titulo').textContent=t.arte; el('arte-apoio').textContent=t.apoio;
   el('submit').textContent=t.botao;
   el('help').textContent=t.ajuda; el('help').hidden=!t.ajuda;
   el('campo-senha').hidden=esqueci; el('password').required=!esqueci;
