@@ -11,10 +11,41 @@
 <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
 <link rel="stylesheet" href="/static/css/style.css">
 </head>
-<body>
+<body class="pagina-entrar">
 <main class="entrar">
+<div class="entrar-quadro">
+  <aside class="entrar-arte">
+    <p class="marca marca-clara"><svg class="marca-icone" viewBox="0 0 34 34" width="30" height="30" aria-hidden="true" focusable="false"><rect width="34" height="34" rx="10" fill="var(--osso)"/><path d="M9 17.5l5.5 5.5L25.5 11" fill="none" stroke="var(--terracota)" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Ponto<span>Certo</span></span></p>
+    <svg class="arte-botao" viewBox="0 0 60 60" aria-hidden="true" focusable="false"><circle cx="30" cy="30" r="27" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="30" cy="30" r="19" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="4 4"/><circle cx="24" cy="24" r="3.4" fill="currentColor"/><circle cx="36" cy="24" r="3.4" fill="currentColor"/><circle cx="24" cy="36" r="3.4" fill="currentColor"/><circle cx="36" cy="36" r="3.4" fill="currentColor"/></svg>
+    <svg class="maquina" viewBox="0 0 340 224" aria-hidden="true" focusable="false">
+      <path d="M0 174 C60 166 120 182 180 174 S300 166 340 174 V200 H0Z" fill="var(--terracota-claro)" opacity=".6"/>
+      <path class="costura-viva" d="M0 186 C36 181 70 189 104 184" fill="none" stroke="var(--osso)" stroke-width="2.6" stroke-dasharray="7 6" stroke-linecap="round"/>
+      <circle cx="258" cy="96" r="22" fill="var(--areia)" stroke="var(--barro)" stroke-width="4"/>
+      <circle cx="258" cy="96" r="6" fill="var(--barro)"/>
+      <path d="M248 196 V78 a28 28 0 0 0 -28 -28 H118 a28 28 0 0 0 -28 28 V132 H130 V96 a8 8 0 0 1 8 -8 H202 a8 8 0 0 1 8 8 V196Z" fill="var(--osso)"/>
+      <path d="M120 64 H220" stroke="var(--terracota-claro)" stroke-width="4" stroke-linecap="round"/>
+      <path d="M120 74 H180" stroke="var(--linha)" stroke-width="3" stroke-linecap="round"/>
+      <circle cx="229" cy="140" r="9" fill="var(--terracota-claro)"/>
+      <circle cx="229" cy="168" r="5" fill="var(--terracota)"/>
+      <path d="M170 50 V32" stroke="var(--barro)" stroke-width="3"/>
+      <rect x="159" y="14" width="22" height="20" rx="2" fill="var(--terracota-escuro)"/>
+      <path d="M161 19 H179 M161 24 H179 M161 29 H179" stroke="var(--terracota-claro)" stroke-width="1.2"/>
+      <rect x="155" y="11" width="30" height="4" rx="2" fill="var(--barro)"/>
+      <rect x="155" y="33" width="30" height="4" rx="2" fill="var(--barro)"/>
+      <path d="M181 22 C206 20 210 40 192 44 C150 52 116 76 108 134" fill="none" stroke="var(--terracota-escuro)" stroke-width="1.6"/>
+      <rect x="100" y="132" width="9" height="22" rx="2" fill="var(--barro)"/>
+      <path class="agulha" d="M104.5 154 V177" stroke="var(--tinta)" stroke-width="2.4" stroke-linecap="round"/>
+      <path d="M92 179 H118" stroke="var(--barro)" stroke-width="5" stroke-linecap="round"/>
+      <rect x="62" y="194" width="250" height="20" rx="7" fill="var(--barro)"/>
+      <rect x="84" y="188" width="46" height="6" rx="2" fill="var(--linha-forte)"/>
+    </svg>
+    <div class="arte-texto">
+      <h2 id="arte-titulo">Que bom ter você de volta.</h2>
+      <p id="arte-apoio">Entre para registrar e conferir as peças da produção, ponto por ponto.</p>
+    </div>
+    <div class="fita-metrica" aria-hidden="true"></div>
+  </aside>
   <div class="entrar-caixa">
-    <p class="marca"><svg class="marca-icone" viewBox="0 0 34 34" width="30" height="30" aria-hidden="true" focusable="false"><rect width="34" height="34" rx="10" fill="var(--terracota)"/><path d="M9 17.5l5.5 5.5L25.5 11" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Ponto<span>Certo</span></span></p>
     <h1 id="title">Entrar</h1>
     <p id="help" class="texto-apoio" hidden></p>
     <form id="form" class="formulario">
@@ -34,6 +65,7 @@
       <span id="ir-entrar" hidden><span id="ir-entrar-texto">Já tem conta?</span> <button type="button" class="btn-link" data-modo="entrar">Entrar</button></span>
     </p>
   </div>
+</div>
 </main>
 <script src="/static/js/login.js"></script>
 </body>
